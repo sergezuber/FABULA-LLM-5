@@ -1,0 +1,58 @@
+{
+  "version": "fabula-receipt/v0",
+  "mintedAt": 1784218409775,
+  "model": {
+    "id": "qwen3.6-35b-a3b-uncensored-heretic-mlx",
+    "host": "local"
+  },
+  "task": "\"Fix the export bug: the nightly export silently drops rows dated exactly on the end date. Prove it.\"",
+  "base": "c660a02ab138d2f15d128ace6be7545e6610e0b4",
+  "gates": [
+    {
+      "id": "verify",
+      "forced": "re-ran the project's checks after source edits — only a green run counts as done"
+    },
+    {
+      "id": "comprehension",
+      "forced": "graded the agent against its own diff before 'done' stood"
+    }
+  ],
+  "artifact": {
+    "kind": "git-diff",
+    "files": 2,
+    "bytes": 1551,
+    "patch": ".fabula/receipts/receipt-1784218409798.patch"
+  },
+  "verification": {
+    "cmd": "bun test",
+    "exitCode": 0,
+    "passed": true,
+    "outputTail": "--- package test script output (tail) ---\nbun test v1.3.14 (0d9b296a)\n\n 6 pass\n 0 fail\n 9 expect() calls\nRan 6 tests across 1 file. [7.00ms]",
+    "cwd": "demo"
+  },
+  "replay": "git worktree add --detach /tmp/fabula-replay-1784218409775 c660a02ab138 && git -C /tmp/fabula-replay-1784218409775 apply \"$(pwd)/.fabula/receipts/receipt-1784218409798.patch\" && cd /tmp/fabula-replay-1784218409775/demo && bun test",
+  "provenance": {
+    "bundlePrefixHash": "a38cb5a6f018b9c0fc40b943d2baac9c5a7efa0932e75fd4b653983a11cc3e34",
+    "systemHash": "51e73b06e4702549f13f7ec242db3bad2b7677c79f6bfede7e37782beab613b7",
+    "toolsHash": "3ad0a6ba87ef249b7e93256d5e13e758e2a3be115c61c72554642fcfb6900a52",
+    "toolCount": 64,
+    "engineVersion": "0.0.0-prod-202607161549",
+    "step": 13,
+    "inputHash": "a4f1fe05052d521fdca8b912ab21bdc45b6e09bdba153ab31a151bba984345a6",
+    "midTurnBreaks": 0,
+    "routerProfile": "coding",
+    "modelDescriptorHash": "c741e6747595deed165fda223ff7a96f4d2c21edb63c9a43b21fb6530fecb046",
+    "modelDescriptor": {
+      "id": "qwen3.6-35b-a3b-uncensored-heretic-mlx",
+      "arch": "qwen3_5_moe",
+      "quantization": "4bit",
+      "publisher": "froggeric",
+      "compatibilityType": "mlx"
+    },
+    "weightsDigest": {
+      "digest": "1d4e997c45fc5d30da404c05ed66501bf8e101da7134dfc46f1248dc83051aa6",
+      "files": 16,
+      "bytes": 20422489818
+    }
+  }
+}

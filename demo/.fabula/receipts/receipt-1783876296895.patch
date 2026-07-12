@@ -1,0 +1,31 @@
+diff --git a/demo/src/export.test.ts b/demo/src/export.test.ts
+index 6d5335d..99453a6 100644
+--- a/demo/src/export.test.ts
++++ b/demo/src/export.test.ts
+@@ -30,6 +30,13 @@ test("rows come back sorted by date then id", () => {
+   expect(dates).toEqual([...dates].sort())
+ })
+ 
++test("rows on the end date are included (inclusive [from, to])", () => {
++  // The spec says both ends are inclusive: rows within [from, to].
++  // A row dated exactly on `to` MUST appear in the output.
++  const out = exportRange(ROWS, "2026-07-01", "2026-07-04")
++  expect(out.map((r) => r.id)).toContain(4) // id 4 is dated "2026-07-04" == to
++})
++
+ test("toCsv renders a header and fixed-point amounts", () => {
+   const csv = toCsv([{ id: 1, date: "2026-07-01", amount: 10 }])
+   expect(csv.split("\n")[0]).toBe("id,date,amount")
+diff --git a/demo/src/export.ts b/demo/src/export.ts
+index cc641a5..689ab42 100644
+--- a/demo/src/export.ts
++++ b/demo/src/export.ts
+@@ -10,7 +10,7 @@ export interface Row {
+ /** Rows within [from, to] — both ends inclusive, per the report spec. */
+ export function exportRange(rows: Row[], from: string, to: string): Row[] {
+   return rows
+-    .filter((r) => r.date >= from && r.date < to)
++    .filter((r) => r.date >= from && r.date <= to)
+     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id))
+ }
+ 

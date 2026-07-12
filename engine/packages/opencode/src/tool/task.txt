@@ -1,0 +1,39 @@
+Persistent work-item tool. Tasks are bounded, referenceable entities with IDs (T1, T2, ...;
+subtasks T1.1, T1.2, ...). This is the only work-item tool — use it to track every multi-step
+piece of work: what you're doing now, what's queued, what's blocked, what's done.
+
+JSON calls always wrap the action in an `operation` object — see examples below.
+
+## Operations
+
+- create:     register a new task. `summary` required. optional: `parent_id`.
+- list:       enumerate tasks. defaults to open+in_progress+blocked, excluding archived.
+              optional: `status` filter, `include_terminal`, `include_archived`.
+- get:        fetch one task by id.
+- start:      mark a task in_progress (you're working on it now). `id` required.
+- block:      transition → blocked. `id` required. optional: `event_summary`.
+- unblock:    transition blocked → open. `id` required. optional: `event_summary`.
+- done:       mark task complete. `id` required. optional: `event_summary`.
+- abandon:    drop task without completing. `id` required. optional: `event_summary`.
+- rename:     change a task's summary. `id` + `summary` required.
+
+Status lifecycle: open ⇄ in_progress, either → blocked → open, either → done | abandoned.
+Mark a task `start` before working it; `done` immediately after finishing. Terminal states
+clean up automatically after `checkpoint.task_archive_days` (default 7 days).
+
+## JSON examples
+
+{"operation":{"action":"create","summary":"Implement auth"}}
+{"operation":{"action":"create","summary":"Lexer","parent_id":"T1"}}
+{"operation":{"action":"start","id":"T1"}}
+{"operation":{"action":"done","id":"T1","event_summary":"all tests pass"}}
+{"operation":{"action":"block","id":"T1","event_summary":"waiting on spec"}}
+
+## Discipline
+
+- Only mark `done` when the work is FULLY accomplished — tests failing, partial implementation,
+  or an unresolved error means keep it in_progress or `block` it, never `done`.
+- Keep one task in_progress at a time when working solo (parallel subagents may each have one).
+- Use task whenever work has 3+ steps, spans multiple turns, or will be referenced again; skip
+  it for a single trivial action.
+- Do not list the task tree in your reply — the UI renders it. Just say what changed.

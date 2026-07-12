@@ -1,0 +1,29 @@
+diff --git a/demo/src/export.test.ts b/demo/src/export.test.ts
+index 6d5335d..eba8efe 100644
+--- a/demo/src/export.test.ts
++++ b/demo/src/export.test.ts
+@@ -15,6 +15,11 @@ test("rows inside the range are returned", () => {
+   expect(out.map((r) => r.id)).toContain(3)
+ })
+ 
++test("rows on the end date are included", () => {
++  const out = exportRange(ROWS, "2026-07-01", "2026-07-04")
++  expect(out.map((r) => r.id)).toContain(4)
++})
++
+ test("rows before the range are excluded", () => {
+   const out = exportRange(ROWS, "2026-07-02", "2026-07-04")
+   expect(out.map((r) => r.id)).not.toContain(1)
+diff --git a/demo/src/export.ts b/demo/src/export.ts
+index cc641a5..689ab42 100644
+--- a/demo/src/export.ts
++++ b/demo/src/export.ts
+@@ -10,7 +10,7 @@ export interface Row {
+ /** Rows within [from, to] — both ends inclusive, per the report spec. */
+ export function exportRange(rows: Row[], from: string, to: string): Row[] {
+   return rows
+-    .filter((r) => r.date >= from && r.date < to)
++    .filter((r) => r.date >= from && r.date <= to)
+     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id))
+ }
+ 

@@ -1,0 +1,15 @@
+{
+  "name": "FABULA-LLM-5",
+  "short_name": "FABULA",
+  "icons": [
+    {
+      "src": "/favicon-v3.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "theme_color": "#131010",
+  "background_color": "#131010",
+  "display": "standalone"
+}

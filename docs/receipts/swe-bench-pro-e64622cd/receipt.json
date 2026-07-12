@@ -1,0 +1,29 @@
+{
+  "version": "fabula-receipt/v0",
+  "mintedAt": 1783669610903,
+  "model": {
+    "id": "qwen3.6-35b-a3b",
+    "host": "local"
+  },
+  "task": "Signal name extraction is inconsistent across PyQt versions and signal types. (SWE-bench Pro, qutebrowser: unify signal_name extraction across PyQt versions and signal types)",
+  "base": "09925f74817cf7a970f166342f81886a1d27ee35",
+  "gates": [
+    {
+      "id": "verify",
+      "forced": "re-ran the project's checks after source edits — only a green run counts as done (the harness pressed the model into verify_done; done was the test result)"
+    }
+  ],
+  "artifact": {
+    "kind": "git-diff",
+    "files": 1,
+    "bytes": 1186,
+    "patch": "model.patch"
+  },
+  "verification": {
+    "cmd": "bash replay.sh  (container: run_script.sh tests/unit/utils/test_debug.py vs hidden acceptance suite)",
+    "exitCode": 0,
+    "passed": true,
+    "outputTail": "tests/unit/utils/test_debug.py::test_dbg_signal[['xxxxxxxxxxxxxxxxxx-fake('xxxxxxxxxxxxxx] PASSED [ 93%]\ntests/unit/utils/test_debug.py::test_dbg_signal[['foo\\\\nbar']-fake('foo\\\\nbar')] PASSED [ 95%]\ntests/unit/utils/test_debug.py::TestGetAllObjects::test_get_all_objects PASSED [ 97%]\ntests/unit/utils/test_debug.py::TestGetAllObjects::test_get_all_objects_qapp PASSED [100%]\n\n======================== 45 passed, 2 xfailed in 0.88s =========================\nfail_to_pass: 4/4 PASSED\npass_to_pass: 41/43 PASSED (+2 xfail/xpass — expected, not regressions)\nVERIFIED"
+  },
+  "replay": "bash replay.sh"
+}

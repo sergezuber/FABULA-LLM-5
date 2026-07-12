@@ -1,0 +1,85 @@
+{
+  "share": "disabled",
+  "model": "lmstudio/your-local-model-id",
+  "_comment_enhance": "The «Enhance prompt» button uses the model SELECTED in the composer by default, with a 45s timeout (so a slow reasoning model still completes instead of failing). This optional section tunes it PER MODEL: keys are model refs ('provider/model'), '_default' applies to all. Each entry may set request params merged into the /chat/completions body (max_tokens, temperature, reasoning flags), a 'timeout_ms', and — if you want a slow reasoning model to enhance FAST — a 'model' override pointing enhance at a faster model for that selected model. Remove this section to just use the selected model as-is.",
+  "enhance": {
+    "_default": {
+      "max_tokens": 1024,
+      "timeout_ms": 45000
+    },
+    "provider/some-slow-reasoning-model": {
+      "model": "provider/some-fast-instruct-model"
+    }
+  },
+  "_comment_checkpoint": "fork:true lets the background checkpoint-writer subagent REUSE the main agent's prefill cache instead of evicting it — on a local model this is a ~15x per-step speedup (the writer otherwise thrashes the KV cache each time it fires at a context threshold). Keeps memory/checkpointing fully on.",
+  "checkpoint": {
+    "fork": true
+  },
+  "instructions": [
+    "system-prompt.example.md",
+    "prompts/runtime-tools-addendum.md",
+    "AGENTS.md"
+  ],
+  "provider": {
+    "lmstudio": {
+      "name": "LM Studio (FABULA-LLM local)",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "http://localhost:1235/v1"
+      },
+      "models": {
+        "your-local-model-id": {
+          "name": "Local model (e.g. a tool-calling, vision-capable build)",
+          "tools": true,
+          "attachment": true,
+          "limit": {
+            "context": 131072,
+            "output": 32768
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": [
+              "text"
+            ]
+          }
+        }
+      }
+    },
+    "nvidia": {
+      "name": "NVIDIA (FABULA-LLM cloud, optional)",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "https://integrate.api.nvidia.com/v1",
+        "apiKey": "{env:NVIDIA_API_KEY}"
+      },
+      "models": {
+        "z-ai/glm-5.1": {
+          "name": "GLM-5.1 (agentic/coding)",
+          "tools": true
+        },
+        "deepseek-ai/deepseek-v4-flash": {
+          "name": "DeepSeek V4 Flash (fast)",
+          "tools": true
+        }
+      }
+    }
+  },
+  "mcp": {
+    "web-search-internet": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "mcp-searxng"
+      ],
+      "environment": {
+        "SEARXNG_URL": "http://localhost:8888"
+      },
+      "enabled": false
+    }
+  },
+  "lsp": true
+}

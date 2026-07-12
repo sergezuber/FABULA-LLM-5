@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 802" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
+<rect width="1200" height="802" rx="18" fill="#0d1117"/>
+<rect x="1" y="1" width="1198" height="800" rx="17" fill="none" stroke="#ffffff10"/>
+<text x="48" y="46" font-size="16" fill="#6e7681" letter-spacing="1.5">CAPTURED RUN — the machine says no</text>
+<text x="1152" y="46" text-anchor="end" font-size="14" fill="#8b949e">every beat below is from the recording (docs/assets/refusal.cast)</text>
+<line x1="48" y1="62" x2="1152" y2="62" stroke="#30363d" stroke-dasharray="4 5"/>
+<rect x="48" y="78" width="380" height="30" rx="8" fill="#1c2128" stroke="#58a6ff" stroke-width="1.5"/>
+<text x="238" y="98" text-anchor="middle" font-size="13" fill="#e6edf3">qwen3.6-35b-a3b-nvidia-nvfp4-512k · local</text>
+<text x="452" y="98" font-size="13" fill="#8b949e">base 1bfcac905f27 · 2 file(s) in the artifact</text>
+<rect x="48" y="118" width="1104" height="74" rx="12" fill="#0b1f30" stroke="#1f6feb66" stroke-width="1.5"/>
+<text x="70" y="148" font-size="16" font-weight="600" fill="#e6edf3">◆  TASK</text>
+<text x="70" y="172" font-size="13" fill="#8b949e">Fix the export bug: the nightly export silently drops rows dated exactly on the end date. Prove it.</text>
+<rect x="48" y="216" width="1104" height="74" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+<text x="70" y="246" font-size="16" font-weight="600" fill="#e6edf3">⚙  the model fixes the source</text>
+<text x="70" y="270" font-size="13" fill="#8b949e">demo/src/export.ts — the boundary comparison</text>
+<line x1="88" y1="192" x2="88" y2="216" stroke="#6e7681" stroke-width="2"/>
+<rect x="48" y="314" width="1104" height="74" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+<text x="70" y="344" font-size="16" font-weight="600" fill="#e6edf3">⚙  …and writes the boundary test</text>
+<text x="70" y="368" font-size="13" fill="#8b949e">demo/src/export.test.ts — the coverage the suite never had</text>
+<line x1="88" y1="290" x2="88" y2="314" stroke="#6e7681" stroke-width="2"/>
+<rect x="48" y="412" width="1104" height="74" rx="12" fill="#161b22" stroke="#f85149" stroke-width="1.5"/>
+<text x="70" y="442" font-size="16" font-weight="600" fill="#f85149">✋  verify_done → the suite is GREEN. REFUSED anyway.</text>
+<text x="70" y="466" font-size="13" fill="#8b949e">⏳ NOT YET DONE (change-quiz gate) — green is not enough; explain your own diff first</text>
+<line x1="88" y1="388" x2="88" y2="412" stroke="#6e7681" stroke-width="2"/>
+<rect x="48" y="510" width="1104" height="74" rx="12" fill="#161b22" stroke="#d29922" stroke-width="1.5"/>
+<text x="70" y="540" font-size="16" font-weight="600" fill="#d29922">⚖  change_quiz — 3 questions about its own diff</text>
+<text x="70" y="564" font-size="13" fill="#8b949e">graded strictly against the diff by a second model</text>
+<line x1="88" y1="486" x2="88" y2="510" stroke="#6e7681" stroke-width="2"/>
+<rect x="48" y="608" width="1104" height="74" rx="12" fill="#0c2417" stroke="#3fb950" stroke-width="1.5"/>
+<text x="70" y="638" font-size="16" font-weight="600" fill="#3fb950">✓  change_quiz PASS → receipt minted</text>
+<text x="70" y="662" font-size="13" fill="#8b949e">📄 Proof-of-Done receipt minted in the same frame</text>
+<line x1="88" y1="584" x2="88" y2="608" stroke="#6e7681" stroke-width="2"/>
+<text x="48" y="760" font-size="13" fill="#6e7681">recorded live, headless · replay the artifact yourself:  cd demo &amp;&amp; fabula receipt verify</text>
+</svg>

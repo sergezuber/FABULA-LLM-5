@@ -1,0 +1,151 @@
+<svg viewBox="0 0 1450 830" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" role="img" aria-label="How FABULA works — one piece of work rides the verification railway; every gate must go green before the Proof-of-Done ticket is stamped VERIFIED">
+<style>
+  .fRewind{animation:fRewind 33.1s linear infinite}
+  .fEscalate{animation:fEscalate 33.1s linear infinite}
+  .fNyd{animation:fNyd 33.1s linear infinite}
+  .fQuiz{animation:fQuiz 33.1s linear infinite}
+  .fNf{animation:fNf 33.1s linear infinite}
+  .rEdit{animation:rEdit 33.1s linear infinite}
+  .rVerify{animation:rVerify 33.1s linear infinite}
+  .rRepro{animation:rRepro 33.1s linear infinite}
+  .rQuiz{animation:rQuiz 33.1s linear infinite}
+  .rJudge{animation:rJudge 33.1s linear infinite}
+  .fCtx{animation:fCtx 33.1s linear infinite}
+  .fTicket{animation:fTicket 33.1s linear infinite}
+  .fStamp{animation:fStamp 33.1s linear infinite;transform-origin:1347px 506px;transform-box:view-box}
+  .fLines{animation:fLines 33.1s linear infinite}
+  .fFoot{animation:fFoot 33.1s linear infinite}
+  @keyframes rEdit{0%{stroke:#2A3442}0.886%{stroke:#2A3442}0.906%{stroke:#EDF2F7}3.605%{stroke:#EDF2F7}3.625%{stroke:#2A3442}98.016%{stroke:#2A3442}98.036%{stroke:#2A3442}99.98%{stroke:#2A3442}100%{stroke:#2A3442}}@keyframes rVerify{0%{stroke:#2A3442}9.043000000000001%{stroke:#2A3442}9.063%{stroke:#E5534B}13.877%{stroke:#E5534B}13.897%{stroke:#2A3442}18.711000000000002%{stroke:#2A3442}18.731%{stroke:#E5534B}21.732%{stroke:#E5534B}21.752%{stroke:#2A3442}29.587%{stroke:#2A3442}29.607%{stroke:#E5534B}32.608%{stroke:#E5534B}32.628%{stroke:#2A3442}41.068%{stroke:#2A3442}41.088%{stroke:#3FB950}98.016%{stroke:#3FB950}98.036%{stroke:#2A3442}99.98%{stroke:#2A3442}100%{stroke:#2A3442}}@keyframes rRepro{0%{stroke:#2A3442}45.297%{stroke:#2A3442}45.317%{stroke:#D9A03F}48.318%{stroke:#D9A03F}48.338%{stroke:#2A3442}58.589999999999996%{stroke:#2A3442}58.61%{stroke:#3FB950}98.016%{stroke:#3FB950}98.036%{stroke:#2A3442}99.98%{stroke:#2A3442}100%{stroke:#2A3442}}@keyframes rQuiz{0%{stroke:#2A3442}61.913999999999994%{stroke:#2A3442}61.934%{stroke:#D9A03F}65.539%{stroke:#D9A03F}65.559%{stroke:#2A3442}76.717%{stroke:#2A3442}76.737%{stroke:#D9A03F}77.926%{stroke:#D9A03F}77.946%{stroke:#3FB950}98.016%{stroke:#3FB950}98.036%{stroke:#2A3442}99.98%{stroke:#2A3442}100%{stroke:#2A3442}}@keyframes rJudge{0%{stroke:#2A3442}79.436%{stroke:#2A3442}79.456%{stroke:#4FD1C5}82.45700000000001%{stroke:#4FD1C5}82.477%{stroke:#2A3442}93.182%{stroke:#2A3442}93.202%{stroke:#3FB950}98.016%{stroke:#3FB950}98.036%{stroke:#2A3442}99.98%{stroke:#2A3442}100%{stroke:#2A3442}}
+  @keyframes fRewind{0%{opacity:.45}17.523%{opacity:.45}18.731%{opacity:1}24.773%{opacity:1}26.284%{opacity:.45}100%{opacity:.45}}@keyframes fEscalate{0%{opacity:.45}28.399%{opacity:.45}29.607%{opacity:1}36.254%{opacity:1}37.764%{opacity:.45}100%{opacity:.45}}@keyframes fNyd{0%{opacity:.45}44.109%{opacity:.45}45.317%{opacity:1}51.964%{opacity:1}53.474%{opacity:.45}100%{opacity:.45}}@keyframes fQuiz{0%{opacity:.45}60.725%{opacity:.45}61.934%{opacity:1}69.184%{opacity:1}70.695%{opacity:.45}100%{opacity:.45}}@keyframes fNf{0%{opacity:.45}78.248%{opacity:.45}79.456%{opacity:1}85.801%{opacity:1}87.311%{opacity:.45}100%{opacity:.45}}
+  @keyframes fCtx{0%{stroke:#2A3442}1%{stroke:#4FD1C5}4.23%{stroke:#4FD1C5}6.647%{stroke:#2A3442}100%{stroke:#2A3442}}@keyframes fTicket{0%{stroke:#33405299}93.807%{stroke:#33405299}95.015%{stroke:#3FB950}98.036%{stroke:#3FB950}100%{stroke:#33405299}}@keyframes fStamp{0%{opacity:0;transform:scale(2.2) rotate(-9deg)}95.619%{opacity:0;transform:scale(2.2) rotate(-9deg)}96.677%{opacity:1;transform:scale(1) rotate(-9deg)}98.036%{opacity:1;transform:scale(1) rotate(-9deg)}100%{opacity:0;transform:scale(2.2) rotate(-9deg)}}@keyframes fLines{0%{fill:#8B95A3}95.619%{fill:#8B95A3}97.281%{fill:#EDF2F7}98.036%{fill:#EDF2F7}100%{fill:#8B95A3}}@keyframes fFoot{0%{fill:#8B95A3;opacity:.75}95.619%{fill:#8B95A3;opacity:.75}97.583%{fill:#7EE787;opacity:1}98.036%{fill:#7EE787;opacity:1}100%{fill:#8B95A3;opacity:.75}}
+  @media (prefers-reduced-motion: reduce){
+    *{animation:none !important}
+    #ball{display:none}
+    .rEdit,.rVerify,.rRepro,.rQuiz,.rJudge{stroke:#3FB950}
+    .fTicket{stroke:#3FB950}
+    .fStamp{opacity:1;transform:scale(1) rotate(-9deg)}
+    .fLines{fill:#EDF2F7}
+    .fFoot{fill:#7EE787;opacity:1}
+    .fRewind,.fEscalate,.fNyd,.fQuiz,.fNf{opacity:.45}
+  }
+</style>
+<defs>
+  <filter id="glow" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="4"/></filter>
+</defs>
+<rect width="1450" height="830" fill="#0A0C10"/>
+
+<!-- header -->
+<text x="88" y="78" font-size="30" font-weight="700" fill="#EDF2F7" letter-spacing="7">HOW FABULA WORKS</text>
+<text x="1362" y="78" text-anchor="end" font-size="15" fill="#8B95A3">any model in · proven work out</text>
+<line x1="88" y1="100" x2="1362" y2="100" stroke="#1C2530" stroke-width="1.5"/>
+
+<!-- rail -->
+<line x1="258" y1="430" x2="1248" y2="430" stroke="#33405299" stroke-width="3"/>
+
+<!-- upper loops -->
+
+  <path d="M 660 430 C 660 367.3, 624.525 316, 595.5 316 C 563.25 316, 541.75 316, 509.5 316 C 480.475 316, 445 367.3, 445 430" fill="none" stroke="#A78BFA" stroke-width="1.6" stroke-dasharray="3 6" opacity="0.55"/>
+  <g class="fEscalate">
+    <text x="596" y="273" text-anchor="middle" font-size="17" font-weight="700" fill="#A78BFA" letter-spacing="2">ESCALATE</text>
+    <text x="596" y="291" text-anchor="middle" font-size="13.5" fill="#8B95A3">stuck → one cloud hint, the</text><text x="596" y="308" text-anchor="middle" font-size="13.5" fill="#8B95A3">local model keeps driving</text>
+  </g>
+
+  <path d="M 1175 430 C 1175 301.29999999999995, 1132.1 196, 1097 196 C 1058 196, 562 196, 523 196 C 487.9 196, 445 301.29999999999995, 445 430" fill="none" stroke="#4FD1C5" stroke-width="1.6" stroke-dasharray="3 6" opacity="0.55"/>
+  <g class="fNf">
+    <text x="812" y="153" text-anchor="middle" font-size="17" font-weight="700" fill="#4FD1C5" letter-spacing="2">NOT FULFILLED</text>
+    <text x="812" y="171" text-anchor="middle" font-size="13.5" fill="#8B95A3">the judge refuses the stop →</text><text x="812" y="188" text-anchor="middle" font-size="13.5" fill="#8B95A3">keep working</text>
+  </g>
+
+<!-- lower loops -->
+
+  <path d="M 660 430 C 660 494.9, 624.525 548, 595.5 548 C 563.25 548, 541.75 548, 509.5 548 C 480.475 548, 445 494.9, 445 430" fill="none" stroke="#D9A03F" stroke-width="1.6" stroke-dasharray="3 6" opacity="0.55"/>
+  <g class="fRewind">
+    <text x="596" y="574" text-anchor="middle" font-size="17" font-weight="700" fill="#D9A03F" letter-spacing="2">REWIND</text>
+    <text x="596" y="593" text-anchor="middle" font-size="13.5" fill="#8B95A3">red ×N → back to the</text><text x="596" y="610" text-anchor="middle" font-size="13.5" fill="#8B95A3">last green checkpoint</text>
+  </g>
+
+  <path d="M 875 430 C 875 543.3, 832.1 636, 797 636 C 758 636, 562 636, 523 636 C 487.9 636, 445 543.3, 445 430" fill="none" stroke="#D9A03F" stroke-width="1.6" stroke-dasharray="3 6" opacity="0.55"/>
+  <g class="fNyd">
+    <text x="668" y="662" text-anchor="middle" font-size="17" font-weight="700" fill="#D9A03F" letter-spacing="2">NOT YET DONE</text>
+    <text x="668" y="681" text-anchor="middle" font-size="13.5" fill="#8B95A3">green tests are not enough —</text><text x="668" y="698" text-anchor="middle" font-size="13.5" fill="#8B95A3">back to work</text>
+  </g>
+
+  <path d="M 1030 430 C 1030 592.8, 987.1 726, 952 726 C 913 726, 562 726, 523 726 C 487.9 726, 445 592.8, 445 430" fill="none" stroke="#D9A03F" stroke-width="1.6" stroke-dasharray="3 6" opacity="0.55"/>
+  <g class="fQuiz">
+    <text x="745" y="752" text-anchor="middle" font-size="17" font-weight="700" fill="#D9A03F" letter-spacing="2">FAILED THE QUIZ</text>
+    <text x="745" y="771" text-anchor="middle" font-size="13.5" fill="#8B95A3">doesn't know its diff →</text><text x="745" y="788" text-anchor="middle" font-size="13.5" fill="#8B95A3">back to work</text>
+  </g>
+
+<!-- socket -->
+<rect x="88" y="354" width="170" height="152" rx="14" fill="#10151D" stroke="#33405299" stroke-width="1.5"/>
+<text x="173" y="384" text-anchor="middle" font-size="14" fill="#8B95A3" letter-spacing="2">ANY MODEL IN</text>
+<rect x="110" y="402" width="126" height="34" rx="17" fill="#0A0C10" stroke="#EDF2F7" stroke-width="1.4"/>
+<text x="173" y="424" text-anchor="middle" font-size="15" fill="#EDF2F7">local 35B</text>
+<text x="173" y="472" text-anchor="middle" font-size="12.5" fill="#8B95A3">a swappable chip</text>
+
+<!-- context os -->
+<rect x="292" y="338" width="120" height="58" rx="10" fill="#10151D" stroke="#2A3442" stroke-width="1.5" class="fCtx"/>
+<text x="352" y="361" text-anchor="middle" font-size="13.5" fill="#EDF2F7" letter-spacing="1.5">CONTEXT OS</text>
+<text x="352" y="379" text-anchor="middle" font-size="11.5" fill="#8B95A3">router · kernel</text>
+<text x="352" y="393" text-anchor="middle" font-size="11.5" fill="#8B95A3">−40% prefix</text>
+
+<!-- stations -->
+
+  <circle cx="445" cy="430" r="14" fill="#0A0C10" stroke="#2A3442" stroke-width="2.5" class="rEdit"/>
+  <circle cx="445" cy="430" r="4.5" fill="#EDF2F7"/>
+  <text x="445" y="474" text-anchor="middle" font-size="21" font-weight="700" fill="#EDF2F7" letter-spacing="2">EDIT</text>
+  <text x="445" y="496" text-anchor="middle" font-size="14" fill="#8B95A3">diffs · tests</text>
+
+  <circle cx="660" cy="430" r="14" fill="#0A0C10" stroke="#2A3442" stroke-width="2.5" class="rVerify"/>
+  <circle cx="660" cy="430" r="4.5" fill="#EDF2F7"/>
+  <text x="660" y="474" text-anchor="middle" font-size="21" font-weight="700" fill="#EDF2F7" letter-spacing="2">VERIFY</text>
+  <text x="660" y="496" text-anchor="middle" font-size="14" fill="#8B95A3">runs the tests</text>
+
+  <circle cx="875" cy="430" r="14" fill="#0A0C10" stroke="#2A3442" stroke-width="2.5" class="rRepro"/>
+  <circle cx="875" cy="430" r="4.5" fill="#EDF2F7"/>
+  <text x="875" y="474" text-anchor="middle" font-size="21" font-weight="700" fill="#EDF2F7" letter-spacing="2">REPRODUCE</text>
+  <text x="875" y="496" text-anchor="middle" font-size="14" fill="#8B95A3">fix needs a test</text>
+
+  <circle cx="1030" cy="430" r="14" fill="#0A0C10" stroke="#2A3442" stroke-width="2.5" class="rQuiz"/>
+  <circle cx="1030" cy="430" r="4.5" fill="#EDF2F7"/>
+  <text x="1030" y="474" text-anchor="middle" font-size="21" font-weight="700" fill="#EDF2F7" letter-spacing="2">QUIZ</text>
+  <text x="1030" y="496" text-anchor="middle" font-size="14" fill="#8B95A3">knows its diff</text>
+
+  <circle cx="1175" cy="430" r="14" fill="#0A0C10" stroke="#2A3442" stroke-width="2.5" class="rJudge"/>
+  <circle cx="1175" cy="430" r="4.5" fill="#EDF2F7"/>
+  <text x="1175" y="474" text-anchor="middle" font-size="21" font-weight="700" fill="#EDF2F7" letter-spacing="2">JUDGE</text>
+  <text x="1175" y="496" text-anchor="middle" font-size="14" fill="#8B95A3">may the turn end?</text>
+
+<!-- ticket -->
+<rect x="1248" y="318" width="198" height="254" rx="14" fill="#10151D" stroke="#33405299" stroke-width="2" class="fTicket"/>
+<text x="1266" y="348" font-size="15" font-weight="700" fill="#EDF2F7" letter-spacing="1.5">PROOF-OF-DONE</text>
+<g class="fLines" fill="#8B95A3" font-size="11.5">
+  <text x="1266" y="376">model in the socket</text>
+  <text x="1266" y="396">gates fired · patch</text>
+  <text x="1266" y="416">context fingerprint</text>
+  <text x="1266" y="436">replay · byte-stability</text>
+</g>
+<text x="1266" y="464" font-size="11.5" fill="#7EE787">$ fabula receipt verify</text>
+<g class="fStamp">
+  <circle cx="1347" cy="506" r="50" fill="#0A0C10" opacity="0.6"/>
+  <circle cx="1347" cy="506" r="50" fill="none" stroke="#3FB950" stroke-width="3.5" opacity="0.9"/>
+  <circle cx="1347" cy="506" r="42" fill="none" stroke="#3FB950" stroke-width="1.2" opacity="0.5"/>
+  <text x="1347" y="513" text-anchor="middle" font-size="19" font-weight="700" fill="#3FB950" letter-spacing="2">VERIFIED</text>
+</g>
+
+<!-- ball: ONE piece of work -->
+<circle id="ball" r="5.5" fill="#EDF2F7" filter="url(#glow)">
+  <animateMotion dur="33.1s" repeatCount="indefinite" calcMode="linear" keyPoints="0.00000;0.02586;0.02586;0.05560;0.05560;0.08533;0.08533;0.11507;0.11507;0.16697;0.16697;0.19671;0.19671;0.24763;0.24763;0.27737;0.27737;0.30710;0.30710;0.40923;0.40923;0.43897;0.43897;0.46870;0.46870;0.49014;0.49014;0.63715;0.63715;0.66688;0.66688;0.69662;0.69662;0.71806;0.71806;0.73811;0.73811;0.88894;0.88894;0.91868;0.91868;0.94841;0.94841;0.96985;0.96985;0.98990;0.98990;1.00000;1.00000;1.00000" keyTimes="0;0.03625;0.06042;0.09063;0.10876;0.13897;0.1571;0.18731;0.20544;0.24773;0.26586;0.29607;0.3142;0.36254;0.38066;0.41088;0.429;0.45317;0.4713;0.51964;0.53776;0.55589;0.56495;0.5861;0.60121;0.61934;0.6435;0.69184;0.70695;0.72205;0.72659;0.74169;0.74622;0.76133;0.77946;0.79456;0.81269;0.85801;0.87311;0.88369;0.88822;0.89879;0.90332;0.91239;0.91692;0.92598;0.93807;0.95015;0.98036;1" path="M 258 430 L 445 430 L 660 430 L 445 430 L 660 430 C 660 494.9, 624.525 548, 595.5 548 C 563.25 548, 541.75 548, 509.5 548 C 480.475 548, 445 494.9, 445 430 L 660 430 C 660 367.3, 624.525 316, 595.5 316 C 563.25 316, 541.75 316, 509.5 316 C 480.475 316, 445 367.3, 445 430 L 660 430 L 875 430 C 875 543.3, 832.1 636, 797 636 C 758 636, 562 636, 523 636 C 487.9 636, 445 543.3, 445 430 L 660 430 L 875 430 L 1030 430 C 1030 592.8, 987.1 726, 952 726 C 913 726, 562 726, 523 726 C 487.9 726, 445 592.8, 445 430 L 660 430 L 875 430 L 1030 430 L 1175 430 C 1175 301.29999999999995, 1132.1 196, 1097 196 C 1058 196, 562 196, 523 196 C 487.9 196, 445 301.29999999999995, 445 430 L 660 430 L 875 430 L 1030 430 L 1175 430 L 1248 430"/>
+  <animate attributeName="fill" values="#EDF2F7;#E5534B;#D9A03F;#EDF2F7;#E5534B;#A78BFA;#EDF2F7;#3FB950;#D9A03F;#EDF2F7;#3FB950;#D9A03F;#EDF2F7;#3FB950;#4FD1C5;#3FB950;#3FB950" keyTimes="0;0.09517;0.20544;0.25982;0.3006;0.3142;0.37462;0.41541;0.4577;0.53172;0.55891;0.6284;0.70393;0.77039;0.8006;0.87009;1" calcMode="discrete" dur="33.1s" repeatCount="indefinite"/>
+  <animate attributeName="opacity" values="0;1;1;0;0" keyTimes="0;0.00755;0.94773;0.95015;1" calcMode="linear" dur="33.1s" repeatCount="indefinite"/>
+</circle>
+<circle r="5.5" fill="#EDF2F7" opacity="0.35">
+  <animateMotion dur="33.1s" repeatCount="indefinite" calcMode="linear" keyPoints="0.00000;0.02586;0.02586;0.05560;0.05560;0.08533;0.08533;0.11507;0.11507;0.16697;0.16697;0.19671;0.19671;0.24763;0.24763;0.27737;0.27737;0.30710;0.30710;0.40923;0.40923;0.43897;0.43897;0.46870;0.46870;0.49014;0.49014;0.63715;0.63715;0.66688;0.66688;0.69662;0.69662;0.71806;0.71806;0.73811;0.73811;0.88894;0.88894;0.91868;0.91868;0.94841;0.94841;0.96985;0.96985;0.98990;0.98990;1.00000;1.00000;1.00000" keyTimes="0;0.03625;0.06042;0.09063;0.10876;0.13897;0.1571;0.18731;0.20544;0.24773;0.26586;0.29607;0.3142;0.36254;0.38066;0.41088;0.429;0.45317;0.4713;0.51964;0.53776;0.55589;0.56495;0.5861;0.60121;0.61934;0.6435;0.69184;0.70695;0.72205;0.72659;0.74169;0.74622;0.76133;0.77946;0.79456;0.81269;0.85801;0.87311;0.88369;0.88822;0.89879;0.90332;0.91239;0.91692;0.92598;0.93807;0.95015;0.98036;1" path="M 258 430 L 445 430 L 660 430 L 445 430 L 660 430 C 660 494.9, 624.525 548, 595.5 548 C 563.25 548, 541.75 548, 509.5 548 C 480.475 548, 445 494.9, 445 430 L 660 430 C 660 367.3, 624.525 316, 595.5 316 C 563.25 316, 541.75 316, 509.5 316 C 480.475 316, 445 367.3, 445 430 L 660 430 L 875 430 C 875 543.3, 832.1 636, 797 636 C 758 636, 562 636, 523 636 C 487.9 636, 445 543.3, 445 430 L 660 430 L 875 430 L 1030 430 C 1030 592.8, 987.1 726, 952 726 C 913 726, 562 726, 523 726 C 487.9 726, 445 592.8, 445 430 L 660 430 L 875 430 L 1030 430 L 1175 430 C 1175 301.29999999999995, 1132.1 196, 1097 196 C 1058 196, 562 196, 523 196 C 487.9 196, 445 301.29999999999995, 445 430 L 660 430 L 875 430 L 1030 430 L 1175 430 L 1248 430"/>
+  <animate attributeName="fill" values="#EDF2F7;#E5534B;#D9A03F;#EDF2F7;#E5534B;#A78BFA;#EDF2F7;#3FB950;#D9A03F;#EDF2F7;#3FB950;#D9A03F;#EDF2F7;#3FB950;#4FD1C5;#3FB950;#3FB950" keyTimes="0;0.09517;0.20544;0.25982;0.3006;0.3142;0.37462;0.41541;0.4577;0.53172;0.55891;0.6284;0.70393;0.77039;0.8006;0.87009;1" calcMode="discrete" dur="33.1s" repeatCount="indefinite"/>
+  <animate attributeName="opacity" values="0;0.35;0.35;0;0" keyTimes="0;0.00755;0.94773;0.95015;1" calcMode="linear" dur="33.1s" repeatCount="indefinite"/>
+</circle>
+
+<!-- footer -->
+<text x="88" y="796" font-size="15" fill="#EDF2F7" opacity="0.9">Done is a test result, not the model's confidence.</text>
+<text x="1362" y="796" text-anchor="end" font-size="13.5" class="fFoot" fill="#8B95A3" opacity="0.75">every green run mints a replayable, context-fingerprinted receipt</text>
+</svg>

@@ -1,0 +1,22 @@
+{
+  "_comment": "Declarative reasoning-level -> request-body patches, keyed by model -> level -> apiKind. path is a JSON-pointer-as-list into the outgoing request body. '*' is the fallback for any model. Level is chosen per request via the X-Fabula-Reasoning header, body.extra_body.fabula_reasoning, or FABULA_REASONING_LEVEL. Edit this file to add a model or knob — no adapter code changes.",
+  "*": {
+    "enabled": {
+      "openai-compatible": { "set": [{ "path": ["extra_body", "thinking", "type"], "value": "enabled" }] }
+    },
+    "off": {
+      "openai-compatible": { "set": [{ "path": ["extra_body", "thinking", "type"], "value": "disabled" }] }
+    },
+    "strip": {
+      "openai-compatible": { "unset": [{ "path": ["extra_body", "thinking"] }] }
+    }
+  },
+  "qwen3.5": {
+    "high": {
+      "openai-compatible": { "set": [
+        { "path": ["extra_body", "thinking", "type"], "value": "enabled" },
+        { "path": ["extra_body", "thinking", "budget_tokens"], "value": 8192 }
+      ] }
+    }
+  }
+}

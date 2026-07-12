@@ -1,0 +1,87 @@
+<svg viewBox="0 0 1320 632" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
+  <defs>
+    <marker id="ahGray" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8b949e"/></marker>
+    <marker id="ahAmber" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#d29922"/></marker>
+    <marker id="ahBlue" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#58a6ff"/></marker>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="7"/></filter>
+  </defs>
+
+  <rect x="0" y="0" width="1320" height="632" fill="#0d1117"/>
+
+  <text x="40" y="48" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" fill="#6e7681" letter-spacing="1.5">FABULA · LOCAL-FIRST AI AGENT HARNESS</text>
+
+  <!-- second-opinion badge: the harness temporarily sockets a bigger chip when stuck -->
+  <rect x="1030" y="84" width="270" height="68" rx="12" fill="#10161f" stroke="#58a6ff" stroke-width="1.5" stroke-dasharray="6 5"/>
+  <text x="1165" y="112" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" fill="#58a6ff" letter-spacing="2">SECOND OPINION</text>
+  <text x="1165" y="136" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" fill="#8b949e">escalate_to_cloud · when stuck</text>
+  <text x="1294" y="176" text-anchor="end" font-size="14" fill="#6e7681">harness-steered —</text>
+  <text x="1294" y="194" text-anchor="end" font-size="14" fill="#6e7681">the model places the call</text>
+  <text x="1294" y="212" text-anchor="end" font-size="14" fill="#6e7681">and keeps driving</text>
+  <path d="M976,196 C1006,186 1010,152 1028,124" fill="none" stroke="#58a6ff" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#ahBlue)"/>
+
+  <!-- TASK IN (vertical center on the loop row, y=401) -->
+  <rect x="40" y="321" width="200" height="160" rx="14" fill="#12171e" stroke="#30363d"/>
+  <text x="64" y="355" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" fill="#6e7681" letter-spacing="1.5">TASK IN</text>
+  <text x="64" y="387" font-size="20" font-weight="700" fill="#e6edf3">A hard,</text>
+  <text x="64" y="413" font-size="20" font-weight="700" fill="#e6edf3">underspecified</text>
+  <text x="64" y="439" font-size="20" font-weight="700" fill="#e6edf3">task</text>
+  <text x="56" y="467" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" fill="#8b949e">no spec · just a goal</text>
+
+  <line x1="244" y1="401" x2="286" y2="401" stroke="#8b949e" stroke-width="4"/>
+  <path d="M286,392 L300,401 L286,410 Z" fill="#8b949e"/>
+
+  <!-- THE HARNESS -->
+  <rect x="300" y="72" width="720" height="520" rx="18" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+  <text x="328" y="112" font-size="30" font-weight="700" fill="#e6edf3" letter-spacing="1">THE HARNESS</text>
+  <text x="328" y="138" font-size="18" fill="#8b949e">autonomy lives here — not in the model · 26 plugins · 60+ tools</text>
+
+  <rect x="344" y="158" width="632" height="104" rx="12" fill="#10161f" stroke="#58a6ff" stroke-width="1.5" stroke-dasharray="6 5"/>
+  <text x="364" y="184" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" fill="#58a6ff" letter-spacing="2">SWAPPABLE MODEL CORE</text>
+  <rect x="562" y="192" width="196" height="48" rx="10" fill="#58a6ff" opacity="0.12" filter="url(#glow)"/>
+  <rect x="546" y="186" width="196" height="48" rx="10" fill="none" stroke="#58a6ff" stroke-width="1.5" opacity="0.45"/>
+  <rect x="578" y="198" width="196" height="48" rx="10" fill="none" stroke="#58a6ff" stroke-width="1.5" opacity="0.25"/>
+  <rect x="562" y="192" width="196" height="48" rx="10" fill="#1c2128" stroke="#58a6ff" stroke-width="1.75"/>
+  <text x="660" y="224" text-anchor="middle" font-size="24" font-weight="700" fill="#e6edf3">ANY LLM</text>
+  <text x="660" y="253" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" fill="#8b949e">local or cloud · Qwen · Llama · GPT · Claude</text>
+
+  <!-- self-repair ladder: what the harness does when verify goes red -->
+  <path d="M893,372 C840,296 720,290 665,290 C610,290 490,296 432,372" fill="none" stroke="#d29922" stroke-width="2.5" marker-end="url(#ahAmber)"/>
+  <rect x="572" y="271" width="186" height="40" rx="20" fill="#0d1117" stroke="#d29922" stroke-width="1.5"/>
+  <text x="665" y="297" text-anchor="middle" font-size="18" font-weight="700" fill="#d29922" letter-spacing="0.5">SELF-REPAIR</text>
+  <rect x="452" y="320" width="426" height="46" rx="8" fill="#161b22"/>
+  <text x="665" y="336" text-anchor="middle" font-size="16" fill="#d29922">red → self-repair · red ×N → auto-rewind to last green</text>
+  <text x="665" y="358" text-anchor="middle" font-size="16" fill="#d29922">still stuck → cloud second opinion</text>
+
+  <rect x="376" y="372" width="108" height="58" rx="12" fill="#1c2128" stroke="#30363d"/>
+  <text x="430" y="408" text-anchor="middle" font-size="22" font-weight="600" fill="#e6edf3">PLAN</text>
+  <rect x="516" y="372" width="150" height="58" rx="12" fill="#1c2128" stroke="#30363d"/>
+  <text x="591" y="408" text-anchor="middle" font-size="22" font-weight="600" fill="#e6edf3">DECOMPOSE</text>
+  <rect x="698" y="372" width="88" height="58" rx="12" fill="#1c2128" stroke="#30363d"/>
+  <text x="742" y="408" text-anchor="middle" font-size="22" font-weight="600" fill="#e6edf3">ACT</text>
+  <rect x="818" y="372" width="150" height="58" rx="12" fill="#1c2128" stroke="#3fb950"/>
+  <text x="893" y="408" text-anchor="middle" font-size="22" font-weight="600" fill="#3fb950">VERIFY</text>
+  <rect x="700" y="442" width="316" height="22" rx="6" fill="#161b22"/>
+  <text x="1010" y="458" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" fill="#8b949e">force-verify · reproduce · quiz</text>
+
+  <line x1="486" y1="401" x2="510" y2="401" stroke="#8b949e" stroke-width="2.5" marker-end="url(#ahGray)"/>
+  <line x1="668" y1="401" x2="692" y2="401" stroke="#8b949e" stroke-width="2.5" marker-end="url(#ahGray)"/>
+  <line x1="788" y1="401" x2="812" y2="401" stroke="#8b949e" stroke-width="2.5" marker-end="url(#ahGray)"/>
+
+  <line x1="430" y1="430" x2="430" y2="470" stroke="#30363d" stroke-width="1.5" stroke-dasharray="3 5"/>
+  <line x1="591" y1="430" x2="591" y2="470" stroke="#30363d" stroke-width="1.5" stroke-dasharray="3 5"/>
+  <line x1="742" y1="430" x2="742" y2="470" stroke="#30363d" stroke-width="1.5" stroke-dasharray="3 5"/>
+
+  <rect x="344" y="470" width="632" height="76" rx="12" fill="#14181c" stroke="#30363d"/>
+  <text x="368" y="502" font-size="19" font-weight="700" fill="#e6edf3">RELIABILITY &amp; SECURITY</text>
+  <text x="368" y="526" font-size="17" fill="#8b949e">wraps every tool call · guards · retries · validation · sandbox</text>
+
+  <!-- one continuous line: the verified result comes FROM the verify gate -->
+  <line x1="968" y1="401" x2="1066" y2="401" stroke="#3fb950" stroke-width="4"/>
+  <path d="M1066,392 L1080,401 L1066,410 Z" fill="#3fb950"/>
+
+  <rect x="1080" y="321" width="200" height="160" rx="14" fill="none" stroke="#3fb950" stroke-width="3" opacity="0.35" filter="url(#glow)"/>
+  <rect x="1080" y="321" width="200" height="160" rx="14" fill="#12171e" stroke="#3fb950" stroke-width="1.5"/>
+  <text x="1104" y="357" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" fill="#3fb950" letter-spacing="1.5">DONE MEANS</text>
+  <text x="1180" y="421" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="40" font-weight="700" fill="#3fb950">PROVEN</text>
+  <text x="1180" y="457" text-anchor="middle" font-size="15" fill="#8b949e">finished · tests green ✓</text>
+</svg>

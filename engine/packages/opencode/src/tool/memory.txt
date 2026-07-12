@@ -1,0 +1,35 @@
+Search session/project/global memory using BM25 over markdown bodies. Use this to recall
+content persisted previously: project memory, session checkpoints, task narratives (under
+sessions/<sid>/tasks/), project notes, global preferences.
+
+Layout: <data>/memory/<scope>/<scope_id>/<key>.md. Scopes: global | projects | sessions | cc.
+Action: search — OR-joined BM25 query, optional scope/scope_id/type filters. After search
+returns paths, Read the most relevant ones (snippets are truncated); Glob
+`<data>/memory/**/*.md` to browse by file name instead of body.
+
+QUERY GUIDELINES:
+- Queries are OR'd and BM25-ranked (any matching word; ranked by rarity/count; a score floor
+  drops common-word-only matches). Prefer 1–3 DISTINCTIVE terms — "T5.3 closure" or
+  "permission deadlock", not padded generic lists ("config params database connection").
+- Punctuation (`.`, `-`, `/`, `:`) is stripped at tokenization on both sides: `T5.3` matches
+  `T5_3`/`T5 3`; `postgres://host:5433` is indexed as `postgres`, `host`, `5433` — search one
+  token, not the full literal.
+
+A HIT IS AUTHORITATIVE: if search returns a result, trust it — even when a sibling query
+returned nothing. Don't conclude "never recorded" because one phrasing missed.
+
+PARTIAL HIT, EXACT LITERAL NEEDED: curation paraphrases; if you need a connection string,
+port, token, or command line byte-for-byte and the hit only approximates it, query the
+history tool (the original message holds it verbatim) — never reconstruct from a paraphrase.
+
+WHEN SEARCH RETURNS 0 (escalate, don't give up): (1) retry with fewer/rarer terms; (2) for
+tokenizer-split literals (URL, port, path) Grep the memory dir directly; (3) for verbatim
+recall a summary glossed over, use the history tool. Widen scope progressively:
+session → project → global → history.
+
+CC SCOPE: with memory.cc_index enabled, Claude Code memory at
+~/.claude/projects/<slug>/memory/*.md is indexed under scope="cc" (scope_id = the CC project
+slug; frontmatter metadata.type — feedback/project/reference/user — fills the type column for
+filtering). Read-only from this tool. Privacy: `type: user`/`type: feedback` may hold personal
+context; with cc_index on they become recallable from any agent, including subagents exposed
+to prompt-injected content — keep cc_index off or filter `type` at search time if undesired.

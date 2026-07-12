@@ -1,0 +1,192 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1360" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <style>
+      .card{fill:#161b22;stroke:#ffffff14;stroke-width:1;}
+      .glabel{font-size:14px;font-weight:700;letter-spacing:.09em;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+      .pname{fill:#e6edf3;font-size:17px;font-weight:600;}
+      .pdesc{fill:#8b949e;font-size:14px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+      .hook{fill:#8b949e;font-size:15px;}
+      .hdr{fill:#e6edf3;font-size:20px;font-weight:700;}
+      .hdrm{fill:#8b949e;font-size:13px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+      .legend{fill:#6e7681;font-size:13px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+    </style>
+  </defs>
+  <rect x="0" y="0" width="1200" height="1360" rx="18" fill="#0d1117"/>
+  <rect x="1" y="1" width="1198" height="1358" rx="17" fill="none" stroke="#ffffff10"/>
+
+  <!-- header · count must equal MANIFEST.length in plugin/lib/manifest.ts -->
+  <text x="48" y="52" class="hdr">FABULA — 32 plugins, one toolbelt</text>
+  <text x="1152" y="52" text-anchor="end" class="hdrm">78 plugin tools + engine built-ins · each plugin a single file: plugin/fabula-*.ts</text>
+  <line x1="48" y1="74" x2="1152" y2="74" stroke="#ffffff10"/>
+  <text x="48" y="98" class="hdrm" fill="#6e7681">every tool call wrapped by <tspan fill="#f0883e">reliability</tspan> + <tspan fill="#f0883e">security</tspan> · on any model you plug in, local or cloud</text>
+  <text x="48" y="122" class="legend">⚡ = pure hook — fires itself, no tool to call · others are callable tools</text>
+
+  <!-- ===== LEFT COLUMN ===== -->
+  <text x="50" y="152" class="glabel" fill="#b794f6">UNDERSTAND &amp; PLAN</text>
+  <rect x="48" y="166" width="544" height="46" rx="10" class="card"/>
+  <rect x="48" y="174" width="3" height="30" rx="1.5" fill="#b794f6"/>
+  <text x="74" y="187" class="pname">graph</text>
+  <text x="74" y="205" class="pdesc">one task → parallel sub-steps</text>
+  <rect x="48" y="220" width="544" height="46" rx="10" class="card"/>
+  <rect x="48" y="228" width="3" height="30" rx="1.5" fill="#b794f6"/>
+  <text x="74" y="241" class="pname">unknowns</text>
+  <text x="74" y="259" class="pdesc">mines the codebase as the spec</text>
+  <rect x="48" y="274" width="544" height="46" rx="10" class="card"/>
+  <rect x="48" y="282" width="3" height="30" rx="1.5" fill="#b794f6"/>
+  <text x="74" y="295" class="pname">interview</text>
+  <text x="74" y="313" class="pdesc">asks the one call only you can make</text>
+  <rect x="48" y="328" width="544" height="46" rx="10" class="card"/>
+  <rect x="48" y="336" width="3" height="30" rx="1.5" fill="#b794f6"/>
+  <text x="74" y="349" class="pname">brainstorm</text>
+  <text x="74" y="367" class="pdesc">3–5 divergent throwaway options</text>
+
+  <text x="50" y="414" class="glabel" fill="#58c3f5">ACT ON THE WORLD</text>
+  <rect x="48" y="428" width="544" height="46" rx="10" class="card"/>
+  <rect x="48" y="436" width="3" height="30" rx="1.5" fill="#58c3f5"/>
+  <text x="74" y="449" class="pname">tools</text>
+  <text x="74" y="467" class="pdesc">web · code · files · sandbox · drift-proof edits</text>
+  <rect x="48" y="482" width="544" height="46" rx="10" class="card"/>
+  <rect x="48" y="490" width="3" height="30" rx="1.5" fill="#58c3f5"/>
+  <text x="74" y="503" class="pname">browser</text>
+  <text x="74" y="521" class="pdesc">13 tools drive real Chromium</text>
+
+  <text x="50" y="568" class="glabel" fill="#39c5cf">REMEMBER</text>
+  <rect x="48" y="582" width="544" height="46" rx="10" class="card"/>
+  <rect x="48" y="590" width="3" height="30" rx="1.5" fill="#39c5cf"/>
+  <text x="74" y="603" class="pname">context</text>
+  <text x="74" y="621" class="pdesc">curated memory injected · coding tool belt</text>
+  <text x="568" y="611" class="hook">⚡</text>
+  <rect x="48" y="636" width="544" height="46" rx="10" class="card"/>
+  <rect x="48" y="644" width="3" height="30" rx="1.5" fill="#39c5cf"/>
+  <text x="74" y="657" class="pname">handoff</text>
+  <text x="74" y="675" class="pdesc">notes survive between sessions</text>
+  <rect x="48" y="690" width="544" height="46" rx="10" class="card"/>
+  <rect x="48" y="698" width="3" height="30" rx="1.5" fill="#39c5cf"/>
+  <text x="74" y="711" class="pname">checkpoint</text>
+  <text x="74" y="729" class="pdesc">snapshots each edit · undo safely</text>
+
+  <text x="50" y="776" class="glabel" fill="#39d3c0">PERCEIVE</text>
+  <rect x="48" y="790" width="544" height="46" rx="10" class="card"/>
+  <rect x="48" y="798" width="3" height="30" rx="1.5" fill="#39d3c0"/>
+  <text x="74" y="811" class="pname">multimodal</text>
+  <text x="74" y="829" class="pdesc">image analysis · TTS · local transcribe</text>
+  <rect x="48" y="844" width="544" height="46" rx="10" class="card"/>
+  <rect x="48" y="852" width="3" height="30" rx="1.5" fill="#39d3c0"/>
+  <text x="74" y="865" class="pname">vision</text>
+  <text x="74" y="883" class="pdesc">detects VLM-capable models · syncs the flag</text>
+
+  <text x="50" y="930" class="glabel" fill="#f0883e">GUARD EVERY CALL</text>
+  <rect x="48" y="944" width="544" height="46" rx="10" class="card"/>
+  <rect x="48" y="952" width="3" height="30" rx="1.5" fill="#f0883e"/>
+  <text x="74" y="965" class="pname">reliability</text>
+  <text x="74" y="983" class="pdesc">loop-guard + tool-call repair</text>
+  <text x="568" y="973" class="hook">⚡</text>
+  <rect x="48" y="998" width="544" height="46" rx="10" class="card"/>
+  <rect x="48" y="1006" width="3" height="30" rx="1.5" fill="#f0883e"/>
+  <text x="74" y="1019" class="pname">security</text>
+  <text x="74" y="1037" class="pdesc">SSRF · redaction · injection-safe · shell guards</text>
+
+  <!-- ===== RIGHT COLUMN ===== -->
+  <text x="610" y="152" class="glabel" fill="#56d364">VERIFY &amp; SHIP</text>
+  <rect x="608" y="166" width="544" height="46" rx="10" class="card"/>
+  <rect x="608" y="174" width="3" height="30" rx="1.5" fill="#56d364"/>
+  <text x="634" y="187" class="pname">reproduce-gate</text>
+  <text x="634" y="205" class="pdesc">no test for the fix → not done</text>
+  <text x="1128" y="195" class="hook">⚡</text>
+  <rect x="608" y="220" width="544" height="46" rx="10" class="card"/>
+  <rect x="608" y="228" width="3" height="30" rx="1.5" fill="#56d364"/>
+  <text x="634" y="241" class="pname">change-quiz</text>
+  <text x="634" y="259" class="pdesc">quizzes the agent on its own diff</text>
+  <rect x="608" y="274" width="544" height="46" rx="10" class="card"/>
+  <rect x="608" y="282" width="3" height="30" rx="1.5" fill="#56d364"/>
+  <text x="634" y="295" class="pname">shipnotes</text>
+  <text x="634" y="313" class="pdesc">logs the why, packages the pitch</text>
+  <rect x="608" y="328" width="544" height="46" rx="10" class="card"/>
+  <rect x="608" y="336" width="3" height="30" rx="1.5" fill="#56d364"/>
+  <text x="634" y="349" class="pname">receipt</text>
+  <text x="634" y="367" class="pdesc">green verify → mints a replayable proof</text>
+
+  <text x="610" y="393" class="glabel" fill="#f85149">WHEN THE MODEL FAILS</text>
+  <rect x="608" y="407" width="544" height="46" rx="10" class="card"/>
+  <rect x="608" y="415" width="3" height="30" rx="1.5" fill="#f85149"/>
+  <text x="634" y="428" class="pname">rewind</text>
+  <text x="634" y="446" class="pdesc">red ×N → files roll back to last green</text>
+  <text x="1128" y="436" class="hook">⚡</text>
+  <rect x="608" y="461" width="544" height="46" rx="10" class="card"/>
+  <rect x="608" y="469" width="3" height="30" rx="1.5" fill="#f85149"/>
+  <text x="634" y="482" class="pname">escalate</text>
+  <text x="634" y="500" class="pdesc">stuck → cloud second opinion, one consult</text>
+
+  <text x="610" y="580" class="glabel" fill="#d4a72c">GROW</text>
+  <rect x="608" y="594" width="544" height="46" rx="10" class="card"/>
+  <rect x="608" y="602" width="3" height="30" rx="1.5" fill="#d4a72c"/>
+  <text x="634" y="615" class="pname">learn</text>
+  <text x="634" y="633" class="pdesc">distills a win into a reusable skill</text>
+  <text x="1128" y="623" class="hook">⚡</text>
+  <rect x="608" y="648" width="544" height="46" rx="10" class="card"/>
+  <rect x="608" y="656" width="3" height="30" rx="1.5" fill="#d4a72c"/>
+  <text x="634" y="669" class="pname">selfextend</text>
+  <text x="634" y="687" class="pdesc">authors its own new tool — contract-checked</text>
+
+  <text x="610" y="767" class="glabel" fill="#e3b341">OWN THE STACK</text>
+  <rect x="608" y="781" width="544" height="46" rx="10" class="card"/>
+  <rect x="608" y="789" width="3" height="30" rx="1.5" fill="#e3b341"/>
+  <text x="634" y="802" class="pname">manage</text>
+  <text x="634" y="820" class="pdesc">enable / disable · dep health</text>
+  <rect x="608" y="835" width="544" height="46" rx="10" class="card"/>
+  <rect x="608" y="843" width="3" height="30" rx="1.5" fill="#e3b341"/>
+  <text x="634" y="856" class="pname">ops</text>
+  <text x="634" y="874" class="pdesc">launchd jobs · overdue ledger · notify</text>
+  <rect x="608" y="889" width="544" height="46" rx="10" class="card"/>
+  <rect x="608" y="897" width="3" height="30" rx="1.5" fill="#e3b341"/>
+  <text x="634" y="910" class="pname">readfloor</text>
+  <text x="634" y="928" class="pdesc">whole-file read floors</text>
+  <text x="1128" y="918" class="hook">⚡</text>
+  <rect x="608" y="943" width="544" height="46" rx="10" class="card"/>
+  <rect x="608" y="951" width="3" height="30" rx="1.5" fill="#e3b341"/>
+  <text x="634" y="964" class="pname">distill-guard</text>
+  <text x="634" y="982" class="pdesc">safety valve on self-improvement passes</text>
+  <text x="1128" y="972" class="hook">⚡</text>
+  <rect x="608" y="997" width="544" height="46" rx="10" class="card"/>
+  <rect x="608" y="1005" width="3" height="30" rx="1.5" fill="#e3b341"/>
+  <text x="634" y="1018" class="pname">purge-hook</text>
+  <text x="634" y="1036" class="pdesc">wipes a deleted chat’s artifacts</text>
+  <text x="1128" y="1026" class="hook">⚡</text>
+
+  <!-- ===== DISRUPT LAYER — proof economy on top of the receipt · all six defaultEnabled:false ===== -->
+  <line x1="48" y1="1088" x2="1152" y2="1088" stroke="#ffffff10"/>
+  <text x="50" y="1124" class="glabel" fill="#db61a2">PROOF ECONOMY</text>
+  <text x="200" y="1124" class="hdrm" fill="#6e7681">extends the Proof-of-Done receipt — publish · attest · guarantee · compose · reward · all six off by default</text>
+
+  <!-- row 1 · publish + attest -->
+  <rect x="48" y="1140" width="544" height="46" rx="10" class="card"/>
+  <rect x="48" y="1148" width="3" height="30" rx="1.5" fill="#db61a2"/>
+  <text x="74" y="1161" class="pname">registry</text>
+  <text x="74" y="1179" class="pdesc">publishes a proof · re-verifies any</text>
+  <rect x="608" y="1140" width="544" height="46" rx="10" class="card"/>
+  <rect x="608" y="1148" width="3" height="30" rx="1.5" fill="#db61a2"/>
+  <text x="634" y="1161" class="pname">witness</text>
+  <text x="634" y="1179" class="pdesc">another model attests the diff</text>
+
+  <!-- row 2 · background + escalate -->
+  <rect x="48" y="1194" width="544" height="46" rx="10" class="card"/>
+  <rect x="48" y="1202" width="3" height="30" rx="1.5" fill="#db61a2"/>
+  <text x="74" y="1215" class="pname">daemon</text>
+  <text x="74" y="1233" class="pdesc">KAIROS — mints proof while you're away</text>
+  <rect x="608" y="1194" width="544" height="46" rx="10" class="card"/>
+  <rect x="608" y="1202" width="3" height="30" rx="1.5" fill="#db61a2"/>
+  <text x="634" y="1215" class="pname">relay</text>
+  <text x="634" y="1233" class="pdesc">cloud writes it → you re-verify</text>
+
+  <!-- row 3 · compose + reward -->
+  <rect x="48" y="1248" width="544" height="46" rx="10" class="card"/>
+  <rect x="48" y="1256" width="3" height="30" rx="1.5" fill="#db61a2"/>
+  <text x="74" y="1269" class="pname">coordinator</text>
+  <text x="74" y="1287" class="pdesc">sub-receipt tree · every step proven</text>
+  <rect x="608" y="1248" width="544" height="46" rx="10" class="card"/>
+  <rect x="608" y="1256" width="3" height="30" rx="1.5" fill="#db61a2"/>
+  <text x="634" y="1269" class="pname">buddy</text>
+  <text x="634" y="1287" class="pdesc">a pet that grows only from proof</text>
+
+  <text x="48" y="1330" class="legend">ground truth: plugin/lib/manifest.ts</text>
+</svg>

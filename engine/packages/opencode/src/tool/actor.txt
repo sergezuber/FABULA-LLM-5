@@ -1,0 +1,67 @@
+Launch a new actor (subagent) to handle complex, multi-step tasks autonomously.
+
+JSON calls wrap the action payload inside an `operation` object; `action` is the discriminator field.
+
+Examples:
+{"operation":{"action":"run","subagent_type":"explore","description":"Find error recovery","prompt":"<full task>"}}
+{"operation":{"action":"run","subagent_type":"explore","description":"Investigate T4","prompt":"<full task>","task_id":"T4"}}
+{"operation":{"action":"spawn","subagent_type":"general","description":"Long-running search","prompt":"<full task>"}}
+{"operation":{"action":"status","actor_id":"<existing>"}}
+{"operation":{"action":"wait","actor_id":"<existing>"}}
+{"operation":{"action":"cancel","actor_id":"<existing>"}}
+{"operation":{"action":"send","to_actor_id":"<existing>","content":"<message>"}}
+
+## Operations (the `operation.action` field selects one)
+
+- run:    spawn a subagent and BLOCK until completion; result returned inline.
+          required: subagent_type, description, prompt. optional: actor_id, timeout_ms, command, context
+- spawn:  spawn a subagent and return actor_id IMMEDIATELY (background); its result arrives later
+          as a notification (your turn does NOT auto-wake — use `wait` to block explicitly).
+          required: subagent_type, description, prompt. optional: actor_id, command, context
+- status: poll actor state without blocking. required: actor_id.
+          Returns: { status: "pending"|"running"|"idle"|"unknown", actor_id, turnCount, ... }
+- wait:   block until actor completes (success/failure/cancelled) or timeout (default 10 min).
+          required: actor_id. optional: timeout_ms. Returns: { status, actor_id, result?, error? }
+- cancel: stop a running actor (graceful). required: actor_id. Idempotent.
+- send:   deliver message to another actor's inbox. required: to_actor_id, content.
+          optional: to_session_id, type (default "text"). Fire-and-forget (~5 ms); receiver sees
+          <inbox from="..." sent_at="...">...</inbox> at its next iteration; unknown to_actor_id
+          returns {inboxID: null, error: "receiver not found"} rather than throwing.
+
+## When to use
+
+Parallelize independent searches/analyses (spawn several, `wait` on each); isolate heavy lifting
+(10+ file reads → you get only the synthesis); `explore` for read-only code discovery; `general`
+for unbiased spec review. DON'T spawn for trivial single-file lookups, answers already in your
+context, or decisions on partial outputs.
+
+## Writing the prompt
+
+You are the subagent's only briefing — it hasn't seen this conversation. Explain the goal and why,
+what you've learned or ruled out, and enough context for judgment calls (not just narrow steps).
+For investigations hand over the QUESTION — prescribed steps become dead weight. If you need short
+output, say so ("report in under 200 words").
+
+## Context inheritance
+
+- `context="full"`: subagent sees your full conversation history (state writers, evaluators).
+- `context="state"`: checkpoint summaries injected (background knowledge, no full detail).
+- `context="none"` (default): clean context, only the prompt.
+
+## Actor ID vs Task ID
+
+`actor_id` identifies a subagent session: pass it to `run`/`spawn` to RESUME that subagent with its
+prior messages; omit it for a fresh one. Task IDs (T1, T2, …) come from the `task` tool — when the
+subagent works on one of your active tasks, pass `task_id` so its verbatim findings are captured to
+`tasks/<TID>/progress.md` and reconciled into the next checkpoint (the system verifies the file
+after the run and gives the subagent one retry to write it). Pass ONLY a TID the `task` tool
+returned this session — malformed/unknown TIDs drop the binding and the tool result says so. Leave
+`task_id` off for ad-hoc work.
+
+## Usage notes
+
+- `wait` is for ephemeral subagents. Persistent peers idle between turns and never produce "done"
+  on success — `wait` on a peer blocks until it fails or is cancelled; coordinate with `send` +
+  `status` instead.
+- Trust the subagent's outputs generally, but it doesn't see your context (unless `context="full"`);
+  brief it accordingly.

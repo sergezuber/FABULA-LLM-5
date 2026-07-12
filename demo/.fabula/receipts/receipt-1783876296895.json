@@ -1,0 +1,43 @@
+{
+  "version": "fabula-receipt/v0",
+  "mintedAt": 1783876296880,
+  "model": {
+    "id": "qwen3.6-35b-a3b-nvidia-nvfp4-512k",
+    "host": "local"
+  },
+  "task": "\"Fix the export bug: the nightly export silently drops rows dated exactly on the end date. Prove it.\"",
+  "base": "91528cd73457663551e58e695fb30dda3929e279",
+  "gates": [
+    {
+      "id": "verify",
+      "forced": "re-ran the project's checks after source edits — only a green run counts as done"
+    },
+    {
+      "id": "comprehension",
+      "forced": "graded the agent against its own diff before 'done' stood"
+    }
+  ],
+  "artifact": {
+    "kind": "git-diff",
+    "files": 2,
+    "bytes": 1343,
+    "patch": ".fabula/receipts/receipt-1783876296895.patch"
+  },
+  "verification": {
+    "cmd": "cd \"$(git rev-parse --show-toplevel)/demo\" && bun test .",
+    "exitCode": 0,
+    "passed": true,
+    "outputTail": "--- FABULA_VERIFY_CMD output (tail) ---\nbun test v1.3.14 (0d9b296a)\n\n 6 pass\n 0 fail\n 9 expect() calls\nRan 6 tests across 1 file. [55.00ms]"
+  },
+  "replay": "git worktree add --detach /tmp/fabula-replay-1783876296880 91528cd73457 && git -C /tmp/fabula-replay-1783876296880 apply \"$(pwd)/.fabula/receipts/receipt-1783876296895.patch\" && cd /tmp/fabula-replay-1783876296880 && cd \"$(git rev-parse --show-toplevel)/demo\" && bun test .",
+  "provenance": {
+    "bundlePrefixHash": "2356eade555182c1cbda726160f5ab057da779cbee10c4a2c2f4c38e17a8ac47",
+    "systemHash": "6ed4ae1915c57f1984f6baf7baf74a6decc7cc67e077963d21bb3392b056c60e",
+    "toolsHash": "6f62c87edc2cd76bb299e8c0651b1e3d1a9d32e108d34d3b60e21037f682d3f9",
+    "toolCount": 102,
+    "engineVersion": "0.0.0-prod-202607121102",
+    "step": 15,
+    "midTurnBreaks": 0,
+    "routerProfile": "coding"
+  }
+}

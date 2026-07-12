@@ -1,0 +1,7 @@
+{
+  "name": "fabula-demo",
+  "private": true,
+  "scripts": {
+    "test": "bun test ."
+  }
+}

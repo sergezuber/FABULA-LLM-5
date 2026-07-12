@@ -1,0 +1,97 @@
+import { parseDiffFromFile, type FileDiffMetadata } from "@pierre/diffs"
+import { formatPatch, parsePatch, structuredPatch } from "diff"
+import type { SnapshotFileDiff, VcsFileDiff } from "@mimo-ai/sdk/v2"
+
+type LegacyDiff = {
+  file: string
+  patch?: string
+  before?: string
+  after?: string
+  additions: number
+  deletions: number
+  status?: "added" | "deleted" | "modified"
+}
+
+type ReviewDiff = SnapshotFileDiff | VcsFileDiff | LegacyDiff
+
+export type ViewDiff = {
+  file: string
+  patch: string
+  additions: number
+  deletions: number
+  status?: "added" | "deleted" | "modified"
+  fileDiff: FileDiffMetadata
+}
+
+const cache = new Map<string, FileDiffMetadata>()
+
+function patch(diff: ReviewDiff) {
+  if (typeof diff.patch === "string") {
+    const [patch] = parsePatch(diff.patch)
+
+    const beforeLines: string[] = []
+    const afterLines: string[] = []
+
+    for (const hunk of patch.hunks) {
+      hunk.lines.forEach((line, index) => {
+        // "\ No newline at end of file" annotates the previous line, it is not content
+        if (line.startsWith("\\")) return
+        const content = line.slice(1) + (hunk.lines[index + 1]?.startsWith("\\") ? "" : "\n")
+        if (line.startsWith("-")) {
+          beforeLines.push(content)
+          return
+        }
+        if (line.startsWith("+")) {
+          afterLines.push(content)
+          return
+        }
+        // context line (starts with ' ')
+        beforeLines.push(content)
+        afterLines.push(content)
+      })
+    }
+
+    return { before: beforeLines.join(""), after: afterLines.join(""), patch: diff.patch }
+  }
+  return {
+    before: "before" in diff && typeof diff.before === "string" ? diff.before : "",
+    after: "after" in diff && typeof diff.after === "string" ? diff.after : "",
+    patch: formatPatch(
+      structuredPatch(
+        diff.file,
+        diff.file,
+        "before" in diff && typeof diff.before === "string" ? diff.before : "",
+        "after" in diff && typeof diff.after === "string" ? diff.after : "",
+        "",
+        "",
+        { context: Number.MAX_SAFE_INTEGER },
+      ),
+    ),
+  }
+}
+
+function file(file: string, patch: string, before: string, after: string) {
+  const hit = cache.get(patch)
+  if (hit) return hit
+
+  const value = parseDiffFromFile({ name: file, contents: before }, { name: file, contents: after })
+  cache.set(patch, value)
+  return value
+}
+
+export function normalize(diff: ReviewDiff): ViewDiff {
+  const next = patch(diff)
+  return {
+    file: diff.file,
+    patch: next.patch,
+    additions: diff.additions,
+    deletions: diff.deletions,
+    status: diff.status,
+    fileDiff: file(diff.file, next.patch, next.before, next.after),
+  }
+}
+
+export function text(diff: ViewDiff, side: "deletions" | "additions") {
+  if (side === "deletions") return diff.fileDiff.deletionLines.join("")
+  return diff.fileDiff.additionLines.join("")
+}

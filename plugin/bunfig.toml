@@ -1,0 +1,6 @@
+# Bun test config. The preload makes tests hermetic: it redirects FABULA's on-disk state
+# ($XDG_CONFIG_HOME/mimocode/*.json — permission mode + plugin enable list) to a throwaway temp dir,
+# so unit tests never read the developer's machine state (a persisted permission `mode: bypass`
+# otherwise silently skips every security guard and fails all the "blocks …" assertions).
+[test]
+preload = ["./lib/test-preload.ts"]

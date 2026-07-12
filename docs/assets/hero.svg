@@ -1,0 +1,190 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1340" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arw" markerWidth="9" markerHeight="9" refX="6.5" refY="3" orient="auto">
+      <path d="M0,0 L6.5,3 L0,6 Z" fill="#6e7681"/>
+    </marker>
+    <marker id="arwAmber" markerWidth="9" markerHeight="9" refX="6.5" refY="3" orient="auto">
+      <path d="M0,0 L6.5,3 L0,6 Z" fill="#d29922"/>
+    </marker>
+    <style>
+      .card{fill:#161b22;stroke:#ffffff14;stroke-width:1;}
+      .gate{fill:#161b22;stroke:#d29922;stroke-width:1.5;}
+      .title{fill:#e6edf3;font-size:17px;font-weight:600;}
+      .t2{fill:#e6edf3;font-size:16px;font-weight:600;}
+      .sub{fill:#8b949e;font-size:13px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+      .tag{font-size:12px;font-weight:600;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+      .flow{stroke:#6e7681;stroke-width:2.25;fill:none;}
+      .hdr{fill:#e6edf3;font-size:17px;font-weight:600;}
+      .hdrm{fill:#6e7681;font-size:13px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="1340" rx="18" fill="#0d1117"/>
+  <rect x="1" y="1" width="1198" height="1338" rx="17" fill="none" stroke="#ffffff10"/>
+
+  <!-- header -->
+  <text x="48" y="34" class="hdr">FABULA — one hard task: two failed fixes, still proven</text>
+  <text x="1152" y="34" text-anchor="end" class="hdrm">illustrative walkthrough · every amber gate fires itself — no human nudge</text>
+  <line x1="48" y1="50" x2="1152" y2="50" stroke="#ffffff10"/>
+
+  <!-- legend -->
+  <rect x="48" y="66" width="12" height="12" rx="3" fill="#161b22" stroke="#30363d"/>
+  <text x="66" y="77" class="sub" font-size="14">the model acts</text>
+  <rect x="208" y="66" width="12" height="12" rx="3" fill="#f85149"/>
+  <text x="226" y="77" class="sub" font-size="14">the model fails</text>
+  <rect x="376" y="66" width="12" height="12" rx="3" fill="#d29922"/>
+  <text x="394" y="77" class="sub" font-size="14">the harness intervenes — fires itself</text>
+  <rect x="729" y="66" width="12" height="12" rx="3" fill="#3fb950"/>
+  <text x="747" y="77" class="sub" font-size="14">proven</text>
+  <rect x="822" y="66" width="12" height="12" rx="3" fill="none" stroke="#58a6ff" stroke-dasharray="3 2"/>
+  <text x="840" y="77" class="sub" font-size="14">cloud consult — steered, model-called</text>
+
+  <!-- status rail: the verify EKG -->
+  <rect x="64" y="110" width="6" height="152" rx="3" fill="#30363d"/>
+  <rect x="64" y="262" width="6" height="212" fill="#3fb950"/>
+  <rect x="64" y="474" width="6" height="156" fill="#f85149"/>
+  <rect x="64" y="630" width="6" height="96" fill="#d29922"/>
+  <rect x="64" y="726" width="6" height="288" fill="#f85149"/>
+  <rect x="64" y="1014" width="6" height="264" rx="3" fill="#3fb950"/>
+  <rect x="58" y="260" width="18" height="3" fill="#3fb950"/>
+  <text x="82" y="252" class="sub" fill="#3fb950">⌂ last green ✓</text>
+  <circle cx="67" cy="262" r="5.5" fill="#3fb950"/>
+  <circle cx="67" cy="474" r="5.5" fill="#f85149"/>
+  <circle cx="67" cy="570" r="5.5" fill="#f85149"/>
+  <circle cx="67" cy="1014" r="5.5" fill="#3fb950"/>
+
+  <!-- side rail: reliability + security wrap every call (not spine steps) -->
+  <line x1="1122" y1="318" x2="1122" y2="1158" stroke="#f0883e" stroke-width="1.5"/>
+  <line x1="1114" y1="318" x2="1130" y2="318" stroke="#f0883e" stroke-width="1.5"/>
+  <line x1="1114" y1="1158" x2="1130" y2="1158" stroke="#f0883e" stroke-width="1.5"/>
+  <text transform="rotate(90 1146 738)" x="1146" y="738" text-anchor="middle" class="sub" fill="#f0883e">reliability + security wrap every call — loop-guard · arg-repair · SSRF · redaction · injection-safe</text>
+
+  <!-- connectors -->
+  <g>
+    <path class="flow" d="M620,206 L620,226" marker-end="url(#arw)"/>
+    <path class="flow" d="M620,294 L620,314" marker-end="url(#arw)"/>
+    <path class="flow" d="M620,414 L620,434" marker-end="url(#arw)"/>
+    <path class="flow" d="M620,510 L620,530" marker-end="url(#arw)"/>
+    <path class="flow" d="M620,606 L620,626" marker-end="url(#arw)"/>
+    <path class="flow" d="M620,726 L620,746" marker-end="url(#arw)"/>
+    <path class="flow" d="M620,806 L620,826" marker-end="url(#arw)"/>
+    <path class="flow" d="M620,954 L620,974" marker-end="url(#arw)"/>
+    <path class="flow" d="M620,1050 L620,1070" marker-end="url(#arw)"/>
+    <path class="flow" d="M620,1158 L620,1178" marker-end="url(#arw)"/>
+    <path class="flow" d="M744,474 L760,474" marker-end="url(#arw)"/>
+    <path class="flow" d="M744,570 L760,570" marker-end="url(#arw)"/>
+    <path class="flow" d="M744,1014 L760,1014" marker-end="url(#arw)"/>
+  </g>
+
+  <!-- 1 · TASK -->
+  <g>
+    <rect x="300" y="110" width="780" height="96" rx="14" fill="#0b1f30" stroke="#1f6feb66"/>
+    <rect x="320" y="128" width="52" height="22" rx="6" fill="#21262d"/>
+    <text x="346" y="143" text-anchor="middle" class="tag" fill="#8b949e">TASK</text>
+    <text x="320" y="174" class="title">Exports silently drop rows since the timezone change.</text>
+    <text x="320" y="196" class="title" fill="#8b949e">No repro, no failing test, no spec.</text>
+  </g>
+
+  <!-- 2 · baseline: the suite is green even though the bug is live -->
+  <g>
+    <rect x="300" y="230" width="780" height="64" rx="12" fill="#161b22" stroke="#3fb950"/>
+    <text x="320" y="257" class="sub" font-size="15" font-weight="700" fill="#3fb950">verify_done → GREEN (baseline)</text>
+    <text x="320" y="279" class="sub">⌂ checkpoint captured · the suite never covered this bug — green ≠ proof</text>
+  </g>
+
+  <!-- 3 · reproduce-gate -->
+  <g>
+    <rect x="300" y="318" width="780" height="96" rx="14" class="gate"/>
+    <rect x="320" y="334" width="64" height="22" rx="6" fill="#0f2e1b"/>
+    <text x="352" y="349" text-anchor="middle" class="tag" fill="#56d364">verify</text>
+    <text x="320" y="378" class="title">reproduce-gate — “done” needs a test for the fix</text>
+    <text x="320" y="400" class="sub">fires itself on a green verify without a test for the fix</text>
+    <rect x="848" y="340" width="212" height="52" rx="8" fill="#1c1113" stroke="#f85149"/>
+    <text x="864" y="362" class="sub" fill="#f85149" font-weight="700">repro: FAILS today</text>
+    <text x="864" y="380" class="sub">✓ bug captured</text>
+  </g>
+
+  <!-- 4 · attempt 1 → RED -->
+  <g>
+    <rect x="300" y="438" width="440" height="72" rx="12" class="card"/>
+    <rect x="316" y="450" width="52" height="22" rx="6" fill="#0d2a3d"/>
+    <text x="342" y="465" text-anchor="middle" class="tag" fill="#58c3f5">files</text>
+    <text x="316" y="486" class="t2">fix attempt 1 — patch the date comparison</text>
+    <text x="316" y="503" class="sub">str_replace · checkpoint snapshots first</text>
+    <rect x="764" y="438" width="316" height="72" rx="12" fill="#161b22" stroke="#f85149"/>
+    <text x="780" y="470" class="sub" font-size="15" font-weight="700" fill="#f85149">verify_done → RED</text>
+    <text x="780" y="492" class="sub">repro still fails · siblings break</text>
+  </g>
+
+  <!-- 5 · attempt 2 → RED -->
+  <g>
+    <rect x="300" y="534" width="440" height="72" rx="12" class="card"/>
+    <rect x="316" y="546" width="52" height="22" rx="6" fill="#0d2a3d"/>
+    <text x="342" y="561" text-anchor="middle" class="tag" fill="#58c3f5">files</text>
+    <text x="316" y="582" class="t2">fix attempt 2 — same idea, deeper</text>
+    <text x="316" y="599" class="sub">the model digs the same hole</text>
+    <rect x="764" y="534" width="316" height="72" rx="12" fill="#161b22" stroke="#f85149"/>
+    <text x="780" y="566" class="sub" font-size="15" font-weight="700" fill="#f85149">verify_done → RED</text>
+    <text x="780" y="588" class="sub">2nd consecutive red</text>
+  </g>
+
+  <!-- 6 · AUTO-REWIND (the money shot) -->
+  <g>
+    <rect x="300" y="630" width="780" height="96" rx="14" class="gate"/>
+    <rect x="320" y="646" width="70" height="22" rx="6" fill="#2d2310"/>
+    <text x="355" y="661" text-anchor="middle" class="tag" fill="#d29922">rewind</text>
+    <text x="320" y="690" class="title">AUTO-REWIND — the harness reverts, not the model</text>
+    <text x="320" y="712" class="sub">files restored to the last green shadow-git checkpoint · steer: take a DIFFERENT approach</text>
+  </g>
+  <path d="M300,678 C195,650 130,460 96,276" fill="none" stroke="#d29922" stroke-width="2.5" stroke-dasharray="7 5" marker-end="url(#arwAmber)"/>
+
+  <!-- 7 · still stuck -->
+  <g>
+    <rect x="300" y="750" width="780" height="56" rx="12" class="card"/>
+    <text x="320" y="784" class="t2">new approach — root cause still unclear</text>
+    <text x="1060" y="784" text-anchor="end" class="sub">still stuck</text>
+  </g>
+
+  <!-- 8 · escalate: steered consult, the model places the call -->
+  <g>
+    <rect x="300" y="830" width="780" height="124" rx="14" fill="#161b22" stroke="#58a6ff" stroke-width="1.5" stroke-dasharray="6 5"/>
+    <rect x="320" y="846" width="82" height="22" rx="6" fill="#0b2540"/>
+    <text x="361" y="861" text-anchor="middle" class="tag" fill="#58a6ff">escalate</text>
+    <text x="320" y="890" class="title">escalate_to_cloud — a second opinion, not a takeover</text>
+    <text x="320" y="912" class="sub">steered there by auto-rewind — the model places the call, one consult</text>
+    <text x="320" y="930" class="sub" fill="#c9d1d9">sends what was tried + errors + code → root cause: the batch spans a DST boundary</text>
+    <text x="320" y="948" class="sub" fill="#6e7681">the local model keeps driving</text>
+  </g>
+
+  <!-- 9 · attempt 3 → GREEN -->
+  <g>
+    <rect x="300" y="978" width="440" height="72" rx="12" class="card"/>
+    <rect x="316" y="990" width="52" height="22" rx="6" fill="#0d2a3d"/>
+    <text x="342" y="1005" text-anchor="middle" class="tag" fill="#58c3f5">files</text>
+    <text x="316" y="1026" class="t2">fix attempt 3 — handle the DST boundary</text>
+    <text x="316" y="1043" class="sub">one boundary-aware comparison, one place</text>
+    <rect x="764" y="978" width="316" height="72" rx="12" fill="#161b22" stroke="#3fb950"/>
+    <text x="780" y="1010" class="sub" font-size="15" font-weight="700" fill="#3fb950">verify_done → GREEN</text>
+    <text x="780" y="1032" class="sub">repro passes · suite passes</text>
+  </g>
+
+  <!-- 10 · change-quiz -->
+  <g>
+    <rect x="300" y="1074" width="780" height="84" rx="14" class="gate"/>
+    <rect x="320" y="1090" width="64" height="22" rx="6" fill="#0f2e1b"/>
+    <text x="352" y="1105" text-anchor="middle" class="tag" fill="#56d364">verify</text>
+    <text x="320" y="1128" class="title">change-quiz — green is not enough</text>
+    <text x="320" y="1148" class="sub">3 questions about its own diff, graded strictly against the diff → PASS</text>
+  </g>
+
+  <!-- 11 · result -->
+  <g>
+    <rect x="300" y="1182" width="780" height="96" rx="14" fill="#0c2417" stroke="#2ea04366"/>
+    <text x="330" y="1236" font-size="24" fill="#3fb950">✓</text>
+    <text x="364" y="1230" class="title" fill="#56d364">proven — reproducing test passes · suite green</text>
+    <text x="364" y="1254" class="sub" fill="#7ee787" font-size="12.5">verify GREEN · repro test present · change-quiz PASS · model: any — local or cloud</text>
+  </g>
+
+  <!-- footer -->
+  <text x="600" y="1312" text-anchor="middle" class="sub">3 attempts · 3 self-firing gates · 1 steered cloud consult · 0 human nudges — the model never got smarter; the machine refused an unproven “done”</text>
+</svg>

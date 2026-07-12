@@ -1,0 +1,78 @@
+diff --git a/dist/index.js b/dist/index.js
+index dca128d3a790378c51a24a16d92585178343b278..095a9827736a728cca07b6217bb90cc7ce6b0969 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -766,27 +766,17 @@ var OpenAICompatibleChatLanguageModel = class {
+               for (const toolCallDelta of delta.tool_calls) {
+                 const index = (_c = toolCallDelta.index) != null ? _c : toolCalls.length;
+                 if (toolCalls[index] == null) {
+-                  if (toolCallDelta.id == null) {
+-                    throw new import_provider3.InvalidResponseDataError({
+-                      data: toolCallDelta,
+-                      message: `Expected 'id' to be a string.`
+-                    });
+-                  }
+-                  if (((_d = toolCallDelta.function) == null ? void 0 : _d.name) == null) {
+-                    throw new import_provider3.InvalidResponseDataError({
+-                      data: toolCallDelta,
+-                      message: `Expected 'function.name' to be a string.`
+-                    });
+-                  }
++                  const toolCallId = toolCallDelta.id != null ? toolCallDelta.id : (0, import_provider_utils2.generateId)();
++                  const toolName = ((_d = toolCallDelta.function) == null ? void 0 : _d.name) != null ? toolCallDelta.function.name : "unknown_tool";
+                   controller.enqueue({
+                     type: "tool-input-start",
+-                    id: toolCallDelta.id,
+-                    toolName: toolCallDelta.function.name
++                    id: toolCallId,
++                    toolName
+                   });
+                   toolCalls[index] = {
+-                    id: toolCallDelta.id,
++                    id: toolCallId,
+                     type: "function",
+                     function: {
+-                      name: toolCallDelta.function.name,
+-                      arguments: (_e = toolCallDelta.function.arguments) != null ? _e : ""
++                      name: toolName,
++                      arguments: (_e = (_d = toolCallDelta.function) == null ? void 0 : _d.arguments) != null ? _e : ""
+                     },
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 3b1e1b6bdec5032e3b4fa5ffbcc8cdf3dfe1cc40..d0ee6c7c52a18a1de2eb781a1a2f02e58cee4746 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -753,27 +753,17 @@ var OpenAICompatibleChatLanguageModel = class {
+               for (const toolCallDelta of delta.tool_calls) {
+                 const index = (_c = toolCallDelta.index) != null ? _c : toolCalls.length;
+                 if (toolCalls[index] == null) {
+-                  if (toolCallDelta.id == null) {
+-                    throw new InvalidResponseDataError({
+-                      data: toolCallDelta,
+-                      message: `Expected 'id' to be a string.`
+-                    });
+-                  }
+-                  if (((_d = toolCallDelta.function) == null ? void 0 : _d.name) == null) {
+-                    throw new InvalidResponseDataError({
+-                      data: toolCallDelta,
+-                      message: `Expected 'function.name' to be a string.`
+-                    });
+-                  }
++                  const toolCallId = toolCallDelta.id != null ? toolCallDelta.id : generateId();
++                  const toolName = ((_d = toolCallDelta.function) == null ? void 0 : _d.name) != null ? toolCallDelta.function.name : "unknown_tool";
+                   controller.enqueue({
+                     type: "tool-input-start",
+-                    id: toolCallDelta.id,
+-                    toolName: toolCallDelta.function.name
++                    id: toolCallId,
++                    toolName
+                   });
+                   toolCalls[index] = {
+-                    id: toolCallDelta.id,
++                    id: toolCallId,
+                     type: "function",
+                     function: {
+-                      name: toolCallDelta.function.name,
+-                      arguments: (_e = toolCallDelta.function.arguments) != null ? _e : ""
++                      name: toolName,
++                      arguments: (_e = (_d = toolCallDelta.function) == null ? void 0 : _d.arguments) != null ? _e : ""
+                     },

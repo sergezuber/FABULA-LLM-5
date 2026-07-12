@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  plugin-tests:
+    name: Plugin tests (bun)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install plugin dependencies
+        working-directory: plugin
+        run: bun install --frozen-lockfile || bun install
+      - name: Run tests
+        working-directory: plugin
+        run: bun test
+
+  swift-build:
+    name: macOS app compiles
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the app bundle
+        run: bash app/build.sh

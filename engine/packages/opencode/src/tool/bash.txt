@@ -1,0 +1,29 @@
+Executes a given bash command in a persistent shell session with optional timeout, ensuring proper handling and security measures.
+
+Be aware: OS: ${os}, Shell: ${shell}
+
+All commands run in the current working directory by default. Use the `workdir` parameter to run in a different directory — AVOID `cd <directory> && <command>` patterns (good: workdir="/foo/bar" with command `pytest tests`; bad: `cd /foo/bar && pytest tests`).
+
+IMPORTANT: This tool is for terminal operations like git, npm, docker, etc. DO NOT use it for file operations — always prefer the dedicated tools:
+  - File search: `glob` (NOT find or ls); content search: `grep` tool (NOT grep/rg)
+  - Read files: `read` (NOT cat/head/tail); edit files: `edit` (NOT sed/awk); write files: `write` (NOT echo >/cat <<EOF)
+  - Communication: output text directly (NOT echo/printf)
+Avoid `find`, `grep`, `cat`, `head`, `tail`, `sed`, `awk`, `echo` unless truly necessary for the task.
+
+Usage notes:
+  - The command argument is required. Always double-quote file paths that contain spaces (e.g., rm "path with spaces/file.txt").
+  - Optional timeout in milliseconds (default 120000ms / 2 minutes).
+  - It is very helpful if you write a clear, concise description of what this command does in 5-10 words.
+  - If the output exceeds ${maxLines} lines or ${maxBytes} bytes, it is truncated and the full output is written to a file — use Read with offset/limit or Grep on that file. Do NOT pre-truncate with `head`/`tail`; the full output is already captured.
+  - Set `interactive: true` when the command needs user input (sudo/ssh/gpg passwords, y/N confirmation prompts, logins): the terminal is handed to the user and the command will not time out waiting. Do NOT set it for commands that can run unattended.
+  - Multiple commands: if independent, make multiple Bash tool calls in a single message (they run in parallel). ${chaining} Use ';' only when later commands should run regardless of earlier failures. DO NOT separate commands with newlines (newlines are fine inside quoted strings).
+  - If a command creates new files or directories, first verify the parent directory exists with `ls`.
+
+# Git and GitHub
+
+Hard safety floor (always in force):
+- NEVER commit changes unless the user explicitly asks you to
+- NEVER update the git config; NEVER skip hooks (--no-verify, --no-gpg-sign); NEVER run destructive/irreversible git commands (push --force, hard reset) unless the user explicitly requests them; warn on force push to main/master
+- Avoid git commit --amend; never use -i flags (git rebase -i, git add -i — full-terminal UI is unsupported even with `interactive: true`)
+
+Before creating a git commit or a GitHub pull request, FIRST load the `git-commits-and-prs` skill (via the skill tool) and follow its protocol — commit-message drafting, staging steps, amend rules, and `gh pr create` choreography live there. Use the `gh` command for all GitHub tasks (issues, PRs, checks, releases; e.g. view PR comments: gh api repos/foo/bar/pulls/123/comments).

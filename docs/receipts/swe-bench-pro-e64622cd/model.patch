@@ -1,0 +1,27 @@
+diff --git a/qutebrowser/utils/debug.py b/qutebrowser/utils/debug.py
+index 0d392023d..13035cd23 100644
+--- a/qutebrowser/utils/debug.py
++++ b/qutebrowser/utils/debug.py
+@@ -194,9 +194,19 @@ def signal_name(sig: pyqtSignal) -> str:
+     Return:
+         The cleaned up signal name.
+     """
+-    m = re.fullmatch(r'[0-9]+(.*)\(.*\)', sig.signal)  # type: ignore
+-    assert m is not None
+-    return m.group(1)
++    # Unbound signals have a .signal attribute like "2signal1(int, str)"
++    if hasattr(sig, 'signal'):  # type: ignore[union-attr]
++        m = re.fullmatch(r'[0-9]+(.*?)(?:\(.*\))?', str(sig.signal))  # type: ignore
++        if m is not None:
++            return m.group(1)
++    # Bound signals have a repr like "<bound PYQT_SIGNAL signal1 of ...>"
++    m = re.search(r'PYQT_SIGNAL\s+(\w+)', repr(sig))  # type: ignore
++    if m is not None:
++        return m.group(1)
++    # Fallback: try to get the name from the signal's metadata
++    if hasattr(sig, '_name'):  # type: ignore[union-attr]
++        return sig._name  # type: ignore[union-return]
++    raise AssertionError(f"Could not extract signal name from {sig!r}")
+ 
+ 
+ def format_args(args: typing.Sequence = None,

@@ -1,0 +1,18 @@
+Execute a workflow script that orchestrates multiple subagents deterministically. The script is plain JavaScript in a sandbox that fans out subagents via agent(), parallel(), and pipeline(). Phase and log lines stream into the conversation as the workflow runs.
+
+Operations:
+- "run": start a workflow and BLOCK until terminal status (completed/failed/cancelled); returns the transcript (phases + log() lines) then the script's return value. Provide either `name` (built-in workflow) or `script` (inline JS; must begin with `export const meta = { name, description }`). Optional `workspace` (dir the file primitives are jailed to; defaults to the worktree). Long workflows holding the turn is intentional (skill semantics).
+- "status": check a run by run_id.
+- "wait": block until a run completes (or times out), returning its result.
+- "cancel": cancel by run_id (best-effort; in-flight subagents stop at their next safe point).
+- "resume": re-launch a persisted run under the same run_id (re-runs its script; a convergent script does less work the second time).
+
+Inside the script:
+- agent(prompt, opts?) -> Promise: spawn one subagent; resolves to its result (validated object if opts.schema, else final text) or null on failure. Never throws.
+- parallel(thunks) -> Promise<any[]>: run thunks concurrently; a thrown thunk resolves to null.
+- pipeline(items, ...stages) -> Promise<any[]>: each item through all stages; no barrier between stages.
+- workflow(nameOrScript, args?, opts?) -> Promise: run a CHILD workflow as its own sub-run and await its result (inline script starts with `export const meta`; saved names resolve from .mimocode/workflows/ or .claude/workflows/). opts: { workspace?, maxConcurrentAgents? }. A failed child resolves to null; unknown name / cycle / over-maxDepth THROWS at the call site (fails the run if uncaught — don't wrap workflow() in try/catch unless you intend to ignore configuration bugs). Cycle detection is asymmetric: saved names by NAME (A calling A is always a cycle), inline scripts by content+args (self-call with different args is bounded only by maxDepth). Children share the concurrency ceiling and inherit the parent workspace.
+- readFile(path) -> string|null; writeFile(path, content) (parent dirs auto-created); glob(pattern) -> sorted paths (use this to enumerate work units — do NOT spawn an agent to list files); exists(path) -> boolean. All jailed to the workspace root by a LEXICAL check (blocks `..`/absolute, does not resolve symlinks — scoping, not a security boundary).
+- phase(title), log(message): progress reporting. args: the JSON value passed at start.
+
+Concurrency capped by the host (default min(16, 2x cores)); excess agent() calls queue. Communicate between workflows by dataflow: return a value from a child and pass it as args to the next, or share a file via writeFile — workflows do not message each other directly.

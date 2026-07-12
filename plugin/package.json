@@ -1,0 +1,12 @@
+{
+  "name": "fabula-plugins",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@mimo-ai/plugin": "0.1.0-preview.0",
+    "defuddle": "^0.18.1",
+    "linkedom": "^0.18.12",
+    "playwright": "^1.61.0",
+    "unpdf": "^1.6.2"
+  }
+}

@@ -347,11 +347,66 @@ class Handler(BaseHTTPRequestHandler):
             # spiral/hang AFTER the first token is cut fast. If it stalls before the first byte we
             # retry the whole request once; otherwise we end the SSE stream cleanly so the agent moves
             # on (its loop/reliability guards then handle the empty/partial turn) rather than hanging.
+            #
+            # FRAME BOUNDARIES (the corruption fix): the relay is a SSE parser, not a byte pipe.
+            # Network reads can split an SSE event mid-field — a partial `data: {..."syste` chunk with
+            # NO terminating `\n\n`. If the watchdog then appends `data: [DONE]\n\n` straight after
+            # those dangling bytes (the old behaviour), the SDK sees ONE fused data line
+            # `{"id":..."systedata: [DONE]` and throws JSON Parse error (Unterminated string /
+            # Expected ':'). That is the class of error the user sees when Qwen stalls mid-generation.
+            # Fix: buffer upstream bytes; forward only COMPLETE events (terminated by `\n\n`); on
+            # terminate/EOF, DROP any incomplete tail and emit a clean finish — no half-event is ever
+            # relayed, so no malformed data line can reach the SDK.
             self.send_response(resp.status)
             ctype = resp.headers.get("Content-Type", "text/event-stream")
             self.send_header("Content-Type", ctype)
             self.send_header("Transfer-Encoding", "chunked")
             self.end_headers()
+
+            def _write_chunk(b):
+                self.wfile.write(b"%X\r\n" % len(b))
+                self.wfile.write(b)
+                self.wfile.write(b"\r\n")
+                self.wfile.flush()
+
+            SSE_BOUNDARY = b"\n\n"
+
+            def _flush_complete(buf):
+                """Forward every COMPLETE SSE event in `buf` (terminated by \\n\\n); return the
+                dangling tail past the last boundary (or the whole buffer if none). A watchdog
+                cut or a clean EOF must never relay a half-event — only whole events go out, so
+                the trailing `[DONE]` can never fuse with a dangling partial into one bad line."""
+                tail = b""
+                while True:
+                    i = buf.find(SSE_BOUNDARY)
+                    if i < 0:
+                        tail = buf
+                        break
+                    frame = buf[:i + len(SSE_BOUNDARY)]
+                    buf = buf[i + len(SSE_BOUNDARY):]
+                    _write_chunk(frame)
+                return tail
+
+            def _terminate(buf, idle, dropped):
+                # Forward any complete events held in `buf` BEFORE the terminus — the stall happens
+                # AFTER a token was buffered (resp.read can return complete+partial in one go); those
+                # real tokens must reach the SDK, only the dangling tail is dropped.
+                if buf and SSE_BOUNDARY in buf:
+                    try:
+                        _flush_complete(buf)
+                    except Exception:
+                        pass
+                sys.stderr.write(
+                    "[fabula-adapter] stream idle-timeout after %ss (dropped=%d trailing bytes) — "
+                    "terminating stream\n" % (idle, dropped))
+                try:
+                    _write_chunk(b"data: [DONE]\n\n")
+                    self.wfile.write(b"0\r\n\r\n")
+                    self.wfile.flush()
+                except Exception:
+                    pass
+
+            pending = b""           # bytes past the last complete event — relayed once closed
             forwarded = False
             retries = STREAM_RETRIES
             while True:
@@ -369,23 +424,21 @@ class Handler(BaseHTTPRequestHandler):
                             continue
                         except Exception:
                             pass
-                    sys.stderr.write(
-                        "[fabula-adapter] stream idle-timeout after %ss (forwarded=%s) — "
-                        "terminating stream\n"
-                        % (STREAM_IDLE_TIMEOUT if forwarded else FIRST_TOKEN_TIMEOUT, forwarded))
-                    try:
-                        done = b"data: [DONE]\n\n"
-                        self.wfile.write(b"%X\r\n" % len(done))
-                        self.wfile.write(done)
-                        self.wfile.write(b"\r\n")
-                        self.wfile.write(b"0\r\n\r\n")
-                        self.wfile.flush()
-                    except Exception:
-                        pass
+                    _terminate(pending,
+                               STREAM_IDLE_TIMEOUT if forwarded else FIRST_TOKEN_TIMEOUT,
+                               len(pending) - (pending.rfind(SSE_BOUNDARY) + len(SSE_BOUNDARY)
+                                               if SSE_BOUNDARY in pending else 0))
                     break
                 except Exception:
                     break
                 if not chunk:
+                    # Upstream closed cleanly. Forward any final complete events; a dangling tail here
+                    # means upstream itself ended mid-event — drop it rather than relay a bad line.
+                    if pending and SSE_BOUNDARY in pending:
+                        try:
+                            _flush_complete(pending)
+                        except Exception:
+                            pass
                     try:
                         self.wfile.write(b"0\r\n\r\n")
                         self.wfile.flush()
@@ -395,13 +448,8 @@ class Handler(BaseHTTPRequestHandler):
                 if not forwarded:
                     set_read_timeout(resp, STREAM_IDLE_TIMEOUT)  # split: first byte in -> inter-token idle
                 forwarded = True
-                try:
-                    self.wfile.write(b"%X\r\n" % len(chunk))
-                    self.wfile.write(chunk)
-                    self.wfile.write(b"\r\n")
-                    self.wfile.flush()
-                except Exception:
-                    break
+                # Split on SSE event boundaries: forward whole events, hold the remainder.
+                pending = _flush_complete(pending + chunk)
             return
 
         # non-streaming: buffer with the SAME idle-watchdog + first-token/inter-token split as the

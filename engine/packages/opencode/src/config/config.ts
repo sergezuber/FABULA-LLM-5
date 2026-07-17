@@ -616,6 +616,9 @@ export const layer = Layer.effect(
       const gitignore = path.join(dir, ".gitignore")
       const hasIgnore = yield* fs.existsSafe(gitignore)
       if (!hasIgnore) {
+        // The config dir itself may not exist yet (fresh clone / new project) — a missing dir or
+        // read-only location must degrade to "no gitignore", never kill startup (call site orDies).
+        yield* fs.makeDirectory(dir, { recursive: true }).pipe(Effect.ignore)
         yield* fs
           .writeFileString(
             gitignore,
@@ -623,7 +626,7 @@ export const layer = Layer.effect(
           )
           .pipe(
             Effect.catchIf(
-              (e) => e.reason._tag === "PermissionDenied",
+              (e) => e.reason._tag === "PermissionDenied" || e.reason._tag === "NotFound",
               () => Effect.void,
             ),
           )

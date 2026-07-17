@@ -8,6 +8,8 @@
 
 **Sovereign by default: your model, your data, your perimeter — and a receipt anyone can replay.**
 
+> **Platform:** runs today on **macOS with Apple Silicon (M-series)** only. The engine is portable Bun/TypeScript — Linux is on the roadmap, not shipped yet.
+
 ![How FABULA works — any model slots into the socket; Context OS compiles the minimal byte-stable context; the work loop self-repairs on red, rewinds to the last green checkpoint after repeated failures, takes one cloud second opinion when stuck; even a green run is NOT YET DONE until the REPRODUCE and QUIZ gates pass, and the JUDGE refuses to end the turn until the request is fulfilled; only proven work exits, as a replayable, context-fingerprinted Proof-of-Done receipt](docs/assets/how-it-works.svg)
 
 FABULA is an **agent harness** built on one bet: **trust belongs to the proof, not the model.** Any LLM — a small local model or a frontier cloud — is a swappable chip, and the autonomy lives in the machinery around it. **Done is a test result, not the model's confidence.** Every gate is open source you can read, and every fully-gated green run mints a replayable [Proof-of-Done receipt](docs/GREENPAPER.md) ([open spec draft](docs/spec/verified-autonomy-receipt-v0.2.md)). Run it fully local and nothing leaves your machine — not a cost argument, but sovereignty: the mode audited environments (on-prem, air-gapped) actually require, where a verified receipt from the model you own outranks an unverifiable claim from a model you rent.
@@ -77,6 +79,8 @@ producers it has.
 For anyone who wants the unedited artifacts behind the scheme: the live recording of the refusal ([`docs/assets/refusal.cast`](docs/assets/refusal.cast), plays with asciinema) and its beat-by-beat render ([`docs/assets/captured-run.svg`](docs/assets/captured-run.svg)). The worst day — repeated red verifies, an automatic file rewind, a steered cloud second opinion — is the machinery's deeper ladder: [`docs/HARDEST-JOURNEY.md`](docs/HARDEST-JOURNEY.md).
 
 ## Try it
+
+You need a **Mac with Apple Silicon (M1 or newer)** — that's the only shipped platform today.
 
 ```bash
 git clone https://github.com/sergezuber/FABULA-LLM-5 && cd FABULA-LLM-5

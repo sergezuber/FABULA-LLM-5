@@ -46,6 +46,9 @@ echo "▸ 4/5  Config + engine command…"
 # Personal config from the templates — never clobber an existing one (cp -n aborts under set -e on macOS).
 [ -f fabula.config.json ] || cp fabula.config.example.json fabula.config.json
 [ -f .env ] || cp .env.example .env
+# Project config dir for the engine (MIMOCODE_CONFIG_DIR): nothing inside is tracked, so a fresh
+# clone lacks it — an engine built before v0.1.4 dies at startup writing .fabula/.gitignore.
+mkdir -p "$HERE/.fabula"
 mkdir -p "$HOME/.config"
 [ -e "$HOME/.config/fabula" ] || [ -L "$HOME/.config/fabula" ] || ln -s "$HERE" "$HOME/.config/fabula"
 

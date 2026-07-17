@@ -564,28 +564,66 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
     }
 
     // Shown when the engine never becomes healthy within STARTUP_DEADLINE — an actionable screen
-    // (restart / copy diagnostics / reboot advice) instead of an endless "Starting…" spinner.
+    // (restart / copy diagnostics) instead of an endless "Starting…" spinner. English by default
+    // (release rule: a fresh install must read as an English app). The screen SELF-RECOVERS: native
+    // polling keeps watching health and loads the UI the moment the engine finishes booting — a slow
+    // first start (DB migration, plugin scan) must never strand the user on a dead error page.
     func showStartupFailure() {
         let deadline = Int(STARTUP_DEADLINE)
+        // Real evidence for the Copy button: the tail of the newest engine log, base64-carried so no
+        // escaping in the page can break. Clipboard uses the NATIVE bridge — navigator.clipboard is
+        // dead in a null-origin loadHTMLString page.
+        let logTail = shellOut("tail -n 40 \"$(ls -t \"$HOME/.local/share/fabula/log\"/*.log 2>/dev/null | head -1)\" 2>/dev/null")
+        let diag = "FABULA startup timeout: :\(PORT)/global/health did not return 200 within \(deadline)s\n--- engine log tail ---\n\(logTail)"
+        let diagB64 = Data(diag.utf8).base64EncodedString()
         let html = """
         <html><body style="background:#0b0b0d;color:#cfcfd4;font:15px/1.5 -apple-system;
         display:flex;height:100vh;align-items:center;justify-content:center;margin:0;text-align:center">
         <div style="max-width:520px;padding:0 24px">
           <div style="font-size:22px;margin-bottom:10px">FABULA-LLM-5</div>
-          <div style="opacity:.85;margin-bottom:6px">Не удалось запустить локальный сервер за \(deadline)&nbsp;с.</div>
-          <div style="opacity:.6;font-size:13px;margin-bottom:20px">Обычно помогает перезапуск движка. Если повторяется — в системе могли остаться «залипшие» процессы движка (их снимает только перезагрузка Mac).</div>
-          <button onclick="R()" style="background:#e08a2e;color:#111;border:0;border-radius:8px;padding:10px 18px;font:600 14px -apple-system;cursor:pointer;margin:4px">Перезапустить движок</button>
-          <button onclick="D()" style="background:#26262b;color:#cfcfd4;border:0;border-radius:8px;padding:10px 18px;font:600 14px -apple-system;cursor:pointer;margin:4px">Скопировать диагностику</button>
-          <div id="d" style="opacity:.45;font-size:11px;margin-top:18px;white-space:pre-wrap;user-select:text"></div>
+          <div style="opacity:.85;margin-bottom:6px">The local server didn't come up within \(deadline)&nbsp;s.</div>
+          <div style="opacity:.6;font-size:13px;margin-bottom:20px">Still watching in the background — the app loads automatically the moment the engine is ready. A restart usually helps; if it keeps happening, stuck engine processes may remain (only a Mac reboot clears those).</div>
+          <button onclick="R()" style="background:#e08a2e;color:#111;border:0;border-radius:8px;padding:10px 18px;font:600 14px -apple-system;cursor:pointer;margin:4px">Restart engine</button>
+          <button id="cb" onclick="D()" style="background:#26262b;color:#cfcfd4;border:0;border-radius:8px;padding:10px 18px;font:600 14px -apple-system;cursor:pointer;margin:4px">Copy diagnostics</button>
+          <div id="d" style="opacity:.45;font-size:11px;margin-top:18px;max-height:180px;overflow:auto;white-space:pre-wrap;user-select:text;text-align:left"></div>
         </div>
         <script>
+          var diag=atob('\(diagB64)');
           function R(){try{window.webkit.messageHandlers.fabulaPlugins.postMessage({action:'restart'});}catch(e){}}
-          var diag='FABULA startup timeout: :\(PORT)/global/health did not return 200 within \(deadline)s';
-          function D(){try{navigator.clipboard.writeText(diag);}catch(e){}document.getElementById('d').textContent=diag;}
+          function D(){
+            try{window.webkit.messageHandlers.fabulaPlugins.postMessage({action:'copyDiag',diag:diag});}catch(e){}
+            document.getElementById('d').textContent=diag;
+            document.getElementById('cb').textContent='Copied ✓';
+            setTimeout(function(){document.getElementById('cb').textContent='Copy diagnostics';},1500);
+          }
         </script>
         </body></html>
         """
         webView.loadHTMLString(html, baseURL: nil)
+        scheduleRecoveryPoll()
+    }
+
+    // Keeps checking health AFTER the failure screen is up; a manual restart (startPolling resets
+    // startupFailed) takes over and this loop stands down.
+    func scheduleRecoveryPoll() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in self?.recoveryCheck() }
+    }
+    func recoveryCheck() {
+        guard startupFailed else { return }
+        guard let health = URL(string: HEALTHURL), let ui = URL(string: URLSTR) else { return }
+        var req = URLRequest(url: health); req.timeoutInterval = 3; req.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        URLSession.shared.dataTask(with: req) { [weak self] _, resp, _ in
+            DispatchQueue.main.async {
+                guard let self = self, self.startupFailed else { return }
+                if let h = resp as? HTTPURLResponse, h.statusCode == 200 {
+                    self.startupFailed = false
+                    self.navRetries = 0
+                    self.webView.load(URLRequest(url: ui))
+                    return
+                }
+                self.scheduleRecoveryPoll()
+            }
+        }.resume()
     }
 
     @objc func restartServer() {
@@ -951,6 +989,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
         if message.name == "fabulaPlugins" {
             guard let b = message.body as? [String: Any], let action = b["action"] as? String else { return }
             if action == "restart" { restartServer(); return }
+            // Startup-failure screen: clipboard via the native pasteboard — the web clipboard API is
+            // unavailable in that null-origin page.
+            if action == "copyDiag" {
+                if let d = b["diag"] as? String {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(d, forType: .string)
+                }
+                return
+            }
             if action == "lang" {
                 if let v = b["value"] as? String, v != uiLang {
                     uiLang = v; UserDefaults.standard.set(v, forKey: "fabulaLang")

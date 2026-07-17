@@ -4,14 +4,16 @@
 
 import { execFile } from "node:child_process"
 
-/** Resolve the first available binary from candidates via `which`. */
+/** Resolve the first available binary from candidates via `which`. A per-spawn timeout keeps a
+ *  wedged lookup (loaded machine, network-mounted PATH) from hanging the promise forever — a
+ *  candidate that can't be resolved in time is treated as absent. */
 export function whichAny(cands: string[]): Promise<string | null> {
   return new Promise((resolve) => {
     let i = 0
     const next = () => {
       if (i >= cands.length) return resolve(null)
       const c = cands[i++]
-      execFile("which", [c], (err, out) => (!err && out.trim() ? resolve(out.trim()) : next()))
+      execFile("which", [c], { timeout: 3000 }, (err, out) => (!err && out.trim() ? resolve(out.trim()) : next()))
     }
     next()
   })

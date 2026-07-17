@@ -88,6 +88,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
     var uiLang: String = UserDefaults.standard.string(forKey: "fabulaLang")
         ?? ((Locale.preferredLanguages.first?.hasPrefix("ru") == true) ? "ru" : "en")
 
+    // UNUserNotificationCenter ABORTS the process (NSInternalInconsistencyException → SIGABRT) when
+    // LaunchServices cannot resolve the bundle — e.g. a bundle without Info.plist/CFBundleIdentifier,
+    // or the raw binary run outside a bundle. Gate every touch of the framework on a resolvable
+    // identity so a broken/naked bundle degrades to "no system notifications" instead of a crash.
+    let canUseSystemNotifications = Bundle.main.bundleIdentifier != nil
+
     func applicationDidFinishLaunching(_ note: Notification) {
         NSApp.setActivationPolicy(.regular)
         buildMenu()
@@ -95,13 +101,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
         buildWindow()
         startPolling()
         // System notifications (agent finished / permission asked / errors — toggles in Settings).
-        let center = UNUserNotificationCenter.current()
-        center.delegate = self
-        center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        if canUseSystemNotifications {
+            let center = UNUserNotificationCenter.current()
+            center.delegate = self
+            center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        } else {
+            NSLog("FABULA: no bundle identifier — system notifications disabled (rebuild the bundle with app/build.sh)")
+        }
     }
 
     // MARK: - System notifications (fabulaNotify bridge)
     func deliverNotification(title: String, body: String, href: String) {
+        guard canUseSystemNotifications else { return }
         let content = UNMutableNotificationContent()
         content.title = title
         if !body.isEmpty { content.body = body }

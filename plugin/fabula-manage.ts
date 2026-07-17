@@ -67,7 +67,7 @@ export const FabulaManage: Plugin = async () => ({
           const s = await checkDep(d)
           if (s.present) { out.push(`  ✓ ${d.name} already present`); continue }
           if (!d.required && !inclOpt) { out.push(`  ○ ${d.name} (optional) — skipped`); continue }
-          if (!d.install) { out.push(`  • ${d.name} — manual step: ${d.note || d.purpose}`); continue }
+          if (!d.install || d.manual) { out.push(`  • ${d.name} — manual step: ${d.install || d.note || d.purpose}`); continue }
           if (ran.has(d.install)) continue
           ran.add(d.install)
           out.push(`  → ${d.name}: ${d.install}`)

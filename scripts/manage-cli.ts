@@ -71,7 +71,7 @@ switch (cmd) {
       const s = await checkDep(d)
       if (s.present) { log.push(`✓ ${d.name} present`); continue }
       if (!d.required && !inclOpt) { log.push(`○ ${d.name} optional skipped`); continue }
-      if (!d.install) { log.push(`• ${d.name} manual: ${d.note || d.purpose}`); continue }
+      if (!d.install || d.manual) { log.push(`• ${d.name} manual: ${d.install || d.note || d.purpose}`); continue }
       if (ran.has(d.install)) continue
       ran.add(d.install)
       log.push(`→ ${d.name}: ${d.install}`)

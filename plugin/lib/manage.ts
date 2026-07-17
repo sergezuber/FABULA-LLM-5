@@ -34,6 +34,7 @@ export async function checkDep(dep: Dep): Promise<DepStatus> {
 
 /** Install a dependency via its install command. Returns the combined output. */
 export async function installDep(dep: Dep): Promise<{ ok: boolean; out: string; skipped?: string }> {
+  if (dep.manual) return { ok: false, out: "", skipped: "manual step (guidance, not a runnable command)" }
   if (!dep.install) return { ok: false, out: "", skipped: "no install command (manual/builtin)" }
   const r = await sh(dep.install)
   // re-check after install

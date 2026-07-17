@@ -20,8 +20,12 @@ export interface Dep {
   purpose: string
   /** shell that exits 0 iff the dependency is present. */
   check?: string
-  /** shell that installs it on macOS (idempotent where possible). */
+  /** shell that installs it on macOS (idempotent where possible) — OR, when `manual` is set, human
+   *  guidance for a step the installer cannot run (a service to launch, an app to download). */
   install?: string
+  /** true = `install` is human guidance, NOT a runnable command: the installer PRINTS it and never
+   *  executes it. Prose with prose punctuation (parens, prose) would otherwise crash `/bin/bash -c`. */
+  manual?: boolean
   note?: string
 }
 
@@ -47,6 +51,7 @@ const LOCAL_MODEL: Dep = {
   kind: "service", name: "LM Studio (+ :1235 adapter)", required: true,
   purpose: "the local model the agent runs on", check: "curl -sf http://localhost:1235/v1/models >/dev/null",
   install: "Install LM Studio (https://lmstudio.ai), load a tool-calling model, then start proxy/lmstudio-adapter.py",
+  manual: true,
   note: "The :1235 Python adapter is mandatory (json_object→json_schema + reasoning→content).",
 }
 
@@ -60,7 +65,7 @@ export const MANIFEST: PluginMeta[] = [
       { kind: "npm", name: "defuddle", required: true, purpose: "web_fetch HTML→markdown", check: "test -d plugin/node_modules/defuddle", install: "cd plugin && bun install" },
       { kind: "npm", name: "linkedom", required: true, purpose: "web_fetch DOM parsing", check: "test -d plugin/node_modules/linkedom", install: "cd plugin && bun install" },
       { kind: "npm", name: "unpdf", required: true, purpose: "web_fetch PDF extraction", check: "test -d plugin/node_modules/unpdf", install: "cd plugin && bun install" },
-      { kind: "service", name: "SearXNG", required: false, purpose: "web_search / image_search backend", check: "curl -sf ${SEARXNG_URL:-http://localhost:8888}/ >/dev/null", install: "Run a SearXNG instance (docker run searxng/searxng) and set SEARXNG_URL", note: "Without it, web_search/image_search return a clear 'not configured' message." },
+      { kind: "service", name: "SearXNG", required: false, purpose: "web_search / image_search backend", check: "curl -sf ${SEARXNG_URL:-http://localhost:8888}/ >/dev/null", install: "Run a SearXNG instance (docker run searxng/searxng) and set SEARXNG_URL", manual: true, note: "Without it, web_search/image_search return a clear 'not configured' message." },
       { kind: "docker", name: "Docker", required: false, purpose: "execute_code sandbox (FABULA_CODE_SANDBOX=docker)", check: "docker version --format '{{.Server.Version}}' >/dev/null 2>&1", install: "brew install --cask docker  # then launch Docker Desktop once", note: "Optional: execute_code runs directly if Docker is absent and the command is allowed by the guards." },
     ],
   },
@@ -82,7 +87,7 @@ export const MANIFEST: PluginMeta[] = [
     tools: ["list_checkpoints", "restore_checkpoint", "diff_checkpoints"],
     deps: [
       ...NPM_BUNDLED,
-      { kind: "system", name: "git", required: true, purpose: "shadow-git checkpoint store (separate from your repo)", check: "git --version >/dev/null 2>&1", install: "Install git (xcode-select --install, or brew install git)." },
+      { kind: "system", name: "git", required: true, purpose: "shadow-git checkpoint store (separate from your repo)", check: "git --version >/dev/null 2>&1", install: "Install git (xcode-select --install, or brew install git).", manual: true },
     ],
   },
   {
@@ -91,7 +96,7 @@ export const MANIFEST: PluginMeta[] = [
     tools: [],
     deps: [
       ...NPM_BUNDLED,
-      { kind: "service", name: "ntfy", required: false, purpose: "push notifications (FABULA_NTFY_TOPIC)", check: "true", install: "Set FABULA_NTFY_TOPIC and subscribe in the ntfy app — no install needed (uses ntfy.sh by default).", note: "Disabled until FABULA_NTFY_TOPIC is set." },
+      { kind: "service", name: "ntfy", required: false, purpose: "push notifications (FABULA_NTFY_TOPIC)", check: "true", install: "Set FABULA_NTFY_TOPIC and subscribe in the ntfy app — no install needed (uses ntfy.sh by default).", manual: true, note: "Disabled until FABULA_NTFY_TOPIC is set." },
     ],
   },
   {
@@ -122,7 +127,7 @@ export const MANIFEST: PluginMeta[] = [
     tools: ["vision_analyze", "text_to_speech", "transcribe_audio"],
     deps: [
       ...NPM_BUNDLED,
-      { kind: "service", name: "vision endpoint (VLM)", required: false, purpose: "vision_analyze", check: "true", install: "Load a VLM in LM Studio (set LMSTUDIO_VLM_MODEL) or set FABULA_VISION_URL+FABULA_VISION_MODEL", note: "vision_analyze returns a clear message if no VLM is configured." },
+      { kind: "service", name: "vision endpoint (VLM)", required: false, purpose: "vision_analyze", check: "true", install: "Load a VLM in LM Studio (set LMSTUDIO_VLM_MODEL) or set FABULA_VISION_URL+FABULA_VISION_MODEL", manual: true, note: "vision_analyze returns a clear message if no VLM is configured." },
       { kind: "builtin", name: "say (macOS TTS)", required: false, purpose: "text_to_speech fallback", check: "command -v say >/dev/null", note: "Built into macOS — text_to_speech works out of the box (Milena voice for Russian)." },
       { kind: "system", name: "piper", required: false, purpose: "text_to_speech (higher quality than say)", check: "command -v piper >/dev/null || test -n \"$FABULA_PIPER_BIN\"", install: "pip3 install piper-tts  # then set FABULA_PIPER_VOICE to a .onnx voice", note: "Optional — say is used if piper is absent." },
       { kind: "python", name: "faster-whisper", required: false, purpose: "transcribe_audio (speech-to-text)", check: "python3 -c 'import faster_whisper' 2>/dev/null || command -v whisper >/dev/null", install: "pip3 install faster-whisper", note: "No built-in macOS fallback — transcribe_audio needs this." },

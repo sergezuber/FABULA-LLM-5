@@ -74,9 +74,10 @@ console.log(`\n  ${present.length} present, ${missing.length} missing (${missing
 if (LIST) process.exit(missing.some((m) => m.dep.required) ? 1 : 0)
 
 // 2) install missing (required always; optional only with --all). Dedupe by install command.
-const toInstall = missing.filter((m) => m.dep.install && (m.dep.required || ALL))
-const skippedOptional = missing.filter((m) => !m.dep.required && !ALL && m.dep.install)
-const manual = missing.filter((m) => !m.dep.install)
+// `manual` deps carry human guidance in `install` (not a runnable command) — never execute them.
+const toInstall = missing.filter((m) => m.dep.install && !m.dep.manual && (m.dep.required || ALL))
+const skippedOptional = missing.filter((m) => !m.dep.required && !ALL && m.dep.install && !m.dep.manual)
+const manual = missing.filter((m) => !m.dep.install || m.dep.manual)
 
 const ranCmds = new Set<string>()
 let failed = 0
@@ -95,7 +96,7 @@ if (skippedOptional.length) {
 }
 if (manual.length) {
   console.log(`\n${C.y}Manual / built-in (no auto-install):${C.x}`)
-  for (const m of manual) console.log(`  • ${m.dep.name} ${C.d}— ${m.dep.note || m.dep.purpose}${C.x}`)
+  for (const m of manual) console.log(`  • ${m.dep.name} ${C.d}— ${m.dep.install || m.dep.note || m.dep.purpose}${C.x}`)
 }
 
 console.log(`\n${failed === 0 ? C.g + "✓ dependency install complete" : C.r + `✗ ${failed} install(s) failed`}${C.x}`)

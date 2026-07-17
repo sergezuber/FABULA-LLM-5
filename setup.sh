@@ -52,12 +52,12 @@ mkdir -p "$HERE/.fabula"
 mkdir -p "$HOME/.config"
 [ -e "$HOME/.config/fabula" ] || [ -L "$HOME/.config/fabula" ] || ln -s "$HERE" "$HOME/.config/fabula"
 
-# The `fabula` command: ALWAYS prefer the repo-local engine built above. An unrelated `mimo`
-# already on PATH must NOT win — the app would then serve a foreign engine's UI and config
-# inside the FABULA window (a real hijack seen on a machine with a pre-existing MiMoCode
-# install). A PATH `mimo` is only the fallback when the repo binary is absent (a --deps run).
-# An existing `fabula` exec-SHIM is repointed to the preferred engine; a real `fabula`
-# binary on PATH is left alone.
+# The `fabula` command: ALWAYS prefer the repo-local engine built above. An unrelated engine
+# binary already on PATH (found via `command -v mimo`) must NOT win — the app would then serve
+# a foreign engine's UI and config inside the FABULA window (a real hijack seen on a machine
+# with a pre-existing MiMoCode install). The PATH engine is only the fallback when the repo
+# binary is absent (a --deps run). An existing `fabula` exec-SHIM is repointed to the preferred
+# engine; a real `fabula` binary on PATH is left alone.
 ENGINE_REAL=""
 [ -x "$HERE/bin/fabula" ] && ENGINE_REAL="$HERE/bin/fabula"
 [ -n "$ENGINE_REAL" ] || ENGINE_REAL="$(command -v mimo || true)"

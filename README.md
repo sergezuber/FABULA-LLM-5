@@ -80,7 +80,15 @@ For anyone who wants the unedited artifacts behind the scheme: the live recordin
 
 ## Try it
 
-You need a **Mac with Apple Silicon (M1 or newer)** — that's the only shipped platform today.
+You need a **Mac with Apple Silicon (M1 or newer)** — that's the only shipped platform today — and
+the **Xcode Command Line Tools** (the engine build compiles a few native modules):
+
+```bash
+# once per machine; skip if you already build C/C++ on this Mac
+xcode-select --install
+```
+
+<sup>Toolchain sanity check: `printf '#include <functional>\nint main(){}\n' | clang++ -x c++ - -o /tmp/t && echo OK` — if this fails after a macOS update, reinstall the Command Line Tools.</sup>
 
 ```bash
 git clone https://github.com/sergezuber/FABULA-LLM-5 && cd FABULA-LLM-5
@@ -88,14 +96,48 @@ git clone https://github.com/sergezuber/FABULA-LLM-5 && cd FABULA-LLM-5
 open FABULA-LLM-5.app
 ```
 
+`./setup.sh` is idempotent — re-run it any time (after `git pull`, after installing a dependency); it
+never overwrites your `.env` / `fabula.config.json`.
+
+### Point it at your model
+
+**Local (default):** install [LM Studio](https://lmstudio.ai), load a tool-calling model — setup
+already installed the localhost adapter the config points at. Nothing else to do.
+
+**Any OpenAI-compatible endpoint** — a cloud provider or a corporate gateway: put the key in `.env`
+(gitignored) and describe the provider in `fabula.config.json`:
+
+```jsonc
+// .env
+MY_API_KEY=sk-...
+
+// fabula.config.json
+{
+  "model": "myapi/my-model-id",
+  "provider": {
+    "myapi": {
+      "name": "My endpoint",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": { "baseURL": "https://llm.example.com/v1", "apiKey": "{env:MY_API_KEY}" },
+      "models": {
+        "my-model-id": { "tools": true, "limit": { "context": 131072, "output": 32768 } }
+      }
+    }
+  }
+}
+```
+
+The model must support **tool calling**, and `limit` needs both `context` and `output`. Check the
+endpoint and the exact model id with `curl -s https://llm.example.com/v1/models -H "Authorization: Bearer $MY_API_KEY"`.
+If the gateway lives behind a corporate VPN, the VPN has to be up while you work.
+
+### The two-minute proof
+
 A planted bug is waiting in [`demo/`](demo/) — every test is green anyway. Open `demo/` as the project and paste:
 
 > Fix the export bug: the nightly export silently drops rows dated exactly on the end date. Prove it.
 
 Then watch the machine refuse to finish until the proof exists — on your machine, with your model.
-
-> [!NOTE]
-> You need a tool-calling model: anything served locally by [LM Studio](https://lmstudio.ai) or any other OpenAI-compatible local server, or any OpenAI-compatible cloud endpoint (key in `.env`, `baseURL` in `fabula.config.json`).
 
 ## What's inside
 

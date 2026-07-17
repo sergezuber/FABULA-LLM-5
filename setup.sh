@@ -49,11 +49,22 @@ echo "▸ 4/5  Config + engine command…"
 mkdir -p "$HOME/.config"
 [ -e "$HOME/.config/fabula" ] || [ -L "$HOME/.config/fabula" ] || ln -s "$HERE" "$HOME/.config/fabula"
 
-# The `fabula` command: prefer an engine already on PATH (`command -v mimo`), else the repo-local binary we just built.
-if ! command -v fabula >/dev/null 2>&1; then
-  ENGINE_REAL="$(command -v mimo || true)"
-  [ -n "$ENGINE_REAL" ] || { [ -x "$HERE/bin/fabula" ] && ENGINE_REAL="$HERE/bin/fabula"; }
-  if [ -n "$ENGINE_REAL" ]; then
+# The `fabula` command: ALWAYS prefer the repo-local engine built above. An unrelated `mimo`
+# already on PATH must NOT win — the app would then serve a foreign engine's UI and config
+# inside the FABULA window (a real hijack seen on a machine with a pre-existing MiMoCode
+# install). A PATH `mimo` is only the fallback when the repo binary is absent (a --deps run).
+# An existing `fabula` exec-SHIM is repointed to the preferred engine; a real `fabula`
+# binary on PATH is left alone.
+ENGINE_REAL=""
+[ -x "$HERE/bin/fabula" ] && ENGINE_REAL="$HERE/bin/fabula"
+[ -n "$ENGINE_REAL" ] || ENGINE_REAL="$(command -v mimo || true)"
+if [ -n "$ENGINE_REAL" ]; then
+  EXISTING="$(command -v fabula || true)"
+  if [ -n "$EXISTING" ] && head -n 2 "$EXISTING" 2>/dev/null | grep -q '^exec "'; then
+    printf '#!/bin/sh\nexec "%s" "$@"\n' "$ENGINE_REAL" > "$EXISTING"
+    chmod +x "$EXISTING"
+    echo "  engine command repointed: $EXISTING → $ENGINE_REAL"
+  elif [ -z "$EXISTING" ]; then
     for BIN_DIR in /opt/homebrew/bin /usr/local/bin "$HOME/.local/bin"; do
       mkdir -p "$BIN_DIR" 2>/dev/null || true
       if [ -d "$BIN_DIR" ] && [ -w "$BIN_DIR" ]; then

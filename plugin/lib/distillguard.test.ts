@@ -56,3 +56,38 @@ test("DISTILL_SKIP_NOTICE forbids studying + DB access", () => {
   expect(DISTILL_SKIP_NOTICE).toMatch(/do not inspect any database/i)
   expect(DISTILL_SKIP_NOTICE).toMatch(/disabled on uncensored models/i)
 })
+
+// ── dream: the second self-improvement pass, same policy (the 2026-07-17 gap) ──
+import { isDreamRun, blockedSelfImprovePass, DREAM_SKIP_NOTICE } from "./distillguard"
+
+const DREAM_PROMPT = [
+  "Run one automatic dream memory consolidation pass for the current project.",
+  "Use the memory files as the working index and the raw mimocode trajectory database as the source of truth.",
+].join("\n")
+
+test("isDreamRun: by agent name and by the stable prompt signature; casual 'dream' NOT caught", () => {
+  expect(isDreamRun({ agent: "dream" })).toBe(true)
+  expect(isDreamRun({ agent: "Dream " })).toBe(true)
+  expect(isDreamRun({ text: DREAM_PROMPT })).toBe(true)
+  expect(isDreamRun({ text: "i had a dream about my project" })).toBe(false)
+  expect(isDreamRun({ text: "dream memory consolidation" })).toBe(false) // no corroborating marker
+  expect(isDreamRun({})).toBe(false)
+})
+
+test("blockedSelfImprovePass: ONE decision for both passes", () => {
+  const pat = uncensoredPattern({})
+  // dream on uncensored → blocked with the DREAM notice
+  expect(blockedSelfImprovePass({ agent: "dream", text: DREAM_PROMPT, modelID: "qwen3.6-35b-a3b-uncensored-heretic-mlx", pat })).toBe(DREAM_SKIP_NOTICE)
+  // distill on uncensored → blocked with the DISTILL notice (regression)
+  expect(blockedSelfImprovePass({ agent: "distill", modelID: "qwen-7b-uncensored", pat })).toBe(DISTILL_SKIP_NOTICE)
+  // dream on an ALIGNED model → allowed
+  expect(blockedSelfImprovePass({ agent: "dream", text: DREAM_PROMPT, modelID: "qwen3.6-35b-a3b-ud-mlx", pat })).toBe(null)
+  // ordinary chat on an uncensored model → untouched
+  expect(blockedSelfImprovePass({ agent: "build", text: "hello", modelID: "qwen-7b-uncensored", pat })).toBe(null)
+})
+
+test("DREAM_SKIP_NOTICE forbids memory writes + DB access", () => {
+  expect(DREAM_SKIP_NOTICE).toMatch(/do not inspect any/i)
+  expect(DREAM_SKIP_NOTICE).toMatch(/memory files/i)
+  expect(DREAM_SKIP_NOTICE).toMatch(/disabled on uncensored models/i)
+})

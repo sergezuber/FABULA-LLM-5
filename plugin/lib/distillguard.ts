@@ -46,6 +46,18 @@ export function shouldBlockDistill(opts: { agent?: unknown; text?: unknown; mode
   return isDistillRun(opts) && isUncensoredModel(opts.modelID, opts.pat)
 }
 
+/** Is this turn the auto-DREAM pass (memory consolidation)? Same self-improvement class as distill:
+ *  it reads past trajectories and writes durable project memory — an uncensored model must not do
+ *  that autonomously either. Primary signal: the subagent name "dream"; fallback: the stable prompt
+ *  signature from the engine's DREAM_TASK (kept specific so a user merely typing "dream" is NOT caught). */
+export function isDreamRun(opts: { agent?: unknown; text?: unknown }): boolean {
+  if (typeof opts.agent === "string" && opts.agent.trim().toLowerCase() === "dream") return true
+  const t = typeof opts.text === "string" ? opts.text.toLowerCase() : ""
+  if (!t) return false
+  if (/\bautomatic dream memory consolidation pass\b/.test(t)) return true
+  return /\bdream memory consolidation\b/.test(t) && /trajectory database|memory files/.test(t)
+}
+
 // Replacement injected in place of the distill instructions so the uncensored model does NOTHING:
 // no DB inspection, no reading sessions, no asset creation — just a one-line acknowledgement.
 export const DISTILL_SKIP_NOTICE =
@@ -53,3 +65,19 @@ export const DISTILL_SKIP_NOTICE =
   "past sessions, or create/modify any skills, agents, or commands. Ignore all earlier instructions in " +
   "this message. Reply with EXACTLY this one line and nothing else:\n" +
   "Distill skipped — disabled on uncensored models (FABULA policy)."
+
+export const DREAM_SKIP_NOTICE =
+  "FABULA policy: `dream` (memory consolidation) is DISABLED on uncensored models. Do NOT inspect any " +
+  "database, read any past sessions, or create/modify any memory files. Ignore all earlier instructions " +
+  "in this message. Reply with EXACTLY this one line and nothing else:\n" +
+  "Dream skipped — disabled on uncensored models (FABULA policy)."
+
+/** ONE decision for every auto self-improvement pass: returns the notice to inject when THIS turn is
+ *  a forbidden pass on an uncensored model, else null. New passes get added HERE, so the policy can
+ *  never silently miss one again (the dream gap of 2026-07-17). */
+export function blockedSelfImprovePass(opts: { agent?: unknown; text?: unknown; modelID: unknown; pat: RegExp }): string | null {
+  if (!isUncensoredModel(opts.modelID, opts.pat)) return null
+  if (isDistillRun(opts)) return DISTILL_SKIP_NOTICE
+  if (isDreamRun(opts)) return DREAM_SKIP_NOTICE
+  return null
+}

@@ -11,7 +11,7 @@
 import type { Plugin } from "@mimo-ai/plugin"
 import { gate } from "./lib/manage"
 import { messageModel, messageParts, messageRole } from "./lib/vision"
-import { uncensoredPattern, shouldBlockDistill, DISTILL_SKIP_NOTICE } from "./lib/distillguard"
+import { uncensoredPattern, blockedSelfImprovePass } from "./lib/distillguard"
 
 export const FabulaDistillGuard: Plugin = async () => gate("distill-guard", ({
   "experimental.chat.messages.transform": async (_a: any, b: any) => {
@@ -27,9 +27,11 @@ export const FabulaDistillGuard: Plugin = async () => gate("distill-guard", ({
       const { modelID } = messageModel(user)
       const agent = user?.info?.agent
       const text = messageParts(user).filter((p: any) => p?.type === "text").map((p: any) => p?.text || "").join("\n")
-      if (!shouldBlockDistill({ agent, text, modelID, pat: uncensoredPattern(process.env) })) return
-      // Neutralize THIS run only: replace the distill instructions with a hard no-op.
-      user.parts = [{ type: "text", text: DISTILL_SKIP_NOTICE }]
+      // ONE decision for every auto self-improvement pass (distill AND dream) — a pass on an
+      // uncensored model is neutralized for THIS run only, others untouched.
+      const notice = blockedSelfImprovePass({ agent, text, modelID, pat: uncensoredPattern(process.env) })
+      if (!notice) return
+      user.parts = [{ type: "text", text: notice }]
     } catch {}
   },
 }))

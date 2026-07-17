@@ -199,8 +199,8 @@ export const PLUGIN_I18N: Record<string, PluginI18n> = {
   "distill-guard": {
     tags: ["housekeeping"],
     nameRu: "Защита от авто-обучения",
-    descEn: "Blocks the harness's automatic self-improvement pass on uncensored local models, where it would clash with policy.",
-    descRu: "Блокирует автоматический само-улучшающий проход движка на нецензурированных локальных моделях, где он конфликтует с политикой.",
+    descEn: "Blocks the harness's automatic self-improvement passes — distill and dream memory consolidation — on uncensored models, where they would clash with policy.",
+    descRu: "Блокирует автоматические само-улучшающие проходы движка — distill и dream-консолидацию памяти — на нецензурированных моделях, где они конфликтуют с политикой.",
   },
   "purge-hook": {
     tags: ["housekeeping"],

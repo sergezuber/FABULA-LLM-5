@@ -246,7 +246,7 @@ export const MANIFEST: PluginMeta[] = [
   },
   {
     id: "distill-guard", file: "fabula-distill-guard.ts", name: "Distill guard", core: true, defaultEnabled: true,
-    description: "Blocks the harness's auto self-improvement pass on uncensored models (policy collision).",
+    description: "Blocks the harness's auto self-improvement passes — distill AND dream memory consolidation — on uncensored models (policy collision). One decision covers every pass, so a new pass can never slip by.",
     tools: [], deps: [...NPM_BUNDLED],
   },
   {

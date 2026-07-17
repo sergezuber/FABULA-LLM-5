@@ -314,7 +314,7 @@ On a green verify_done that no other gate downgraded, mints a machine-readable P
 
 ## distill-guard — Distill guard · core
 
-Blocks the harness's auto self-improvement pass on uncensored models (policy collision).
+Blocks the harness's auto self-improvement passes — distill AND dream memory consolidation — on uncensored models (policy collision). One decision covers every pass, so a new pass can never slip by.
 
 | Dependency | Kind | Required | Purpose | Install / note |
 |---|---|---|---|---|

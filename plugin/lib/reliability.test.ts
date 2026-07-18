@@ -417,3 +417,62 @@ test("peekSearch: glob allows a wildcard (only empty glob is degenerate)", () =>
   expect(g.peekSearch("s", "glob", { pattern: "**/*.go" })).toBe(null)
   expect(g.peekSearch("s", "glob", { pattern: "" })?.action).toBe("stop")
 })
+
+// ── web/MCP search loop guard (2026-07-17: the paraphrased-search spiral) ──
+import {
+  LoopGuard as WebLG, isWebSearchTool, normalizeQueryKey, tokenJaccard, searchQueryOf, searchExtrasOf,
+} from "./loopguard"
+
+test("isWebSearchTool: MCP names with any server prefix; code search stays in its own class", () => {
+  expect(isWebSearchTool("web-search-internet_searxng_web_search")).toBe(true)
+  expect(isWebSearchTool("web_search")).toBe(true)
+  expect(isWebSearchTool("image_search")).toBe(true)
+  expect(isWebSearchTool("search_mcp_registry")).toBe(true)
+  expect(isWebSearchTool("grep")).toBe(false)      // code-search class
+  expect(isWebSearchTool("ripgrep")).toBe(false)
+  expect(isWebSearchTool("research_notes")).toBe(false) // 'search' inside a word is not the tool class
+  expect(isWebSearchTool("web_fetch")).toBe(false)
+})
+
+test("normalizeQueryKey: case/punctuation/order/dup-insensitive, unicode-aware (the RU live case)", () => {
+  const a = normalizeQueryKey('Ошо книга "Дзен: искусство мгновенного существования"')
+  const b = normalizeQueryKey("ошо  дзен искусство книга — мгновенного существования!")
+  expect(a).toBe(b)
+  expect(tokenJaccard(normalizeQueryKey("osho woodcutter bus story"), normalizeQueryKey("osho woodcutter story bus")))
+    .toBe(1)
+})
+
+test("2nd near-duplicate web search is HARD BLOCKED; a materially different query passes", () => {
+  const g = new WebLG()
+  const t = "web-search-internet_searxng_web_search"
+  expect(g.peekSearch("s1", t, { query: 'Ошо книга "Дзен: искусство мгновенного существования"' })).toBeNull()
+  // paraphrase (reordered, punctuation changed) → blocked
+  const d = g.peekSearch("s1", t, { query: "ошо дзен книга искусство мгновенного существования" })
+  expect(d?.action).toBe("stop")
+  expect(d?.code).toBe("web_search_duplicate")
+  // near-dup by Jaccard (one token dropped) → still blocked
+  const d2 = g.peekSearch("s1", t, { query: "ошо дзен книга искусство существования мгновенного дзен" })
+  expect(d2?.code).toBe("web_search_duplicate")
+  // materially different → allowed
+  expect(g.peekSearch("s1", t, { query: "osho three stages meditation woodcutter" })).toBeNull()
+})
+
+test("same words but different page/extras are NOT near-duplicates; unknown schema stays untouched", () => {
+  const g = new WebLG()
+  expect(g.peekSearch("s2", "web_search", { query: "osho books", page: 1 })).toBeNull()
+  expect(g.peekSearch("s2", "web_search", { query: "osho books", page: 2 })).toBeNull() // pagination is legit
+  expect(g.peekSearch("s2", "some_search", { weird: 1 })).toBeNull() // no readable query → hands off
+  expect(searchQueryOf({ q: "x" })).toBe("x")
+  expect(searchExtrasOf({ query: "x", page: 3, safe: true })).toBe("page=3&safe=true")
+})
+
+test("distinct-query budget forces synthesis past the cap", () => {
+  const g = new WebLG({ webSearchBudgetPerTurn: 3 })
+  const t = "web_search"
+  for (let i = 1; i <= 3; i++) expect(g.peekSearch("s3", t, { query: `distinct topic number ${i} alpha${i}` })).toBeNull()
+  const d = g.peekSearch("s3", t, { query: "completely new fourth topic beta" })
+  expect(d?.code).toBe("web_search_budget_exceeded")
+  // new user turn resets the budget
+  g.resetTurn("s3")
+  expect(g.peekSearch("s3", t, { query: "fresh turn query gamma" })).toBeNull()
+})

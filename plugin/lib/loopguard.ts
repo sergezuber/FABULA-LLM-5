@@ -28,6 +28,8 @@ export interface GuardConfig {
   exactFailHardBlockAfter: number // identical-args repeated failure → HARD ABORT the next retry (throw)
   degenerateSearchStopAfter: number // empty/catch-all search patterns → strong "synthesize" stop
   searchBudgetPerTurn: number     // total grep/glob calls in one turn → force synthesis (thrash backstop)
+  webNearDupBlockAfter: number    // near-duplicate web-search query (token-set + Jaccard) → hard block
+  webSearchBudgetPerTurn: number  // DISTINCT web-search queries in one turn → force synthesis
   maxSessions: number             // LRU cap on tracked sessions (memory bound)
 }
 
@@ -42,6 +44,13 @@ export const DEFAULT_GUARD_CONFIG: GuardConfig = {
   exactFailHardBlockAfter: 5,
   degenerateSearchStopAfter: 3,
   searchBudgetPerTurn: 60,
+  // Web: a REPEAT of the same (near-dup) query is blocked on the second occurrence — a repeated web
+  // search returns the same results, only floods context (measured: killing redundant search does
+  // not hurt success, arXiv:2605.29796). The budget counts DISTINCT queries, deliberately generous —
+  // QA plateaus at ~3 searches (arXiv:2603.08877) but real agent tasks legitimately need more; the
+  // budget is the thrash backstop, the near-dup block is the actual loop-killer.
+  webNearDupBlockAfter: 2,
+  webSearchBudgetPerTurn: 15,
   maxSessions: 256,
 }
 
@@ -73,6 +82,70 @@ export const FILE_READ_TOOLS = new Set<string>(["view", "read", "cat", "open"])
 // so the per-(tool,args)-signature LoopGuard never trips. We catch it at the PATTERN level (reject
 // before execution) + a per-turn search budget, both counted per-TOOL (not per-signature).
 export const SEARCH_TOOLS = new Set<string>(["grep", "glob", "codesearch", "code_search", "ripgrep", "rg"])
+
+// ── web/MCP search class (2026-07-17) ────────────────────────────────────────
+// Measured live: 20+ consecutive web-search calls with paraphrased queries sailed past BOTH guards —
+// the (tool,args) signature never repeated byte-identically, and the search class above only knows
+// code-search names. The literature names this exact pathology: near-identical tool-call reruns are
+// the top agent failure mode ("Step repetition", 15.7% of failures, arXiv:2503.13657; "Duplicate
+// Step" defined as HIGHLY SIMILAR reruns, arXiv:2605.20251), redundant search grows to ~50% of calls
+// under outcome-trained agents (arXiv:2605.29796), and killing it does not hurt success (accuracy
+// +2.2pp with 40% fewer searches, ibid.; 94.8% of quality at 62.6% of calls, arXiv:2606.13814).
+// Detector shape follows the measured best hybrid (arXiv:2511.10650): a cheap STRUCTURAL stage
+// (normalized token-set key) confirmed by a cheap SIMILARITY stage (Jaccard) — embeddings alone
+// were precision 0.16 there, and we add zero model calls. Tools are classified by NAME PATTERN so
+// arbitrary MCP prefixes (`web-search-internet_searxng_web_search`) are covered.
+
+/** Search-like tools OUTSIDE the code-search set — web/registry/MCP searches, any server prefix. */
+export function isWebSearchTool(tool: string): boolean {
+  if (SEARCH_TOOLS.has(tool)) return false
+  return /(^|[_-])search(es)?([_-]|$)/i.test(tool)
+}
+
+/** The query string of a search-like call, wherever the schema puts it. Undefined → unknown schema,
+ *  stay out of the way (never block what we can't read). */
+export function searchQueryOf(args: any): string | undefined {
+  const q = args?.query ?? args?.q ?? args?.text ?? args?.keywords ?? args?.search
+  return typeof q === "string" && q.trim() ? q : undefined
+}
+
+/** Structural stage: normalized token-SET key. Case, punctuation, token order and duplicates are
+ *  not "a different search" — «Ошо книга "Дзен"» and `ошо дзен книга` collapse to one key. */
+export function normalizeQueryKey(q: string): string {
+  const tokens = q
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]+/gu, " ")
+    .split(/\s+/)
+    .filter((t) => t.length >= 2)
+  return [...new Set(tokens)].sort().join(" ")
+}
+
+/** Non-query primitive args (page, offset, category, …), stable-serialized. Two calls with the same
+ *  words but a different page are legitimately different requests — never near-dup them. */
+export function searchExtrasOf(args: any): string {
+  if (!args || typeof args !== "object") return ""
+  const skip = new Set(["query", "q", "text", "keywords", "search"])
+  const parts: string[] = []
+  for (const k of Object.keys(args).sort()) {
+    if (skip.has(k)) continue
+    const v = (args as Record<string, unknown>)[k]
+    if (v == null) continue
+    if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") parts.push(`${k}=${v}`)
+  }
+  return parts.join("&")
+}
+
+/** Similarity confirmation between two token-set keys. */
+export function tokenJaccard(a: string, b: string): number {
+  const A = new Set(a.split(" ").filter(Boolean))
+  const B = new Set(b.split(" ").filter(Boolean))
+  if (A.size === 0 || B.size === 0) return 0
+  let inter = 0
+  for (const t of A) if (B.has(t)) inter += 1
+  return inter / (A.size + B.size - inter)
+}
+const WEB_NEAR_DUP_JACCARD = 0.8
 // Tools whose pattern is a REGEX (so catch-all metacharacters are degenerate). glob uses globs where
 // `*`/`**` are legitimate, so glob is checked only for an EMPTY pattern.
 export const REGEX_SEARCH_TOOLS = new Set<string>(["grep", "codesearch", "code_search", "ripgrep", "rg"])
@@ -115,6 +188,7 @@ interface TurnState {
   noProgress: Map<string, { hash: string; count: number }>
   searchCalls: number       // total grep/glob calls this turn (per-tool thrash budget)
   degenerateSearch: number  // empty/catch-all search patterns this turn
+  webQueries: Map<string, number> // canonical web-search query key (+extras) → call count this turn
   touched: number // for LRU eviction ordering
 }
 
@@ -254,7 +328,43 @@ export class LoopGuard {
    * `path` — which slip past the signature-based `peekBlock` — are caught here.
    */
   peekSearch(sessionID: string | undefined, tool: string, args: any): GuardDecision | null {
-    if (!sessionID || !SEARCH_TOOLS.has(tool)) return null
+    if (!sessionID) return null
+    // Web/MCP search class: near-duplicate queries are blocked at the repeated PATH itself
+    // (arXiv:2607.01641 — a bound is effective only when it constrains the repeated path), and a
+    // distinct-query budget forces synthesis (tool-removal-style enforcement, arXiv:2603.08877).
+    if (isWebSearchTool(tool)) {
+      const q = searchQueryOf(args)
+      if (q === undefined) return null
+      const st = this.touch(sessionID)
+      const extras = searchExtrasOf(args)
+      const key = normalizeQueryKey(q) + (extras ? ` §${extras}` : "")
+      // similarity confirmation: fold into an existing near-identical key (same extras only)
+      let canonical = key
+      if (!st.webQueries.has(key)) {
+        for (const existing of st.webQueries.keys()) {
+          const [eWords, eExtras = ""] = existing.split(" §")
+          const [kWords, kExtras = ""] = key.split(" §")
+          if (eExtras === kExtras && tokenJaccard(eWords, kWords) >= WEB_NEAR_DUP_JACCARD) { canonical = existing; break }
+        }
+      }
+      const n = (st.webQueries.get(canonical) ?? 0) + 1
+      st.webQueries.set(canonical, n)
+      if (n >= this.cfg.webNearDupBlockAfter) {
+        return mk("stop", "web_search_duplicate", n,
+          `LOOP BLOCKED: this is a repeat of a search you already ran this turn (same or near-identical query — ` +
+          `"${q.slice(0, 120)}"). Re-searching returns the SAME results and only floods context. Either use what the ` +
+          `earlier search already returned and write your answer, or search for something MATERIALLY different ` +
+          `(other entities, another angle, a different source). Do not re-issue paraphrases of this query.`)
+      }
+      if (st.webQueries.size > this.cfg.webSearchBudgetPerTurn) {
+        return mk("stop", "web_search_budget_exceeded", st.webQueries.size,
+          `LOOP BLOCKED: ${st.webQueries.size} distinct web searches this turn — far past the point of diminishing ` +
+          `returns. STOP searching; synthesize what you have gathered and produce the answer now. If something truly ` +
+          `essential is missing, name it explicitly in your answer instead of searching again.`)
+      }
+      return null
+    }
+    if (!SEARCH_TOOLS.has(tool)) return null
     const st = this.touch(sessionID)
     st.searchCalls += 1
 
@@ -291,7 +401,7 @@ export class LoopGuard {
 
   // ── internals ──
   private fresh(): TurnState {
-    return { exactFail: new Map(), sameToolFail: new Map(), noProgress: new Map(), searchCalls: 0, degenerateSearch: 0, touched: ++this.clock }
+    return { exactFail: new Map(), sameToolFail: new Map(), noProgress: new Map(), searchCalls: 0, degenerateSearch: 0, webQueries: new Map(), touched: ++this.clock }
   }
   private touch(sessionID: string): TurnState {
     let st = this.sessions.get(sessionID)

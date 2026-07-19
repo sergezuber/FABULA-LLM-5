@@ -120,8 +120,8 @@ export const PLUGIN_I18N: Record<string, PluginI18n> = {
   "reproduce-gate": {
     tags: ["reliability", "code"],
     nameRu: "Гейт «сначала репродукция»",
-    descEn: "Won't let the agent call a task done when it changed code but wrote no test — a green existing suite doesn't prove a fix. Nudges it to add a test that reproduces the new behavior, then re-verify.",
-    descRu: "Не даёт агенту объявить задачу готовой, если он поменял код, но не написал тест — зелёный существующий набор не доказывает починку. Подсказывает добавить тест на новое поведение и перепроверить.",
+    descEn: "Won't let a green verify stand on a reproduction test it can't trust. It runs the new test against the pre-patch tree: a test that passes with AND without the change is fake (gate stays closed), a fix that breaks a sibling test is a regression (held), and a validated test is frozen so it can't be loosened after going green. When it can't run the check it degrades honestly and never traps a correct fix.",
+    descRu: "Не даёт зелёному verify устоять на репро-тесте, которому нельзя доверять. Прогоняет новый тест против до-патчевого дерева: тест, зелёный И с фиксом, И без него — фейковый (гейт закрыт), фикс, ломающий соседний тест — регрессия (не пропускает), а провалидированный тест «заморожен» и его нельзя ослабить после зелёного. Если проверку прогнать нельзя — честно деградирует и никогда не запирает верный фикс.",
   },
   learn: {
     tags: ["memory", "code"],

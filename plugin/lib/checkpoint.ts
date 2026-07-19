@@ -188,6 +188,32 @@ export function restore(workspace: string, id: string): { restored: string[]; de
   return { restored, deleted, failed, treePaths }
 }
 
+/** Read a file's bytes AS OF a checkpoint commit, from the PRIVATE store (never touches the real .git).
+ *  Returns null if the path did not exist at that commit. Used by the reproduce-gate to materialize the
+ *  pre-patch tree for a fail-to-pass probe. Buffer (not utf8) so binary source is never corrupted. */
+export function readFileAtCommit(workspace: string, commit: string, rel: string): Buffer | null {
+  const store = storeFor(workspace)
+  try {
+    return execFileSync("git", ["show", `${commit}:${rel}`], {
+      env: { ...process.env, ...IDENTITY, GIT_DIR: store.dir },
+      maxBuffer: 64 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "ignore"],
+    }) as unknown as Buffer
+  } catch { return null }
+}
+
+/** All paths present in a checkpoint commit's tree (for a whole-tree snapshot whose `affected` is empty).
+ *  Read-only, from the private store. */
+export function baseTreeFiles(workspace: string, commit: string): string[] {
+  const store = storeFor(workspace)
+  try {
+    return execFileSync("git", ["ls-tree", "-r", "--name-only", commit], {
+      env: { ...process.env, ...IDENTITY, GIT_DIR: store.dir },
+      encoding: "utf8", maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"],
+    }).split("\n").filter(Boolean)
+  } catch { return [] }
+}
+
 /** Unified diff between two checkpoints (or a checkpoint and the current work tree if `toId` omitted). */
 export function diffCheckpoints(workspace: string, fromId: string, toId?: string): string {
   const store = storeFor(workspace)

@@ -144,7 +144,7 @@ Then watch the machine refuse to finish until the proof exists — on your machi
 | The gate | What it refuses |
 |---|---|
 | **verify** | "Done" without a green run of the project's own tests — the engine presses the run back into verification after source edits, by itself. |
-| **reproduce** | A green suite that never exercises the fix — no test for the change, no done. |
+| **reproduce** | A green suite proves nothing on its own. The harness runs your new test against the pre-patch code: passes with *and* without the fix → fake, no done; breaks a sibling → regression, no done. |
 | **quiz** | A change the agent can't explain — it is graded against its own diff before done stands. |
 | **judge** | A turn that ends before the request is fulfilled — an independent judge reads the transcript and refuses the stop until it's done, not planned or promised. |
 | **provenance** | Work of unknown origin — every receipt carries a sha256 of the exact context (system prompt + tool schemas + router profile), a byte-stability verdict, and (v0.2) the request-text hash + the serving model's descriptor, with an optional real weights digest. |

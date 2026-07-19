@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.2.0"
+export const FABULA_VERSION = "0.2.1"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.2.1",
+    date: "2026-07-19",
+    items: [
+      {
+        ru: "Один из внутренних гейтов мог продлевать ход почти без предела — исправлено. Гейт незакрытых фоновых задач имеет лимит: не больше 3 подталкиваний «доделай задачу» за ход. Но свой счётчик он обнулял сам — и когда упирался в лимит, и когда доска задач разгребалась. Из-за этого лимит взводился заново: другой гейт продлевал ход, задачи появлялись снова, и гейт получал ещё 3 подталкивания. Ограничения переставали складываться и начинали ПЕРЕМНОЖАТЬСЯ, а каждое лишнее подталкивание — это полный вызов модели. Теперь счётчик обнуляется только на настоящей границе хода (новое сообщение от вас), так что за один ход гейт не превысит свои 3, а следующий ход по-прежнему начинается с чистого листа. Правило вынесено в общую функцию, которую исполняет и движок, и его проверка, — разъехаться они не могут. Заодно объявлен полный список всех мест, откуда ход может продлиться: добавить новое, не объявив его, теперь нельзя — падает тест.",
+        en: "One internal gate could stretch a turn almost without limit — now it cannot. The gate for unfinished background tasks has a cap: at most 3 'please finish the task' nudges per turn. But it reset its own counter — both when it hit the cap and when the task board emptied. That re-armed the cap: another gate would carry the turn forward, tasks would appear again, and the gate earned another 3. The bounds stopped adding up and started MULTIPLYING, and every extra nudge is a full model call. The counter is now reset only at a real turn boundary (a new message from you), so within one turn the gate can never exceed its 3, while the next turn still starts fresh. The rule now lives in one shared function that both the engine and its guard execute, so the two cannot drift apart. Alongside it, every place a turn can be extended from is now declared in one registry: adding a new one without declaring it fails a test.",
+      },
+    ],
+  },
   {
     version: "0.2.0",
     date: "2026-07-19",

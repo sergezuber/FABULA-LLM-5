@@ -77,6 +77,26 @@ const buildReentryText = (
  * the agent in the gate — fail open by reporting empty so the caller stops
  * cleanly. Mirrors actor/spawn.ts:412 today.
  */
+
+/**
+ * The gate's per-TURN counter policy, made explicit so the run loop cannot quietly invent its own.
+ *
+ * There is deliberately NO "reset" outcome: the counter is the gate's budget for the WHOLE TURN and must
+ * never be reset mid-turn — not when the cap
+ * is reached ("allow the stop") and not when the board settles ("no tasks left"). Either reset re-arms the
+ * cap: the gate re-enters up to `maxReact`, the counter returns to 0, another gate carries the turn forward,
+ * and the gate earns a full fresh allowance. The bound then composes as a PRODUCT of cycles rather than a
+ * SUM — the Infinite-Agentic-Loop shape arXiv:2607.01641 names, a framework feedback edge whose own counter
+ * is re-armable. The reset belongs to the real turn boundary (a new user message) and nowhere else — which
+ * is why this function cannot express one, and why `prompt.ts` contains exactly one `taskGateState.clear`
+ * call (asserted in test/task/gate-reentry-invariant.test.ts). An earlier version returned an always-false
+ * `reset` flag; that was unreachable code AND it cost the guard its strongest invariant.
+ */
+export function gateTurnStep(decision: Decision): { reenter: boolean; bump: boolean } {
+  if (decision.needReentry) return { reenter: true, bump: true }
+  return { reenter: false, bump: false }
+}
+
 export const decide = Effect.fn("TaskGate.decide")(function* (input: DecideInput) {
   const reg = yield* TaskRegistry.Service
   const tasks = yield* reg

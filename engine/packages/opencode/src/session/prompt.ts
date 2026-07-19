@@ -1843,6 +1843,16 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         const message = yield* createUserMessage(input)
         yield* sessions.touch(input.sessionID)
 
+        // TURN BOUNDARY for the task-gate re-entry budget — and the ONLY place this counter is ever reset
+        // (asserted in test/task/gate-reentry-invariant.test.ts). The gate used to clear it from BOTH of
+        // its own non-re-entry branches, on the cap AND when the task board settled; either one re-armed
+        // the cap mid-turn (see taskGate) and made the harness's re-entry bounds compose as a product
+        // instead of a sum. Removing just one of the two was not enough — an independent verifier measured
+        // 6 re-entries in a turn through the other. A real user message is the honest place
+        // to start that budget over: this is the same boundary the auto-goal arming below uses, and the
+        // gates never re-enter through here (they inject synthetic turns via sessions.updateMessage).
+        yield* taskGateState.clear(input.sessionID)
+
         // Auto-goal (mission default: never end the turn until the work is done).
         // Every real user task arms the same goal gate /goal uses — the judge
         // then refuses the stop until the request is fulfilled. Pure decision in
@@ -2166,17 +2176,20 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             maxReact: MAX_TASK_GATE_MAIN_REACT,
             mode: "main",
           }).pipe(Effect.provideService(TaskRegistry.Service, taskRegistry))
+          // The counter policy is NOT written inline here — it lives in TaskGate.gateTurnStep so the run
+          // loop and its guards execute the same rule. See that function for why nothing resets mid-turn.
+          const step = TaskGate.gateTurnStep(decision)
           if (!decision.needReentry) {
             if (decision.capExceeded) {
               yield* slog.warn("task gate hit cap; allowing stop", {
                 sessionID,
                 incompleteTasks: decision.incompleteTasks,
               })
+              return false
             }
-            yield* taskGateState.clear(sessionID)
             return false
           }
-          yield* taskGateState.bump(sessionID)
+          if (step.bump) yield* taskGateState.bump(sessionID)
           const reentry = yield* sessions.updateMessage({
             id: MessageID.ascending(),
             role: "user" as const,

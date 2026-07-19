@@ -39,6 +39,7 @@ import os
 import socket
 import sys
 import threading
+import time
 import urllib.request
 import urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -46,7 +47,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from adapter_util import (
     stable_prefix, shared_prefix_len, classify_overflow, clamp_max_tokens, drain_with_idle_split,
-    update_prefix_and_check, dump_last_request,
+    update_prefix_and_check, compare_and_store, dump_last_request,
+    classify_break, injection_order_report, AdmissionGate, IdleBaseline,
 )
 
 # Optional context window for the dynamic max_tokens clamp (0 = off). When set, every request's
@@ -62,6 +64,22 @@ DUMP_LAST_REQUEST = os.environ.get("FABULA_DUMP_LAST_REQUEST", "")
 # ThreadingHTTPServer handles requests on many threads; _PREFIX_LOCK makes the compare-and-store atomic.
 _PREFIX_STATE = {}
 _PREFIX_LOCK = threading.Lock()
+
+# W5 admission control (arXiv:2512.23029): this serving class collapses under concurrent prefill, and
+# every session/background pass/witness call funnels through this one adapter. 0 = UNLIMITED (the
+# degenerate setting must be the SAFE one); a wait longer than the budget ADMITS anyway (fail-open) —
+# a gate that blocks is worse than no gate, because it would wedge the live app.
+MAX_CONCURRENT_UPSTREAM = int(os.environ.get("FABULA_MAX_CONCURRENT_UPSTREAM", "1") or 1)
+# A queued NON-streaming caller (the goal judge, embeddings, /v1/models) receives no keepalive — there is
+# no SSE frame to send one in — so this ceiling is how long such a caller can sit silent. Keep it short
+# enough that the caller survives it; past the ceiling the gate fails open and the request proceeds.
+ADMIT_WAIT_MAX = float(os.environ.get("FABULA_ADMIT_WAIT_MAX", "60"))
+_ADMISSION = AdmissionGate(MAX_CONCURRENT_UPSTREAM, wait_timeout=ADMIT_WAIT_MAX)
+# W5 measured idle budget: replaces the flat constant once a key has enough evidence of its own.
+_IDLE = IdleBaseline(flat=float(os.environ.get("FABULA_STREAM_IDLE_TIMEOUT", "120")))
+# Kill-switch for the READ-ONLY half (break classification + injection audit). Off = the pre-W5 line,
+# byte-for-byte, so the mechanism can be removed from the picture without removing the telemetry.
+CACHE_BREAK_CLASSIFY = os.environ.get("FABULA_CACHE_BREAK_CLASS", "1").strip().lower() not in ("0", "false", "off")
 
 UPSTREAM = os.environ.get("UPSTREAM", "http://localhost:1234")
 PORT = int(os.environ.get("ADAPTER_PORT", "1235"))
@@ -255,6 +273,7 @@ class Handler(BaseHTTPRequestHandler):
     def _proxy(self, method):
         body = self._read_body()
         is_stream = False
+        j = None   # bound only when a JSON body is parsed; every later use must tolerate None (GETs have no body)
         try:
             if body:
                 j = json.loads(body)
@@ -296,12 +315,32 @@ class Handler(BaseHTTPRequestHandler):
                     # it is unit-tested, incl. under concurrency.
                     try:
                         _key = str(j.get("model") or "?")
-                        _cb = update_prefix_and_check(_PREFIX_STATE, _PREFIX_LOCK, _key, stable_prefix(j))
-                        if _cb:
+                        _sp = stable_prefix(j)
+                        _prev_sp, _cb = compare_and_store(_PREFIX_STATE, _PREFIX_LOCK, _key, _sp)
+                        if _cb and not CACHE_BREAK_CLASSIFY:
                             sys.stderr.write(
                                 "[fabula-adapter] CACHE-BREAK model=%s: shared prefix %d/%d (%.0f%%) — "
                                 "a hook likely mutated the stable system/tools block\n"
                                 % (_key, _cb[0], _cb[1], _cb[2]))
+                        elif _cb:
+                            # WHY it broke decides what to do about it (arXiv:2605.05696): a
+                            # position-shift died on content the server already had — ours to fix by
+                            # reordering — while a content-break is real change and reordering is no cure.
+                            _cls = classify_break(_prev_sp or "", _sp)
+                            _shift = _cls.get("shift")
+                            _order = injection_order_report(j)
+                            _blame = ""
+                            if _cls.get("cls") == "position-shift" and _order.get("offenders"):
+                                _o = _order["offenders"][0]
+                                _blame = " — volatile block #%d (%s) sits above %d stable block(s): %r" % (
+                                    _o["index"], _o["role"], _o["stable_blocks_below"], _o["excerpt"][:80])
+                            sys.stderr.write(
+                                "[fabula-adapter] CACHE-BREAK model=%s cause=%s%s shared=%d/%d (%.0f%%) "
+                                "queue_depth=%d active=%d%s\n"
+                                % (_key, _cls.get("cls", "?"),
+                                   (" shift=%+d" % _shift) if isinstance(_shift, int) else "",
+                                   _cb[0], _cb[1], _cb[2],
+                                   _ADMISSION.queue_depth, _ADMISSION.active, _blame))
                     except Exception:
                         pass
                     # Phase-0 audit tap: capture the final (post-transform) body for offline
@@ -313,6 +352,79 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             pass
 
+        # W5: serialize upstream work. Acquired HERE (not at request entry) because a queued STREAMING
+        # client must be kept alive, and only now do we know it is one. Released in handle_one_request's
+        # finally, which also covers early returns, exceptions and a client that disconnects while queued.
+        _ka = {"committed": False}
+
+        def _keepalive(waited):
+            if not is_stream:
+                return
+            try:
+                if not _ka["committed"]:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/event-stream")
+                    self.send_header("Transfer-Encoding", "chunked")
+                    self.end_headers()
+                    _ka["committed"] = True
+                # an SSE comment: valid framing, ignored by every client, keeps the connection warm
+                payload = b": fabula-adapter queued %.1fs\n\n" % waited
+                self.wfile.write(b"%X\r\n" % len(payload))
+                self.wfile.write(payload)
+                self.wfile.write(b"\r\n")
+                self.wfile.flush()
+            except Exception:
+                # The write failed: the queued client is GONE. Record it so the request is dropped on
+                # admission instead of running a full generation nobody will read (the permit was always
+                # released; the wasted GPU work was not — found by the independent verifier).
+                _ka["dead"] = True
+
+        def _sse_error_and_close(status, payload):
+            """Finish a response the keepalive already committed as 200/SSE. The status line is gone, so
+            the error has to travel as an SSE event and the chunked body has to be terminated properly —
+            anything else fuses a second HTTP response into the stream and the SDK sees garbage."""
+            try:
+                body_txt = payload.decode("utf-8", "replace") if isinstance(payload, (bytes, bytearray)) else str(payload)
+            except Exception:
+                body_txt = ""
+            try:
+                ev = ("data: " + json.dumps({"error": {"message": body_txt, "upstream_status": status},
+                                             "fabula_adapter": "upstream-error-after-keepalive"})
+                      + "\n\n" + "data: [DONE]\n\n").encode()
+                self.wfile.write(b"%X\r\n" % len(ev))
+                self.wfile.write(ev)
+                self.wfile.write(b"\r\n")
+                self.wfile.write(b"0\r\n\r\n")
+                self.wfile.flush()
+            except Exception:
+                pass
+
+        # Only INFERENCE work is admission-controlled. The paper's collapse (arXiv:2512.23029) is about
+        # concurrent PREFILL on the big model; a liveness GET or a small-model embedding call queued
+        # behind a long generation would break the app's health checks for nothing.
+        _gated = method == "POST" and ("/chat/completions" in self.path or self.path.rstrip("/").endswith("/completions"))
+        if _gated:
+            self._adm = _ADMISSION.acquire(timeout=ADMIT_WAIT_MAX, on_wait=_keepalive)
+        else:
+            self._adm = None
+        self._headers_committed = _ka
+        if _gated and _ka.get("dead"):
+            adm = self._adm
+            self._adm = None
+            if adm is not None:
+                adm.release()
+            sys.stderr.write("[fabula-adapter] ADMISSION client vanished while queued — upstream call skipped\n")
+            return
+        if _gated and self._adm.wait > 0.05:
+            sys.stderr.write("[fabula-adapter] ADMISSION waited=%.2fs queue_depth=%d active=%d%s\n"
+                             % (self._adm.wait, _ADMISSION.queue_depth, _ADMISSION.active,
+                                " FAIL-OPEN" if self._adm.fail_open else ""))
+
+        # W5: the idle budget for THIS key, measured. Cold start returns exactly the flat constant.
+        _idle_key = str((j or {}).get("model") or "?") if isinstance(j, dict) else "?"
+        _idle_size = len(body) if body else 0
+        _idle_budget = _IDLE.budget(_idle_key, _idle_size)
+
         def _open_upstream(timeout):
             r = urllib.request.Request(UPSTREAM + self.path,
                                        data=body if body else None,
@@ -322,9 +434,14 @@ class Handler(BaseHTTPRequestHandler):
         try:
             # Open with the FIRST-TOKEN (prefill) budget for BOTH paths; each path drops the socket
             # to the smaller inter-token idle once the first byte lands (see set_read_timeout).
+            _t_open = time.time()
             resp = _open_upstream(FIRST_TOKEN_TIMEOUT)
+            _gap_prev = None
         except urllib.error.HTTPError as e:
             data = e.read()
+            if _ka["committed"]:
+                _sse_error_and_close(int(e.code), data)
+                return
             self.send_response(e.code)
             self.send_header("Content-Type", e.headers.get("Content-Type", "application/json"))
             self.send_header("Content-Length", str(len(data)))
@@ -333,6 +450,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         except Exception as e:
             msg = json.dumps({"error": str(e)}).encode()
+            if _ka["committed"]:
+                _sse_error_and_close(502, msg)
+                return
             self.send_response(502)
             self.send_header("Content-Length", str(len(msg)))
             self.end_headers()
@@ -357,11 +477,15 @@ class Handler(BaseHTTPRequestHandler):
             # Fix: buffer upstream bytes; forward only COMPLETE events (terminated by `\n\n`); on
             # terminate/EOF, DROP any incomplete tail and emit a clean finish — no half-event is ever
             # relayed, so no malformed data line can reach the SDK.
-            self.send_response(resp.status)
-            ctype = resp.headers.get("Content-Type", "text/event-stream")
-            self.send_header("Content-Type", ctype)
-            self.send_header("Transfer-Encoding", "chunked")
-            self.end_headers()
+            # If we were queued, the keepalive already committed the SSE headers and started the
+            # chunked body — sending them again would fuse a second header block into the stream and
+            # the client would see a truncated read.
+            if not _ka["committed"]:
+                self.send_response(resp.status)
+                ctype = resp.headers.get("Content-Type", "text/event-stream")
+                self.send_header("Content-Type", ctype)
+                self.send_header("Transfer-Encoding", "chunked")
+                self.end_headers()
 
             def _write_chunk(b):
                 self.wfile.write(b"%X\r\n" % len(b))
@@ -425,7 +549,7 @@ class Handler(BaseHTTPRequestHandler):
                         except Exception:
                             pass
                     _terminate(pending,
-                               STREAM_IDLE_TIMEOUT if forwarded else FIRST_TOKEN_TIMEOUT,
+                               _idle_budget if forwarded else FIRST_TOKEN_TIMEOUT,
                                len(pending) - (pending.rfind(SSE_BOUNDARY) + len(SSE_BOUNDARY)
                                                if SSE_BOUNDARY in pending else 0))
                     break
@@ -446,9 +570,22 @@ class Handler(BaseHTTPRequestHandler):
                         pass
                     break
                 if not forwarded:
-                    set_read_timeout(resp, STREAM_IDLE_TIMEOUT)  # split: first byte in -> inter-token idle
+                    # The first byte landed. NOTE what is NOT done here: the prefill time is NOT fed to
+                    # the idle baseline. That budget governs INTER-TOKEN gaps, and sampling time-to-first-
+                    # token to bound it is a category error — it measured one quantity and governed
+                    # another, which collapsed the watchdog to its floor and truncated healthy turns.
+                    set_read_timeout(resp, _idle_budget)  # split: first byte in -> inter-token idle
+                _gap_prev = time.time()
                 forwarded = True
                 # Split on SSE event boundaries: forward whole events, hold the remainder.
+                # the real inter-token gap — the quantity the idle budget actually bounds
+                try:
+                    _now = time.time()
+                    if forwarded and _gap_prev is not None:
+                        _IDLE.observe(_idle_key, _idle_size, _now - _gap_prev)
+                    _gap_prev = _now
+                except Exception:
+                    pass
                 pending = _flush_complete(pending + chunk)
             return
 
@@ -461,10 +598,10 @@ class Handler(BaseHTTPRequestHandler):
         try:
             drain_with_idle_split(lambda: resp.read(65536),
                                   lambda t: set_read_timeout(resp, t),
-                                  STREAM_IDLE_TIMEOUT, _buf.append)
+                                  _idle_budget, _buf.append)
         except (socket.timeout, TimeoutError):
             sys.stderr.write("[fabula-adapter] non-stream idle-timeout (first_token=%ss idle=%ss) — "
-                             "aborting\n" % (FIRST_TOKEN_TIMEOUT, STREAM_IDLE_TIMEOUT))
+                             "aborting\n" % (FIRST_TOKEN_TIMEOUT, _idle_budget))
             try:
                 resp.close()
             except Exception:
@@ -508,6 +645,18 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
+
+    def handle_one_request(self):
+        """Release the admission slot after each request on the connection — this covers the handler's
+        early returns, an exception mid-relay, and a client that disconnects while queued. A slot that
+        leaks here silently degrades the cap to nothing, so the release lives at the outermost frame."""
+        try:
+            return BaseHTTPRequestHandler.handle_one_request(self)
+        finally:
+            adm = getattr(self, "_adm", None)
+            if adm is not None:
+                self._adm = None
+                adm.release()
 
     def do_POST(self):
         self._proxy("POST")

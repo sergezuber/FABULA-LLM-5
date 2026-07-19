@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.2.1"
+export const FABULA_VERSION = "0.2.2"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.2.2",
+    date: "2026-07-19",
+    items: [
+      {
+        ru: "Адаптер локальных моделей стал диспетчером, а не трубой. (1) Тяжёлые запросы к модели теперь СЕРИАЛИЗУЮТСЯ: параллельные сессии, фоновые проходы и проверки больше не давят префилл одновременно (на потребительском железе это роняло скорость всем сразу) — лишние запросы честно ждут в очереди, стриминговый клиент получает keepalive-сигналы, а health-проверка приложения и эмбеддинги идут мимо очереди без задержки. Очередь никогда не блокирует намертво: по таймауту запрос проходит в любом случае. (2) Сторожевой таймер простоя больше не одна константа на всех: адаптер измеряет реальные паузы между токенами по каждой модели и размеру запроса и выставляет порог по фактам — залипший поток режется быстрее, а легитимно медленный больше не убивается. (3) Телеметрия разрыва кэша теперь называет ПРИЧИНУ: контент сдвинулся (наша инъекция выше стабильного блока — и виновник называется поимённо) или контент реально изменился. Все три механизма отключаемы переменными окружения.",
+        en: "The local-model adapter became a dispatcher, not a pipe. (1) Heavy model requests are now SERIALIZED: parallel sessions, background passes and checks no longer hammer prefill at once (on consumer hardware that collapsed speed for everyone) — excess requests genuinely queue, a streaming client gets keepalive signals, and the app's health probe and embeddings bypass the queue with no delay. The queue can never block for good: past a timeout the request proceeds regardless. (2) The idle watchdog is no longer one constant for everyone: the adapter measures the real inter-token pauses per model and request size and sets the threshold from evidence — a wedged stream is cut sooner, a legitimately slow one is no longer killed. (3) Cache-break telemetry now names the CAUSE: content merely shifted (our own injection above a stable block — and the offender is named) versus content that really changed. All three mechanisms can be disabled via environment variables.",
+      },
+    ],
+  },
   {
     version: "0.2.1",
     date: "2026-07-19",

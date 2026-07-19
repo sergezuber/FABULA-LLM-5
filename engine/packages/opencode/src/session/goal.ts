@@ -12,6 +12,7 @@ import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { SessionID } from "./schema"
 import { MessageV2 } from "./message-v2"
+import { trajectoryFeatures, renderFeatureBlock, type ScanMessage } from "./verify-gate"
 
 /**
  * Per-session stop-condition goal. `/goal`: once a goal
@@ -181,10 +182,38 @@ export const layer = Layer.effect(
         typeof value === "string" && value.length > 500
           ? `«${value.length} chars: ${value.slice(0, 200)}…»`
           : value
+      // W3: GROUND the verdict in the measured trajectory, not prose alone. A single judge call on the
+      // SAME socketed model is the worst calibration setting (arXiv:2508.06225); process-level trajectory
+      // features are a far better completion signal than the raw transcript (HTC, arXiv:2601.15778). The
+      // harness already records these deterministically — hand them to the judge. Additive: the verdict
+      // schema and the judge's own reasoning path are unchanged.
+      const featureBlock = renderFeatureBlock(
+        trajectoryFeatures(
+          input.msgs.map((m: any): ScanMessage => ({
+            role: m.info.role,
+            parts: (m.parts ?? []).map((p: any) => ({
+              type: p.type,
+              tool: p.tool,
+              synthetic: p.synthetic,
+              metadata:
+                p.type === "tool"
+                  ? {
+                      passed: p.state?.metadata?.passed,
+                      autoRewind: p.state?.metadata?.autoRewind,
+                      notDone: p.state?.metadata?.notDone,
+                    }
+                  : undefined,
+              input: p.type === "tool" ? { command: p.state?.input?.command } : undefined,
+            })),
+          })),
+        ),
+      )
+      const judgeUserContent = `${judgeUser(input.condition)}\n\nMeasured by the harness (deterministic, not self-reported):\n${featureBlock}`
+
       const fullMessages = [
         ...(isOpenaiOauth ? [] : [{ role: "system", content: JUDGE_SYSTEM }]),
         ...conversation,
-        { role: "user", content: judgeUser(input.condition) },
+        { role: "user", content: judgeUserContent },
       ]
       yield* elog.debug("goal judge transcript", {
         condition: input.condition,
@@ -204,7 +233,7 @@ export const layer = Layer.effect(
           ...conversation,
           {
             role: "user",
-            content: judgeUser(input.condition),
+            content: judgeUserContent,
           } satisfies ModelMessage,
         ],
         model: language,

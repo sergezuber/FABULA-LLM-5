@@ -4,7 +4,7 @@ import z from "zod"
 import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
 import { classifyAssistantStep } from "./classify"
-import { needsForcedVerify, hasVerifyCommand, goalStopLayerFires, FORCE_VERIFY_REMINDER, FORCE_VERIFY_NOT_DONE, type ScanMessage } from "./verify-gate"
+import { needsForcedVerify, hasVerifyCommand, goalStopLayerFires, trajectoryFeatures, badDynamicsSignature, FORCE_VERIFY_REMINDER, FORCE_VERIFY_NOT_DONE, type ScanMessage } from "./verify-gate"
 import { auditEntry, mcpSourceFor, schemaTokenBreakdown, renderBreakdown, type ToolAuditEntry } from "./tool-audit"
 import { beltFor, beltMasks, beltVisible, stashShadow, NEVER_MASK, type ShadowTool } from "./belt"
 import { readdir } from "node:fs/promises"
@@ -148,6 +148,8 @@ const UNVERIFIED_CONTINUATION_LIMIT = (() => {
 // FABULA_GOAL_VERIFY_GATE=0. Reads the SAME artifact signal as force-verify
 // (verify-gate.ts answerIsTerminal), so the two gates agree.
 const GOAL_VERIFY_GATE_ENABLED = process.env.FABULA_GOAL_VERIFY_GATE !== "0"
+// W3: refuse an overconfident judge "done" when the measured trajectory says otherwise (default on).
+const JUDGE_HARD_VETO_ENABLED = process.env.FABULA_JUDGE_HARD_VETO !== "0"
 
 /**
  * Number of consecutive finished assistant steps with an identical action
@@ -2228,17 +2230,27 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           // Reads the SAME artifact signal as force-verify (verify-gate.ts
           // answerIsTerminal). SOTA: Agentic Abstention (arXiv:2606.28733) —
           // ANSWER is terminal and must not re-enter a verify loop.
+          // ONE transcript scan, reused by the stop-layer AND the W3 trajectory hard-veto. The metadata
+          // carries the dynamics the harness already records deterministically: verify pass/fail, an
+          // auto-rewind, and a terminal NOT-DONE verdict.
+          const scan: ScanMessage[] = transcriptMsgs.map((m: any) => ({
+            role: m.info.role,
+            parts: (m.parts ?? []).map((p: any) => ({
+              type: p.type,
+              tool: p.tool,
+              synthetic: p.synthetic,
+              metadata:
+                p.type === "tool"
+                  ? {
+                      passed: p.state?.metadata?.passed,
+                      autoRewind: p.state?.metadata?.autoRewind,
+                      notDone: p.state?.metadata?.notDone,
+                    }
+                  : undefined,
+              input: p.type === "tool" ? { command: p.state?.input?.command } : undefined,
+            })),
+          }))
           if (GOAL_VERIFY_GATE_ENABLED) {
-            const scan: ScanMessage[] = transcriptMsgs.map((m: any) => ({
-              role: m.info.role,
-              parts: (m.parts ?? []).map((p: any) => ({
-                type: p.type,
-                tool: p.tool,
-                synthetic: p.synthetic,
-                metadata: p.type === "tool" ? { passed: p.state?.metadata?.passed } : undefined,
-                input: p.type === "tool" ? { command: p.state?.input?.command } : undefined,
-              })),
-            }))
             // Only an AUTO-armed goal short-circuits here; an explicit /goal is the
             // user opting into the loop and must always reach the judge (bounded by
             // MAX_GOAL_REACT) — see goalStopLayerFires.
@@ -2278,7 +2290,36 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               ),
             )
 
-          if (verdict.ok || verdict.impossible) {
+          // ── W3 HARD-VETO (arXiv:2508.06225 overconfident LLM-judge · 2601.15778 HTC trajectory features) ──
+          // The judge is ONE call on the SAME socketed model — the worst calibration setting. Before an
+          // `ok:true` is allowed to END the turn, consult the DETERMINISTIC dynamics the harness already
+          // measured: a red last verify, repeated reds with no green, a stamped terminal NOT-DONE, or
+          // unverified source edits mean the work is self-evidently not done, whatever the judge says.
+          // A veto does NOT stop the run and does NOT add a new loop: it falls through to the SAME bounded
+          // re-entry path below (react cap unchanged), so it can never trap a session, and a later green
+          // verify clears it. `impossible` and a failed judge are never vetoed (honest terminal states);
+          // the stop-layer and explicit /goal semantics are untouched. Kill-switch FABULA_JUDGE_HARD_VETO=0.
+          const vetoEligible =
+            JUDGE_HARD_VETO_ENABLED && verdict.ok === true && verdict.impossible !== true && !("judgeFailed" in verdict)
+          // The "unverified edits" signal only means not-done where a verify command EXISTS. Read the same
+          // project signal the arming layer uses (verify-gate hasVerifyCommand) so the two gates never
+          // disagree: in a non-verifiable repo `verify_done` can never go green, and vetoing there would
+          // burn the whole re-entry budget demanding an impossible verify.
+          const vetoCtx = vetoEligible ? yield* InstanceState.context : undefined
+          const vetoFiles = vetoCtx
+            ? yield* Effect.promise(() => readdir(vetoCtx.directory).catch(() => [] as string[]))
+            : ([] as string[])
+          const hardVeto = vetoEligible
+            ? badDynamicsSignature(trajectoryFeatures(scan), {
+                hasVerifyCommand: hasVerifyCommand(vetoFiles, process.env.FABULA_VERIFY_CMD),
+              })
+            : { veto: false, reason: "" }
+          const reentryReason = hardVeto.veto
+            ? `the harness OVERRODE a "done" verdict — ${hardVeto.reason}. Fix the failing work and get \`verify_done\` green before concluding.`
+            : verdict.reason
+          const effectiveVerdict = hardVeto.veto ? { ...verdict, ok: false, reason: reentryReason } : verdict
+
+          if ((verdict.ok || verdict.impossible) && !hardVeto.veto) {
             yield* slog.info("goal satisfied; allowing stop", {
               sessionID,
               impossible: verdict.impossible === true,
@@ -2315,17 +2356,20 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             yield* bus.publish(Goal.Event.Updated, {
               sessionID,
               goal: undefined,
-              lastVerdict: { ...verdict, attempt: count, messageID: judgedMessageID },
+              lastVerdict: { ...effectiveVerdict, attempt: count, messageID: judgedMessageID },
             })
             yield* goal.clear(sessionID)
             return false
           }
 
-          yield* slog.info("goal not satisfied; re-entering", { sessionID, attempt: count })
+          yield* slog.info(
+            hardVeto.veto ? "goal judge allowed stop; trajectory hard-veto overrode it; re-entering" : "goal not satisfied; re-entering",
+            { sessionID, attempt: count, hardVeto: hardVeto.veto || undefined, vetoReason: hardVeto.veto ? hardVeto.reason : undefined },
+          )
           yield* bus.publish(Goal.Event.Updated, {
             sessionID,
             goal: { condition: active.condition },
-            lastVerdict: { ...verdict, attempt: count, messageID: judgedMessageID },
+            lastVerdict: { ...effectiveVerdict, attempt: count, messageID: judgedMessageID },
           })
           const reentry = yield* sessions.updateMessage({
             id: MessageID.ascending(),
@@ -2348,7 +2392,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               "<system-reminder>",
               `Your goal is not yet satisfied: "${active.condition}".`,
               "A judge reviewed the transcript and reported what is still missing:",
-              verdict.reason,
+              reentryReason,
               "Keep working toward the goal. Do not stop until it is genuinely met or impossible.",
               "</system-reminder>",
             ].join("\n"),

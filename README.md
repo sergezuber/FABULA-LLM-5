@@ -22,7 +22,7 @@ And the run won't quietly end in a claim. If source changed but the tests never 
 
 ## The run can't even end early
 
-Ending the turn is not the model's decision. Before any stop is honored, an independent judge reads the transcript — the real tool calls, not the model's summary — and refuses the stop until the request is fulfilled: **done, not planned, described, or promised.** The judge is fail-open (a broken judge can never trap you) and bounded (a low re-entry cap), and an explicit `/goal` condition makes it as strict as you want.
+Ending the turn is not the model's decision. Before any stop is honored, an independent judge reads the transcript — the real tool calls, not the model's summary — and refuses the stop until the request is fulfilled: **done, not planned, described, or promised.** The judge is fail-open (a broken judge can never trap you) and bounded (a low re-entry cap), and an explicit `/goal` condition makes it as strict as you want. A judge is also just one model call, and model judges are systematically overconfident — so it doesn't get the last word alone: the harness hands it the trajectory it *measured* (verify greens and reds and which came last, rewinds, edits it never verified) and overrides a "done" outright when those dynamics say the work isn't done. Deterministic, same for any model in the socket, and still bounded by the same cap.
 
 ## The right context, not all the context
 
@@ -146,7 +146,7 @@ Then watch the machine refuse to finish until the proof exists — on your machi
 | **verify** | "Done" without a green run of the project's own tests — the engine presses the run back into verification after source edits, by itself. |
 | **reproduce** | A green suite proves nothing on its own. The harness runs your new test against the pre-patch code: passes with *and* without the fix → fake, no done; breaks a sibling → regression, no done. |
 | **quiz** | A change the agent can't explain — it is graded against its own diff before done stands. |
-| **judge** | A turn that ends before the request is fulfilled — an independent judge reads the transcript and refuses the stop until it's done, not planned or promised. |
+| **judge** | A turn that ends before the request is fulfilled — an independent judge reads the transcript and refuses the stop until it's done, not planned or promised. It is handed the trajectory the harness *measured* (greens/reds, rewinds, unverified edits), and a "done" is overridden outright when those dynamics say otherwise. |
 | **provenance** | Work of unknown origin — every receipt carries a sha256 of the exact context (system prompt + tool schemas + router profile), a byte-stability verdict, and (v0.2) the request-text hash + the serving model's descriptor, with an optional real weights digest. |
 | **rewind** | Digging the hole deeper — repeated red verifies roll the files back to the last green checkpoint, atomically, from the harness's own shadow-git. The failed attempts leave your context so the retry starts clean; the steer names the recurring root cause; and any non-idempotent side effect (an install, a migration, a POST) is flagged as not-undone. |
 | **escalate** | Looping on a dead end — the auto-rewind steers the model to fetch one cloud second opinion, then it keeps driving. |

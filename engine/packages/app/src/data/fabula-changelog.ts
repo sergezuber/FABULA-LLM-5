@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.1.9"
+export const FABULA_VERSION = "0.2.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.2.0",
+    date: "2026-07-19",
+    items: [
+      {
+        ru: "Судья, решающий «закончен ли ход», больше не имеет последнего слова в одиночку. Раньше это был ОДИН вызов той же модели, что и работала, — худшая из возможных калибровок: уверенное «готово» завершало ход, даже если динамика прогона кричала обратное. Теперь харнесс передаёт судье траекторию, которую измерил САМ (сколько проверок прошло и провалилось и какая была последней, сколько раз откатывались файлы, были ли правки, которые ни разу не проверялись), — и вдобавок ОТКЛОНЯЕТ вердикт «готово», если динамика самоочевидно говорит «не готово»: последняя проверка красная, несколько красных без единой зелёной, выставлен терминальный вердикт NOT DONE, или код правился и ни разу не проверялся. Это не новая петля: отказ уходит в тот же ограниченный путь повторного захода — счётчик по-прежнему завершает ход, а зелёная проверка снимает отказ. Детерминированно и одинаково для любой модели в сокете. Выключатель: FABULA_JUDGE_HARD_VETO=0.",
+        en: "The judge that decides whether a turn is finished no longer gets the last word alone. It used to be ONE call on the SAME model that did the work — the worst possible calibration: a confident 'done' ended the turn even when the run's dynamics said otherwise. Now the harness hands the judge the trajectory it measured ITSELF (how many verifies passed and failed and which came last, how many times files were rolled back, whether code was edited and never verified) — and on top of that OVERRIDES a 'done' verdict when the dynamics are self-evidently not-done: the last verify was red, several reds with never a green, a terminal NOT DONE verdict was stamped, or source was edited and never verified. This is not a new loop: the refusal falls into the same bounded re-entry path — the cap still ends the turn, and a green verify clears the veto. Deterministic and identical for any model in the socket. Kill-switch: FABULA_JUDGE_HARD_VETO=0.",
+      },
+    ],
+  },
   {
     version: "0.1.9",
     date: "2026-07-19",

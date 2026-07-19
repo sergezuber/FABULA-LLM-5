@@ -70,7 +70,7 @@ export interface ScanMessage {
     type: string
     tool?: string
     synthetic?: boolean
-    metadata?: { passed?: boolean } | null
+    metadata?: { passed?: boolean; autoRewind?: unknown; notDone?: unknown } | null
     /** tool input (only `command` is read, for bash edit detection) */
     input?: { command?: string } | null
   }>
@@ -186,3 +186,76 @@ export const FORCE_VERIFY_REMINDER = [
   "verification command exists for this project, say so explicitly and then stop.",
   "</system-reminder>",
 ].join("\n")
+
+// ── W3: trajectory features + hard-veto for the auto-goal judge ──────────────────────────────────────
+// The goal judge runs ALONE on the raw transcript, same socketed model — the worst calibration setting
+// (arXiv:2508.06225: LLM-as-judge is systematically overconfident). The harness ALREADY computes the run
+// dynamics deterministically; HTC (arXiv:2601.15778) shows those process-level features predict success far
+// better than the prose. So we (a) hand the judge a measured trajectory block, and (b) HARD-VETO an
+// overconfident ok:true when the dynamics are self-evidently not-done. Pure + deterministic + model-agnostic
+// (RULE #9/#14): the same signal for any model in the socket. Scan resets at the last real user boundary.
+
+export interface TrajectoryFeatures {
+  verifyGreen: number
+  verifyRed: number
+  lastVerify: "green" | "red" | "none"
+  edits: number
+  rewinds: number
+  notDone: number
+  unverifiedEdits: boolean
+}
+
+/** Deterministic process-level features of THIS turn (since the last real user boundary). */
+export function trajectoryFeatures(messages: readonly ScanMessage[]): TrajectoryFeatures {
+  let verifyGreen = 0, verifyRed = 0, edits = 0, rewinds = 0, notDone = 0
+  let lastVerify: "green" | "red" | "none" = "none"
+  for (const m of messages) {
+    if (isRealUserBoundary(m)) { verifyGreen = 0; verifyRed = 0; edits = 0; rewinds = 0; notDone = 0; lastVerify = "none"; continue }
+    if (m.role !== "assistant") continue
+    for (const p of m.parts) {
+      if (p.type !== "tool" || !p.tool) continue
+      const md = p.metadata
+      if (p.tool === "verify_done") {
+        if (md?.passed === true) { verifyGreen++; lastVerify = "green" }
+        else if (md?.passed === false) { verifyRed++; lastVerify = "red" }
+      } else if (EDIT_TOOLS.has(p.tool)) edits++
+      else if (BASH_TOOLS.has(p.tool) && bashEditsTree(p.input?.command)) edits++
+      if (md?.autoRewind != null) rewinds++
+      if (md?.notDone != null) notDone++
+    }
+  }
+  return { verifyGreen, verifyRed, lastVerify, edits, rewinds, notDone, unverifiedEdits: needsForcedVerify(messages) }
+}
+
+/**
+ * The HARD-VETO: should an overconfident judge `ok:true` be REFUSED because the dynamics are self-evidently
+ * not-done? Fires ONLY on hard, unambiguous signals so it never traps a genuine "done" (a clean green
+ * trajectory is never vetoed). Order matters for a single honest `reason`.
+ */
+export function badDynamicsSignature(
+  f: TrajectoryFeatures,
+  opts?: { hasVerifyCommand?: boolean },
+): { veto: boolean; reason: string } {
+  if (f.lastVerify === "red")
+    return { veto: true, reason: `the most recent verify_done was RED (${f.verifyRed} red / ${f.verifyGreen} green this turn) — the tests are not passing` }
+  if (f.notDone > 0 && f.lastVerify !== "green")
+    return { veto: true, reason: `a terminal NOT-DONE verdict was stamped this turn and no green verify has passed since` }
+  // "Unverified edits" is only a not-done signal when the project HAS something to verify. In a repo with
+  // no verify command (docs/prompts) `verify_done` can never go green, so vetoing here would burn the whole
+  // re-entry budget demanding an impossible green. This mirrors the arming layer's own refusal to gate a
+  // non-verifiable project (hasVerifyCommand) — the two gates read the SAME project signal. Default
+  // (undefined) keeps the strict behavior for callers that don't know the project.
+  if (f.unverifiedEdits && opts?.hasVerifyCommand !== false)
+    return { veto: true, reason: `source was edited but never confirmed green by verify_done — an unverified change` }
+  if (f.verifyRed >= 2 && f.verifyGreen === 0)
+    return { veto: true, reason: `${f.verifyRed} verifies failed this turn and none ever passed` }
+  return { veto: false, reason: `no hard not-done signal in the trajectory` }
+}
+
+/** A compact, deterministic trajectory block for the judge context — grounds the verdict in measured
+ *  dynamics instead of prose alone (HTC). */
+export function renderFeatureBlock(f: TrajectoryFeatures): string {
+  return `[trajectory this turn] verify_done: ${f.verifyGreen} green / ${f.verifyRed} red (last: ${f.lastVerify}); ` +
+    `${f.edits} source edit(s), ${f.rewinds} auto-rewind(s), ${f.notDone} terminal not-done` +
+    (f.unverifiedEdits ? "; UNVERIFIED source edits present" : "")
+}

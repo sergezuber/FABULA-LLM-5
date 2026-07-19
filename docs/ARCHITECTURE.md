@@ -41,7 +41,8 @@ The system is composed of four cooperating layers.
               │  Adapter  localhost:1235        │   │  MCP servers │
               │  proxy/lmstudio-adapter.py      │   └──────────────┘
               │  schema + reasoning shims,      │
-              │  stall watchdog, telemetry      │
+              │  stall watchdog, admission      │
+              │  control, cache telemetry       │
               └───────────────┬─────────────────┘
                               │ proxied
                               ▼
@@ -66,8 +67,9 @@ for compatibility). A working config is produced by copying
 Models are served **locally by LM Studio** (default endpoint `localhost:1234`). The
 harness does **not** talk to LM Studio directly. Instead it points at a small Python
 **compatibility adapter** on `localhost:1235` (`proxy/lmstudio-adapter.py`), which
-proxies to LM Studio and does four things so that *structured output* and *tool calls*
-work reliably with local reasoning models:
+proxies to LM Studio and does the following so that *structured output* and *tool calls*
+work reliably — and so that concurrency, stalls and cache breaks are governed at the one
+point every request passes:
 
 1. **`json_object` → `json_schema`.** The Vercel AI SDK (inside the engine) emits the legacy
    OpenAI `response_format: {type:"json_object"}` mode for `generateObject`. LM Studio
@@ -95,6 +97,30 @@ work reliably with local reasoning models:
    (`proxy/reasoning-map.json`) can patch a request's reasoning knobs per model/level when
    a level is supplied (`X-Fabula-Reasoning` / env); the adapter also logs KV-cache prefix
    breaks (the measured #1 cost) and context-overflow classification for visibility.
+
+5. **Admission control.** This serving class matches cloud latency at low concurrency and
+   collapses under concurrent prefill, and every session, background pass and witness call
+   funnels through this one adapter — so it serializes *inference* work
+   (`FABULA_MAX_CONCURRENT_UPSTREAM`, default 1; `0` = unlimited). Excess requests queue
+   FIFO; a queued streaming client receives SSE-comment keepalives, and once those commit
+   the response an upstream error travels as an in-band SSE event rather than a second HTTP
+   status line. Waits past `FABULA_ADMIT_WAIT_MAX` **fail open** — a gate that blocks would
+   be worse than no gate. Metadata (`GET /v1/models`, the app's liveness probe) and
+   embeddings bypass the queue entirely. Measured on this hardware with four concurrent
+   *unique* heavy prefills: **41.1s unserialized vs 2.4s serialized**; with a warm shared
+   prefix the gate costs ~0.15s. NB it bounds starvation but does not prioritise — a
+   background pass that arrives first holds the slot for its whole generation.
+
+6. **Measured idle budget.** The flat inter-token timeout is replaced per
+   (model, prompt-size bucket) by a budget derived from genuinely observed *inter-token
+   gaps* — never time-to-first-token, which governs a different quantity — with a floor,
+   an env ceiling, and a cold start equal to the flat constant. `FABULA_IDLE_BASELINE=0`
+   restores the constant.
+
+7. **Cache-break classification.** The break telemetry states *why* the prefix broke:
+   `position-shift` (bit-identical content that merely moved — our own injection ordering,
+   and the offending volatile block is named) versus `content-break` versus growth/shrink.
+   `FABULA_CACHE_BREAK_CLASS=0` restores the previous line.
 
 **Chat streaming passes through token-by-token** (now watchdog-guarded); only the
 *non-streaming* structured responses are additionally buffered and rewritten. An optional

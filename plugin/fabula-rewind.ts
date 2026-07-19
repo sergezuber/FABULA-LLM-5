@@ -20,6 +20,9 @@ import { gate } from "./lib/manage"
 import { snapshot, restore } from "./lib/checkpoint"
 import { initRewind, updateRewind, RewindState } from "./lib/rewind"
 import { EDIT_TOOLS, editPaths } from "./lib/edittools"
+import { diagnose } from "./lib/diagnose"
+import { nonIdempotentEffect, renderLedger, type SideEffect } from "./lib/sidefx"
+import { collapseFailedSpan } from "./lib/convrewind"
 
 const THRESHOLD = (() => {
   const n = parseInt(process.env.FABULA_REWIND_THRESHOLD ?? "", 10)
@@ -39,6 +42,14 @@ const DISABLED = process.env.FABULA_AUTO_REWIND === "0"
 
 const states = new Map<string, RewindState>()
 const createdSince = new Map<string, Set<string>>() // sid → workspace-relative paths created after the last green
+// W2 evidence, all reset on a green verify:
+const editedSince = new Map<string, Set<string>>()   // sid → edited source paths since last green (#2 diagnosis)
+const sidefxSince = new Map<string, SideEffect[]>()   // sid → non-idempotent effects since last green (#3 ledger)
+const greenPending = new Map<string, boolean>()       // sid → capture the conversation boundary at the next transform
+const greenBoundary = new Map<string, string>()       // sid → max message id present at the last green (#1 boundary)
+const pendingRewind = new Map<string, string>()       // sid → the summary to collapse the failed span to (#1)
+function editedFor(sid: string): Set<string> { let s = editedSince.get(sid); if (!s) { s = new Set(); editedSince.set(sid, s) } return s }
+function fxFor(sid: string): SideEffect[] { let a = sidefxSince.get(sid); if (!a) { a = []; sidefxSince.set(sid, a) } return a }
 function stateFor(sid: string): RewindState {
   let s = states.get(sid)
   if (!s) { s = initRewind(); states.set(sid, s) }
@@ -96,6 +107,7 @@ export const FabulaRewind: Plugin = async (input: any) => gate("rewind", ({
       const sid = hookInput?.sessionID || "?"
       const workspace = input?.directory || process.cwd()
       evictOthers(createdSince, sid)
+      if (EDIT_TOOLS.has(tool)) for (const p of paths) editedFor(sid).add(p) // #2 diagnosis file attribution
       for (const p of paths) {
         const abs = isAbsolute(p) ? p : join(workspace, p)
         const rel = relative(workspace, abs)
@@ -108,9 +120,19 @@ export const FabulaRewind: Plugin = async (input: any) => gate("rewind", ({
   "tool.execute.after": async (hookInput: any, output: any) => {
     if (DISABLED || !output) return
     try {
-      if (hookInput?.tool !== "verify_done") return
+      const toolName = hookInput?.tool
+      // Accumulate the rewind EVIDENCE during the red window (reset on a green verify): which source files
+      // the attempts edited (#2 diagnosis attribution) + which calls had non-idempotent side effects (#3).
+      if (toolName && toolName !== "verify_done") {
+        const sid0 = hookInput?.sessionID || "?"
+        if (EDIT_TOOLS.has(toolName)) for (const p of editPaths(toolName, hookInput?.args)) editedFor(sid0).add(p)
+        const fx = nonIdempotentEffect(toolName, hookInput?.args)
+        if (fx) fxFor(sid0).push(fx)
+        return
+      }
       const sid = hookInput?.sessionID || "?"
       evictOthers(states, sid)
+      for (const m of [editedSince, sidefxSince, greenBoundary, pendingRewind, greenPending] as Map<string, unknown>[]) evictOthers(m, sid)
       const workspace = input?.directory || process.cwd()
 
       // "Verify never ran" (no command detected, spawn error → plain-string result, no `passed` key)
@@ -129,6 +151,9 @@ export const FabulaRewind: Plugin = async (input: any) => gate("rewind", ({
         const { state } = updateRewind(stateFor(sid), { green: true, checkpoint: ckId }, THRESHOLD)
         states.set(sid, state)
         createdSince.set(sid, new Set()) // everything on disk is now part of the green state
+        editedSince.set(sid, new Set()); sidefxSince.set(sid, []) // fresh evidence window after green
+        greenPending.set(sid, true)      // capture the conversation boundary at the next transform
+        pendingRewind.delete(sid)        // a green recovered the run — nothing to collapse
         return
       }
 
@@ -190,9 +215,19 @@ export const FabulaRewind: Plugin = async (input: any) => gate("rewind", ({
         }
       } catch { /* restore failed — handled honestly below */ }
 
+      // #2 grounded root-cause steer + #3 side-effect ledger REPLACE the generic summary; #1 sets the
+      // conversation-collapse summary so the retry runs in near-clean context (the 7× contamination fix).
+      const evFiles = [...editedFor(sid)]
+      const grounded = diagnose((action as any).failedNotes ?? [], evFiles)
+      const ledger = renderLedger(sidefxSince.get(sid) ?? [])
+      const groundedSteer =
+        `Reverted your last ${action.redStreak} change(s); files are back at the last state that passed verify. ` +
+        `${grounded}${ledger} Take a DIFFERENT approach — do not repeat the reverted edits; if it also fails, call escalate_to_cloud for a second opinion.`
+
       if (typeof output.output === "string") {
         if (restored) {
-          output.output += `\n\n🔄 AUTO-REWIND${reverted}: ${action.summary}`
+          output.output += `\n\n🔄 AUTO-REWIND${reverted}: ${groundedSteer}`
+          pendingRewind.set(sid, `🔄 Rewound ${action.redStreak} failed attempt(s) to the last green state; files are back at green. ${grounded}${ledger} Take a DIFFERENT approach.`)
           if (output.metadata && typeof output.metadata === "object")
             output.metadata.autoRewind = { toCheckpoint: action.toCheckpoint, reverted: action.redStreak }
         } else {
@@ -209,14 +244,46 @@ export const FabulaRewind: Plugin = async (input: any) => gate("rewind", ({
       }
     } catch { /* never break the verify tool */ }
   },
+
+  // #1 conversation-tree rewind — the failed-attempt transcript must leave the context so the retry runs
+  // in near-clean context (arXiv:2605.08563: contaminated retry = ~7× error). The engine passes the wire
+  // messages by reference (session/prompt.ts:3172) with input {} (no sessionID) — derive it from the
+  // messages. Capture the green boundary at the FIRST transform after a green verify; on a pending rewind,
+  // collapse the failed span (id > boundary) into ONE summary. Honest degrade: no boundary → no mutation.
+  "experimental.chat.messages.transform": async (_input: any, output: any) => {
+    if (DISABLED) return
+    try {
+      const messages = output?.messages
+      if (!Array.isArray(messages) || !messages.length) return
+      const sid = messages.find((m: any) => m?.info?.sessionID)?.info?.sessionID
+      if (!sid) return
+      if (greenPending.get(sid)) {
+        let maxId = ""
+        for (const m of messages) { const id = m?.info?.id; if (typeof id === "string" && id > maxId) maxId = id }
+        if (maxId) greenBoundary.set(sid, maxId)
+        greenPending.set(sid, false)
+      }
+      const summary = pendingRewind.get(sid)
+      const boundary = greenBoundary.get(sid)
+      if (summary && boundary) {
+        collapseFailedSpan(messages, boundary, summary)
+        pendingRewind.delete(sid) // one collapse per rewind (idempotent)
+      }
+    } catch { /* never break the turn */ }
+  },
 }))
 
 // Pull a one-line reason out of the verify result so the summary tells the model what actually failed.
+// Pull the MOST INFORMATIVE failure line (PROBE / AgentDebug: structured evidence beats the first match).
+// A generic summary line ("FAILED (1 failed)") is worthless for a diagnosis — prefer a SPECIFIC named
+// error / expectation, falling back to any failure line, then the first line.
 function extractNote(output: any): string | undefined {
   const s = typeof output?.output === "string" ? output.output : ""
   if (!s) return undefined
-  const line = s.split("\n").map((l: string) => l.trim())
-    .find((l: string) => /fail|error|assert|expected|traceback|✗|❌/i.test(l))
-  const pick = (line || s.split("\n")[0] || "").trim()
+  const lines = s.split("\n").map((l: string) => l.trim()).filter(Boolean)
+  const specific = lines.find((l: string) =>
+    /\b\w*(Error|Exception)\b\s*:|expected\b[^\n]*\b(got|but|to)\b|\bassert\w*\b[^\n]*[:=]|no module named|cannot find module|is not a function|has no attribute|timed? ?out\b|syntax ?error/i.test(l))
+  const generic = lines.find((l: string) => /fail|error|✗|❌|traceback/i.test(l))
+  const pick = specific || generic || lines[0] || ""
   return pick ? pick.slice(0, 200) : undefined
 }

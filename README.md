@@ -148,7 +148,7 @@ Then watch the machine refuse to finish until the proof exists — on your machi
 | **quiz** | A change the agent can't explain — it is graded against its own diff before done stands. |
 | **judge** | A turn that ends before the request is fulfilled — an independent judge reads the transcript and refuses the stop until it's done, not planned or promised. |
 | **provenance** | Work of unknown origin — every receipt carries a sha256 of the exact context (system prompt + tool schemas + router profile), a byte-stability verdict, and (v0.2) the request-text hash + the serving model's descriptor, with an optional real weights digest. |
-| **rewind** | Digging the hole deeper — repeated red verifies roll the files back to the last green checkpoint, atomically, from the harness's own shadow-git. |
+| **rewind** | Digging the hole deeper — repeated red verifies roll the files back to the last green checkpoint, atomically, from the harness's own shadow-git. The failed attempts leave your context so the retry starts clean; the steer names the recurring root cause; and any non-idempotent side effect (an install, a migration, a POST) is flagged as not-undone. |
 | **escalate** | Looping on a dead end — the auto-rewind steers the model to fetch one cloud second opinion, then it keeps driving. |
 
 Around the gates: web, shell, sandboxed code execution, drift-proof file edits, a real Chromium, memory and hand-off notes, checkpoints and undo, SSRF/redaction/injection defense on every call. The full map of every plugin and tool: [`docs/PLUGINS.md`](docs/PLUGINS.md).

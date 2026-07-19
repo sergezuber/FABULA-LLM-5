@@ -24,7 +24,7 @@ export interface RewindState {
 }
 
 export type RewindAction =
-  | { type: "rewind"; toCheckpoint: string; summary: string; redStreak: number }
+  | { type: "rewind"; toCheckpoint: string; summary: string; redStreak: number; failedNotes: string[] }
   // Terminal rung of the ladder (Greenpaper §2): the honest state is NOT DONE — either the run never
   // once passed verify (nothing to rewind to), or every fresh approach after the allowed rewinds
   // stayed red. Silent stops and unproven "done" are protocol violations; this surfaces the verdict.
@@ -68,7 +68,7 @@ export function updateRewind(
     ].filter(Boolean).join(" ")
     // reset the streak so we don't rewind again immediately on the next red
     return { state: { redStreak: 0, lastGreenCheckpoint: state.lastGreenCheckpoint, failedNotes: [], rewinds: rewinds + 1, hadGreen: state.hadGreen },
-             action: { type: "rewind", toCheckpoint: state.lastGreenCheckpoint, summary, redStreak } }
+             action: { type: "rewind", toCheckpoint: state.lastGreenCheckpoint, summary, redStreak, failedNotes } }
   }
   // Terminal NOT DONE — two ways to exhaust the ladder:
   // (a) no green anchor ever existed: a long red streak with nothing to rewind to used to be a silent

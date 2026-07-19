@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.1.8"
+export const FABULA_VERSION = "0.1.9"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.1.9",
+    date: "2026-07-19",
+    items: [
+      {
+        ru: "Авто-откат при повторном провале стал умнее по трём осям. (1) Проваленные попытки теперь убираются из контекста модели: когда обвязка откатывает файлы к последнему зелёному состоянию, транскрипт неудачных правок больше не тянется в следующий шаг — повтор идёт «с чистого листа», а не по замусоренному (повтор в загрязнённом контексте многократно повышает вероятность ошибки). (2) Вместо generic «попробуй другой подход» — обоснованный диагноз: обвязка вытаскивает КОНКРЕТНУЮ строку ошибки (а не общую сводку вроде «FAILED»), называет повторяющуюся первопричину по всей серии красных и указывает файл, который правили. (3) Леджер побочных эффектов: откат возвращает только файлы, поэтому неидемпотентные команды из откачённых попыток (установки пакетов, миграции БД, сетевые POST'ы, git push, запуск контейнеров) НЕ отменяются и могут сработать дважды — теперь стир об этом честно предупреждает.",
+        en: "Auto-rewind on repeated failure got smarter on three axes. (1) The failed attempts now leave the model's context: when the harness reverts the files to the last green state, the transcript of the failed edits no longer carries into the next step — the retry starts from a clean slate instead of a contaminated one (retrying with the failed attempt still in context multiplies the error rate). (2) Instead of a generic 'try a different approach', the steer is a grounded diagnosis: the harness extracts the SPECIFIC error line (not a generic 'FAILED' summary), names the recurring root-cause signature across the whole red streak, and points at the edited file. (3) Side-effect ledger: the revert restores files only, so non-idempotent commands from the reverted attempts (package installs, DB migrations, network POSTs, git push, container starts) are NOT undone and may double-apply — the steer now warns about them honestly.",
+      },
+    ],
+  },
   {
     version: "0.1.8",
     date: "2026-07-19",

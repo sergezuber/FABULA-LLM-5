@@ -81,6 +81,27 @@ _IDLE = IdleBaseline(flat=float(os.environ.get("FABULA_STREAM_IDLE_TIMEOUT", "12
 # byte-for-byte, so the mechanism can be removed from the picture without removing the telemetry.
 CACHE_BREAK_CLASSIFY = os.environ.get("FABULA_CACHE_BREAK_CLASS", "1").strip().lower() not in ("0", "false", "off")
 
+# The adapter is started by a LaunchAgent, which passes NO environment of its own — so every knob below
+# would silently be a code default and the documented kill-switches would be unreachable in production
+# (found on review: the running process had zero FABULA_* vars). Load the repo `.env` first, letting a real
+# environment variable win, so `.env` is the single place the docs can honestly point at.
+def _load_dotenv(path):
+    try:
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, _, v = line.partition("=")
+                k = k.strip()
+                if k and k not in os.environ:
+                    os.environ[k] = v.strip().strip('"').strip("'")
+    except OSError:
+        pass          # no .env is normal (fresh clone); never fail startup over it
+
+
+_load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, ".env"))
+
 UPSTREAM = os.environ.get("UPSTREAM", "http://localhost:1234")
 PORT = int(os.environ.get("ADAPTER_PORT", "1235"))
 

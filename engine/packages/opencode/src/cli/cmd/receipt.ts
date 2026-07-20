@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 // FABULA — `fabula receipt`: the CLI surface of the Proof-of-Done receipt (Greenpaper contract).
 // Receipts are minted by the receipt plugin into <project>/.fabula/receipts/; this command lets anyone
 // show, list and — the point of the protocol — RE-VERIFY them: `fabula receipt verify` replays the
@@ -94,14 +95,63 @@ function verifyReceipt(dir: string, file: string): number {
   console.log(`Claim:    ${verdictLine(r)}`)
   // Context provenance (Phase 3): which exact prompt-prefix produced this work.
   const prov = (r as { provenance?: { bundlePrefixHash?: string; routerProfile?: string; midTurnBreaks?: number } }).provenance
+  // These describe the context of the ORIGINAL run and cannot be reconstructed from a receipt on another
+  // machine — so they are ASSERTED, not checked, and this line now says so. Printing them beside a
+  // genuinely re-run verification, in identical formatting, let a reader take the whole block as
+  // verified: the expensive claim was checked and the cheap ones were echoed, with nothing telling them
+  // apart. `FABULA_RECHECK=0` restores the pre-W8 line exactly.
+  const w8 = String(process.env.FABULA_RECHECK ?? "1").trim() !== "0"
   if (prov?.bundlePrefixHash)
     console.log(
       `Context:  prefix ${prov.bundlePrefixHash.slice(0, 16)}` +
         (prov.routerProfile ? ` · profile ${prov.routerProfile}` : "") +
         (typeof prov.midTurnBreaks === "number"
           ? ` · byte-stability ${prov.midTurnBreaks === 0 ? "held" : `BROKEN ×${prov.midTurnBreaks}`}`
-          : ""),
+          : "") +
+        (w8 ? `  [asserted by the receipt — NOT checkable here: describes the original run's context]` : ""),
     )
+  // SELF-CONSISTENCY, here too. This costs no network, no config and no model: the receipt prints a
+  // descriptor and the hash that is supposed to cover it, so a disagreement is the document contradicting
+  // ITSELF and is detectable on any machine, forever. It was wired into `verify_receipt` and not here —
+  // and this surface printed a plain `VERIFIED ✓` for a receipt that contradicts itself, which is the
+  // wave's own failure mode surviving on the wave's own command.
+  let identityContradicted = false
+  if (w8) {
+    const p2 = (r as any).provenance
+    if (p2?.modelDescriptorHash && p2?.modelDescriptor) {
+      try {
+        // BYTE-IDENTICAL to `plugin/lib/modeldigest.ts descriptorHash`. The engine cannot import from
+        // plugin/, so this is a duplicate by necessity — and the first duplicate silently diverged twice
+        // over: it dropped null-valued entries the original keeps, and used a bare `.sort()` on [k,v]
+        // pairs where the original sorts by KEY. The two surfaces then returned OPPOSITE verdicts on the
+        // same document: an honest receipt was accused of contradicting itself while a forged one passed.
+        // Receipt JSON is untrusted input, so the descriptor's keys are the forger's to choose. Any edit
+        // here must be made in both places and pinned by the cross-surface fixture test.
+        const canon = JSON.stringify(
+          Object.fromEntries(Object.entries(p2.modelDescriptor).sort(([a], [b]) => (a < b ? -1 : 1))),
+        )
+        const selfHash = createHash("sha256").update(canon, "utf8").digest("hex")
+        if (selfHash !== String(p2.modelDescriptorHash)) {
+          console.log(
+            `Identity: ❌ MISMATCH — this receipt's modelDescriptorHash does not match the descriptor printed beside it; ` +
+              `the document contradicts itself (claims ${String(p2.modelDescriptorHash).slice(0, 16)}, its own descriptor hashes to ${selfHash.slice(0, 16)})`,
+          )
+          // A line nobody's script reads is not a verdict. `verify_receipt` already refuses to head a
+          // contradicted receipt with a bare VERIFIED; this surface printed the objection and still exited
+          // 0, so `fabula receipt verify && deploy` deployed it. The comment further down this file exists
+          // for exactly that reason.
+          identityContradicted = true
+        }
+      } catch { /* an unhashable descriptor is reported by verify_receipt, not guessed at here */ }
+    } else if (p2?.modelDescriptorHash) {
+      // A hash with no descriptor beside it cannot be checked by anyone, ever — that is a property of the
+      // receipt, not of this machine, and it is worth saying out loud rather than passing over.
+      console.log(
+        `Identity: • modelDescriptorHash is asserted with no descriptor beside it — unverifiable here and everywhere, by construction`,
+      )
+    }
+  }
+
   const vcmdTimeoutMs = replayTimeoutMs()
 
   // Without a base commit the artifact can't be replayed deterministically — verify in place instead.
@@ -178,6 +228,17 @@ function verifyReceipt(dir: string, file: string): number {
       return 1
     }
     if (res.code === 0) {
+      if (identityContradicted) {
+        // The work replayed and passed — say so, because it did. But the document contradicts itself
+        // about WHO produced it, and a bare VERIFIED here would be this command asserting more than it
+        // checked. Non-zero so `fabula receipt verify && deploy` stops, which is the whole reason this
+        // file refuses to exit 0 on any weaker verdict.
+        console.log(
+          `\n❌ IDENTITY MISMATCH — the work replayed and \`${vcmd}\` passed, but this receipt's own descriptor ` +
+            `does not hash to the value it claims. The tests are not in question; the document's account of itself is.`,
+        )
+        return 1
+      }
       console.log(`\nVERIFIED ✓ — the artifact replayed deterministically: base ${r.base.slice(0, 12)} + patch → \`${vcmd}\` passed.`)
       return 0
     }

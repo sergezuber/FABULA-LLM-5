@@ -50,7 +50,11 @@ const CONTRACT_TOKENS = [
   "MiMoCode", "MiMo-Code",
 ]
 
-const FORBIDDEN = [/claude/i, /anthropic/i, /opencode/i, /discord/i, /\bmimo\b/]
+// `discord` is bounded like `mimo` already is. Unbounded, it matched "DISCORDANT" — the exact statistical
+// term for McNemar's test — and reported a paired-test module as a foreign-brand leak. A hygiene gate that
+// fires on correct English teaches people to route around it, and a gate people route around protects
+// nothing. The brand is a word, so match a word.
+const FORBIDDEN = [/claude/i, /anthropic/i, /opencode/i, /\bdiscord\b/i, /\bmimo\b/]
 
 // The naming policy's ONE allowed use of "Claude": naming it as a MODEL in a model list / provider
 // options (never as authorship). Encode that exception — a `claude` hit is OK when the same line
@@ -78,7 +82,7 @@ test("naming policy: no Claude/Anthropic/mimo/OpenCode leaks in FABULA-authored 
       if (!FORBIDDEN.some((r) => r.test(line))) return
       if (CONTRACT_TOKENS.some((t) => line.includes(t))) return // a kept contract — allowed
       // "Claude" in a model list is the policy's one permitted use (naming a model, not authorship).
-      const onlyClaude = /claude/i.test(line) && !/anthropic|opencode|discord|\bmimo\b/i.test(line)
+      const onlyClaude = /claude/i.test(line) && !/anthropic|opencode|\bdiscord\b|\bmimo\b/i.test(line)
       if (onlyClaude && isModelListContext(line)) return
       violations.push(`${rel}:${i + 1}\t${line.trim().slice(0, 140)}`)
     })

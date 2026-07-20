@@ -69,6 +69,16 @@ function mintReceipt(patchValue = "1", verifyValue = "1") {
   writeFileSync(path.join(recDir, "latest.json"), JSON.stringify(receipt))
 }
 
+/** Mint a receipt carrying a reproduce-gate verdict, so the "absent" case has something to differ FROM.
+ *  Without this pair the absence check could pass against a build that says nothing either way. */
+function mintReceiptWithGate(verdict: { reason: string }) {
+  mintReceipt()
+  const p = path.join(repo, ".fabula", "receipts", "latest.json")
+  const r = JSON.parse(readFileSync(p, "utf8"))
+  r.gateProof = verdict
+  writeFileSync(p, JSON.stringify(r))
+}
+
 async function tools() {
   const hooks = (await FabulaRegistry({ directory: repo } as any)) as any
   expect(hooks.tool).toBeDefined() // plugin is enabled (gate passed)
@@ -112,4 +122,54 @@ test("untrusted http source is refused without the opt-in flag", async () => {
   const out = await t.verify_receipt.execute({ source: "https://example.com/receipt.json" }, {} as any)
   expect(String(out)).toContain("untrusted")
   expect(String(out)).toContain("FABULA_REGISTRY_VERIFY_UNTRUSTED")
+})
+
+// ── the reproduce-gate verdict on the VERIFY surface (C8) ─────────────────────────────────────────
+//
+// This property is guarded on the RENDER side and was guarded by nothing here: an independent verifier
+// deleted the sentence below and 62 frozen plus ~1875 tracked cases stayed green. Same property, other
+// surface — and the surface a reviewer actually reads when deciding whether to trust someone's proof.
+//
+// The absence case is the one that matters. Hook order in this harness is a glob scan, so a receipt can
+// be minted before the gate has stamped anything; a verify output that simply says nothing then reads
+// exactly like one where the probe ran and passed. Absence is not a pass, and it has to say so.
+
+test("a receipt WITH a gate verdict carries that verdict into the verify output", async () => {
+  mintReceiptWithGate({ reason: "validated — the test failed on base and passed on the patch" })
+  const t = await tools()
+  await t.publish_receipt.execute({}, {} as any)
+  const fullId = JSON.parse(readFileSync(path.join(store, "proofs", "index.json"), "utf8"))[0].id
+  const ver = String(await t.verify_receipt.execute({ source: fullId }, {} as any))
+  expect(ver).toContain("validated")
+  expect(ver).toContain("failed on base")
+})
+
+test("a receipt with NO gate verdict says so — absence must not read as a pass", async () => {
+  mintReceipt() // no gateProof at all
+  const t = await tools()
+  await t.publish_receipt.execute({}, {} as any)
+  const fullId = JSON.parse(readFileSync(path.join(store, "proofs", "index.json"), "utf8"))[0].id
+  const ver = String(await t.verify_receipt.execute({ source: fullId }, {} as any))
+  // The output must NAME the absence rather than pass over it in silence.
+  expect(ver.toLowerCase()).toContain("no reproduce-probe verdict")
+  expect(ver.toLowerCase()).toContain("absence is not a pass")
+})
+
+test("the two cases are DISTINGUISHABLE — the absent one is not just the present one minus a word", async () => {
+  // Guards against a build that emits the same text either way: if both outputs were identical the two
+  // assertions above could both pass on a single hardcoded sentence.
+  mintReceiptWithGate({ reason: "validated — the test failed on base and passed on the patch" })
+  const t1 = await tools()
+  await t1.publish_receipt.execute({}, {} as any)
+  const idxA = JSON.parse(readFileSync(path.join(store, "proofs", "index.json"), "utf8"))[0].id
+  const withGate = String(await t1.verify_receipt.execute({ source: idxA }, {} as any))
+
+  mintReceipt()
+  const t2 = await tools()
+  await t2.publish_receipt.execute({}, {} as any)
+  const entries = JSON.parse(readFileSync(path.join(store, "proofs", "index.json"), "utf8"))
+  const without = String(await t2.verify_receipt.execute({ source: entries[entries.length - 1].id }, {} as any))
+
+  expect(withGate).not.toBe(without)
+  expect(withGate.toLowerCase()).not.toContain("no reproduce-probe verdict")
 })

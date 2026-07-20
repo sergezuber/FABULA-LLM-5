@@ -161,5 +161,37 @@ export const FabulaContext: Plugin = async (input: any) => {
         }
       } catch {}
     },
+
+    // FRESHNESS STEER (RULE #9). A question about CURRENT events — "today's news", "latest", a live
+    // price, who holds an office NOW — cannot be answered from a training snapshot, and the model does not
+    // reliably reach for web_search on its own: told to "search for time-sensitive things" in the system
+    // prompt, it answered a "top-10 AI news for today" query straight from memory and FABRICATED the list
+    // (invented papers, releases, dollar figures). The system prompt is the weak channel for this; a
+    // directive appended to the USER TURN is the one this project has repeatedly seen the model act on.
+    // So when the turn reads as time-sensitive, the harness plants an imperative to search FIRST and cite,
+    // deterministically, every such turn.
+    "experimental.chat.messages.transform": async (_i: any, output: any) => {
+      try {
+        const messages = output?.messages
+        if (!Array.isArray(messages) || !messages.length) return
+        // the last USER message is the current ask
+        const last = [...messages].reverse().find((m: any) => (m?.info?.role ?? m?.role) === "user")
+        const parts = last?.parts
+        if (!Array.isArray(parts)) return
+        const textPart = [...parts].reverse().find((p: any) => typeof p?.text === "string")
+        if (!textPart) return
+        const t = String(textPart.text).toLowerCase()
+        if (t.includes("[fabula: search first]")) return // already steered this turn
+        // Triggers, EN + RU, deliberately broad on the "current" axis — a false positive costs one search,
+        // a false negative costs a fabricated answer, and this project errs toward the cheaper mistake.
+        const FRESH = /\b(today|todays|current|currently|latest|recent|recently|breaking|this week|right now|as of|news|headlines|who won|score|price of|stock|weather)\b|сегодня|сейчас|последн|свеж|новост|актуальн|на данный момент|за неделю|кто выиграл|курс|погода|цена/i
+        if (!FRESH.test(t)) return
+        textPart.text +=
+          "\n\n[FABULA: search first] This asks about CURRENT information that post-dates your training. " +
+          "You MUST call the web_search tool (SearXNG is available) BEFORE answering, and base the answer on " +
+          "what it returns WITH links — do not answer from memory or invent items, dates, names, or figures. " +
+          "If a search returns nothing usable, say so plainly rather than filling the gap from memory."
+      } catch { /* never break a turn over the freshness steer */ }
+    },
   }
 }

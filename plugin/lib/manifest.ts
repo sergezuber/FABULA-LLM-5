@@ -240,6 +240,11 @@ export const MANIFEST: PluginMeta[] = [
     tools: [], deps: [...NPM_BUNDLED],
   },
   {
+    id: "memory", file: "fabula-memory.ts", name: "Anchored memory from verified work", defaultEnabled: false,
+    description: "Memory that can be CHECKED rather than trusted. A memory formed from a verified turn is bound at write time to the code it is about — today the file and its exact bytes; symbol-span scope is implemented and used wherever a symbol is known, but the writer that records a verified turn supplies a path only, so a real memory currently invalidates on ANY edit to that file — and before it is ever served back, that binding is re-checked against the real tree with git rather than judged by a model. Code moved on? The memory is withheld, or the CURRENT source is served in its place; it is never handed over with a 'possibly stale' label, because a hedge beside a memory is the exact stimulus measured to make the decision worse, not a softer form of honesty. Raw episodes are append-only and never destroyed by consolidation, which writes a new record pointing back at what it summarised. Whether a memory gets PROMOTED is decided from an outcome produced outside the model — the project's own verifier — and that decision starts in SHADOW: journalled, acting on nothing, until its record has been read. Kill-switches: FABULA_MEM_PIN=0 (restore the old positional truncation), FABULA_MEM_WORTH=0 (stop the usefulness counters), FABULA_MEM_STALE_MODE (withhold | evidence); FABULA_MEM_PROMOTE=1 turns the shadow journal into action.",
+    tools: [], deps: [...NPM_BUNDLED],
+  },
+  {
     id: "receipt", file: "fabula-receipt.ts", name: "Proof-of-Done receipt", defaultEnabled: true,
     description: "On a green verify_done that no other gate downgraded, mints a machine-readable Proof-of-Done receipt (Greenpaper contract): model in the socket, which gates fired and what each forced, the diff, the verification that passed, and a deterministic replay command — written to .fabula/receipts/. Read-only: never blocks or changes the verdict, only records it. Manual mint: mint_receipt. Kill-switch: FABULA_RECEIPT=0.",
     tools: ["mint_receipt"], deps: [...NPM_BUNDLED],

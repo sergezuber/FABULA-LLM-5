@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.2.3"
+export const FABULA_VERSION = "0.2.4"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.2.4",
+    date: "2026-07-20",
+    items: [
+      {
+        ru: "Память, которую можно ПРОВЕРИТЬ, а не принять на веру (новый плагин, по умолчанию ВЫКЛЮЧЕН). (1) Память, рождённая из проверенного хода, привязывается в момент записи к коду, о котором она, и перед выдачей привязка перепроверяется по реальному дереву — обычным хешированием файлов, без модели и без сети. Код ушёл вперёд — память не отдаётся вовсе либо вместо неё отдаётся ТЕКУЩИЙ исходник; она никогда не выдаётся с пометкой «возможно устарело», потому что оговорка рядом с памятью измеримо ухудшает решение, а не смягчает его. (2) Сырые записи больше не уничтожаются: консолидация дописывает новую запись и сначала дословно архивирует то, что поглощает; вытеснение объявляет, сколько записей ушло, а не молча урезает. Проходы движка, которые раньше перезаписывали заметки шаблоном и удаляли «устаревшее», теперь сначала архивируют и уводят в раздел «Заменено». (3) Жёсткие ограничения больше не режутся по длине: раньше попадёт ли правило к модели зависело от того, на какой строке файла его набрали. (4) Повышение памяти решается по исходу вашей же проверки — не по повторяемости и не по мнению модели — и стартует в тени: решение пишется в журнал и ни на что не влияет, пока вы это не включите. Честно: помогает ли эта память — ещё никто не измерил. Побочно: панель плагинов перестала показывать выключенные плагины включёнными, а юнит-тесты перестали ходить к живому модельному серверу (сьют стал быстрее на четверть).",
+        en: "Memory you can CHECK rather than trust (new plugin, ships OFF). (1) A memory formed from a verified turn is bound at write time to the code it is about, and that binding is re-checked against the real tree before the memory is ever served — plain file hashing, no model, no network. If the code moved on, the memory is withheld or the CURRENT source is served in its place; it is never handed over with a 'possibly stale' label, because a hedge beside a memory measurably worsens the decision rather than softening it. (2) Raw records are no longer destroyed: consolidation appends a new record and archives what it consumes verbatim first, and shedding declares how many records it dropped instead of quietly truncating. The engine passes that used to overwrite notes with a template and delete 'obsolete' entries now archive first and retire into a Superseded section. (3) Hard constraints are no longer cut by length: whether a rule reached the model used to depend on which line of the file someone typed it on. (4) Promotion is decided from your own verifier's outcome — not repetition, not the model's opinion — and starts in shadow: the decision is journalled and acts on nothing until you enable it. Honestly: nobody has yet measured whether this memory helps. Alongside: the plugins panel stopped reporting disabled plugins as enabled, and unit tests stopped calling a live model server (the suite got a quarter faster).",
+      },
+    ],
+  },
   {
     version: "0.2.3",
     date: "2026-07-20",

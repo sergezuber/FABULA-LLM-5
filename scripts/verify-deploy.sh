@@ -76,6 +76,11 @@ check_marker "no green verify has passed since" "W3 · the judge hard-veto wordi
 check_marker "verify_done"                     "the verify gate"
 check_marker "FABULA_CHANNEL_MAX_SESSIONS"     "W6 · the bounded shadow channel"
 check_marker "modeOrigin"                      "W6 · the permission-mode origin stamp"
+# W7 markers are literals copied VERBATIM out of the prompt files. Copying is not pedantry: probing this
+# same binary with a plausible-sounding "archive notes.md" reported the change MISSING from a binary that
+# contains it, because the real sentence reads differently. A marker written from memory tests the memory.
+check_marker "notes-archive.md"                "W7 · the raw notes are archived before the reset"
+check_marker "## Superseded"                   "W7 · dream retires rather than deletes"
 
 printf '\n'
 if [ "$fail" -eq 0 ]; then echo "DEPLOY: FRESH — the app runs this tree's engine"; else echo "DEPLOY: STALE — rebuild with ./build.sh (or the engine step) before claiming a wave is shipped"; fi

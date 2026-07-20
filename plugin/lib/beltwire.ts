@@ -30,9 +30,15 @@ const CHANNEL_MAX_SESSIONS = (() => {
 })()
 
 function capChannel<V>(m: Map<string, V>, keep: string): void {
-  // Map iterates in insertion order, so the first key is the least recently ADDED. Re-stamping an
-  // existing session refreshes nothing on purpose: a session that keeps being written to keeps being
-  // re-inserted by its writer, and one that went quiet is exactly the one worth dropping.
+  // Least recently USED, not first seen. The comment here used to argue the opposite — that re-stamping
+  // "refreshes nothing on purpose" because a busy session keeps being re-inserted — and that reasoning is
+  // wrong for the same reason it was wrong in the engine's `stashShadow`: a plain `set` leaves an existing
+  // key where it was FIRST inserted, so the session being written on every turn stays the oldest key
+  // forever and is evicted by the next other session's write. Measured on this very channel: the actively
+  // used session was dropped once across 60 interleaved writes, and zero times after this line.
+  //
+  // The engine's copy of this rule was corrected in an earlier wave and this one was not — the same rule
+  // living in two modules, diverging the moment only one of them is touched.
   while (m.size > CHANNEL_MAX_SESSIONS) {
     const oldest = m.keys().next().value as string | undefined
     if (oldest === undefined || oldest === keep) break
@@ -123,6 +129,7 @@ export function shadowNamesFor(sessionID: string): string[] {
  *  a caller that used `beltChannel().set()` directly would reintroduce the unbounded growth. */
 export function setBeltEntry(sessionID: string, entry: BeltEntry): void {
   const m = beltChannel()
+  m.delete(sessionID) // re-insert so this session becomes the most recent, never the eviction candidate
   m.set(sessionID, entry)
   capChannel(m, sessionID)
 }

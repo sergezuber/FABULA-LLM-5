@@ -15,8 +15,8 @@
   <rect x="1" y="1" width="1198" height="1358" rx="17" fill="none" stroke="#ffffff10"/>
 
   <!-- header · count must equal MANIFEST.length in plugin/lib/manifest.ts -->
-  <text x="48" y="52" class="hdr">FABULA — 32 plugins, one toolbelt</text>
-  <text x="1152" y="52" text-anchor="end" class="hdrm">78 plugin tools + engine built-ins · each plugin a single file: plugin/fabula-*.ts</text>
+  <text x="48" y="52" class="hdr">FABULA — 34 plugins, one toolbelt</text>
+  <text x="1152" y="52" text-anchor="end" class="hdrm">80 plugin tools + engine built-ins · each plugin a single file: plugin/fabula-*.ts</text>
   <line x1="48" y1="74" x2="1152" y2="74" stroke="#ffffff10"/>
   <text x="48" y="98" class="hdrm" fill="#6e7681">every tool call wrapped by <tspan fill="#f0883e">reliability</tspan> + <tspan fill="#f0883e">security</tspan> · on any model you plug in, local or cloud</text>
   <text x="48" y="122" class="legend">⚡ = pure hook — fires itself, no tool to call · others are callable tools</text>

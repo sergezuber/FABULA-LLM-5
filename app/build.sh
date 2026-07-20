@@ -47,5 +47,13 @@ cp -f "$HERE/icon.icns" "$APP/Contents/Resources/icon.icns"
 # Sign LAST, after every resource is in place (signing first would break the seal), then let
 # LaunchServices re-read the bundle so the identifier resolves on first launch.
 codesign --force --deep --sign - "$APP" 2>/dev/null || true
-/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP" 2>/dev/null || true
+
+# Drop any prior registration for this path BEFORE re-adding it. `-f` alone only refreshes the
+# entry; it cannot heal one that is stale or was captured mid-write by an earlier build, and a
+# bad entry makes the launcher refuse the bundle with -10810 ("can't be opened") even though the
+# binary runs fine when executed directly. Unregister-then-register makes every rebuild
+# idempotent regardless of what the database held before.
+LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+"$LSREGISTER" -u "$APP" 2>/dev/null || true
+"$LSREGISTER" -f -R "$APP" 2>/dev/null || true
 echo "Done. Bundle: $APP (v$VERSION)"

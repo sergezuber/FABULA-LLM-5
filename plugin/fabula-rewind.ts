@@ -56,6 +56,38 @@ const greenPending = new Map<string, boolean>()       // sid → capture the con
 const greenBoundary = new Map<string, string>()       // sid → max message id present at the last green (#1 boundary)
 const pendingRewind = new Map<string, string>()       // sid → the summary to collapse the failed span to (#1)
 const collapseMisses = new Map<string, number>()      // sid → transcript collapses that could NOT be applied
+
+/** Sessions already told, once, that their transcript could not be cleaned. */
+const contaminationTold = new Set<string>()
+
+/**
+ * Say — where the model will actually read it — that the failed attempts are STILL in the context.
+ *
+ * The steer written when the rewind fires cannot know this. It is composed in `tool.execute.after`, and
+ * the collapse is attempted later, in this transform: at steer time the outcome is simply not available,
+ * so any claim about the transcript there is a guess. On the FIRST rewind the guess is always "clean",
+ * because nothing has missed yet — which is precisely the run where a miss goes unannounced and the model
+ * retries inside the contaminated context this mechanism exists to remove.
+ *
+ * So the claim is made where the outcome is known. Once per session, because a note repeated on every
+ * turn becomes furniture the model stops reading, and it is appended to the LAST message — the one the
+ * model reads immediately before deciding what to do next.
+ */
+function noteContaminated(sid: string, messages: any[], reason?: string): void {
+  if (contaminationTold.has(sid)) return
+  const last = messages[messages.length - 1]
+  const parts = last?.parts
+  if (!Array.isArray(parts)) return
+  const text =
+    `\n\n<system-reminder>The failed attempts could NOT be removed from this conversation` +
+    `${reason ? ` (${reason})` : ""} — they are still above. The FILES were rolled back to the last state` +
+    ` that passed; the transcript was not. Treat everything after the last green verification as` +
+    ` discarded, and do not re-read it as if it described the current tree.</system-reminder>`
+  const t = [...parts].reverse().find((p: any) => typeof p?.text === "string")
+  if (!t) return
+  t.text += text
+  contaminationTold.add(sid)
+}
 // W6 escalation economics, all reset on a green verify:
 const streakStart = new Map<string, number>()         // sid → when the current red streak began (wall-clock cost)
 const escalations = new Map<string, number>()         // sid → second opinions actually DELIVERED this task
@@ -322,6 +354,7 @@ export const FabulaRewind: Plugin = async (input: any) => gate("rewind", ({
         editedSince.set(sid, new Set()); sidefxSince.set(sid, []); editCounts.delete(sid) // fresh evidence window after green
         streakStart.delete(sid)   // W6: the cost clock belongs to a streak, and this streak is over
         collapseMisses.delete(sid) // a green is a fresh conversation window too
+        contaminationTold.delete(sid) // …so a later contamination must be announced again
         greenPending.set(sid, true)      // capture the conversation boundary at the next transform
         pendingRewind.delete(sid)        // a green recovered the run — nothing to collapse
         return
@@ -530,9 +563,13 @@ export const FabulaRewind: Plugin = async (input: any) => gate("rewind", ({
         // the retry then ran in exactly the contaminated context this mechanism exists to remove, and
         // nothing anywhere said so. A failed collapse now stays pending and is retried next transform.
         if (res.applied) pendingRewind.delete(sid)
-        else collapseMisses.set(sid, (collapseMisses.get(sid) ?? 0) + 1)
+        else {
+          collapseMisses.set(sid, (collapseMisses.get(sid) ?? 0) + 1)
+          noteContaminated(sid, messages, res.reason)
+        }
       } else if (summary && !boundary) {
         collapseMisses.set(sid, (collapseMisses.get(sid) ?? 0) + 1)
+        noteContaminated(sid, messages, "no green boundary was captured")
       }
     } catch { /* never break the turn */ }
   },

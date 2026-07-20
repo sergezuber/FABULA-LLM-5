@@ -218,3 +218,87 @@ test("never-green run reaches the explicit terminal NOT DONE verdict (no silent 
   expect(readFileSync(path.join(ws, "x.py"), "utf8")).toBe("broken\n")
   rmSync(ws, { recursive: true, force: true })
 })
+
+// ── a transcript collapse that MISSES must say so, where the model reads it ───────────────────────
+//
+// The steer written when a rewind fires cannot know whether the transcript will be cleaned: it is
+// composed in `tool.execute.after`, and the collapse is attempted later in the transform hook. On the
+// FIRST rewind the steer therefore always implies a clean retry — nothing has missed yet — which is
+// exactly the run where a miss goes unannounced and the model retries inside the contaminated context
+// this mechanism exists to remove. The files were rolled back; the transcript was not; and the model was
+// told it was back at green.
+//
+// So the claim is made where the OUTCOME is known. These cases create the miss rather than asserting a
+// string exists somewhere.
+
+function msg(id: string, sid: string, text: string) {
+  return { info: { id, sessionID: sid, role: "assistant" }, parts: [{ type: "text", text }] }
+}
+
+test("a collapse that cannot match its span announces the contamination in the conversation", async () => {
+  const { FabulaRewind } = await import("../fabula-rewind")
+  const h: any = await FabulaRewind({ directory: mkdtempSync(path.join(tmpdir(), "fab-cm-")), sessionID: "cm1" } as any)
+
+  // a green, so a boundary can be captured
+  await h["tool.execute.after"]({ tool: "verify_done", sessionID: "cm1" }, { title: "ok", metadata: { passed: true } })
+  const first: any = { messages: [msg("m1", "cm1", "green turn")] }
+  await h["experimental.chat.messages.transform"]({}, first)
+
+  // reds until the rewind fires and a collapse is requested
+  for (let i = 0; i < 4; i++) {
+    await h["tool.execute.after"](
+      { tool: "verify_done", sessionID: "cm1" },
+      { title: `FAILED attempt ${i}`, metadata: { passed: false }, output: "red" },
+    )
+  }
+
+  // the transform now runs against messages with NOTHING above the boundary — the span cannot match,
+  // so the collapse misses. This is the condition, created rather than described.
+  const second: any = { messages: [msg("m1", "cm1", "green turn")] }
+  await h["experimental.chat.messages.transform"]({}, second)
+
+  const text = second.messages.map((m: any) => m.parts.map((p: any) => p.text).join("")).join("\n")
+  expect(text).toContain("could NOT be removed")
+  expect(text).toContain("FILES were rolled back")
+})
+
+test("the announcement is made ONCE, not on every turn", async () => {
+  const { FabulaRewind } = await import("../fabula-rewind")
+  const h: any = await FabulaRewind({ directory: mkdtempSync(path.join(tmpdir(), "fab-cm-")), sessionID: "cm2" } as any)
+  await h["tool.execute.after"]({ tool: "verify_done", sessionID: "cm2" }, { title: "ok", metadata: { passed: true } })
+  await h["experimental.chat.messages.transform"]({}, { messages: [msg("m1", "cm2", "green")] })
+  for (let i = 0; i < 4; i++) {
+    await h["tool.execute.after"](
+      { tool: "verify_done", sessionID: "cm2" },
+      { title: `FAILED ${i}`, metadata: { passed: false }, output: "red" },
+    )
+  }
+  let seen = 0
+  for (let turn = 0; turn < 3; turn++) {
+    const out: any = { messages: [msg("m1", "cm2", "green")] }
+    await h["experimental.chat.messages.transform"]({}, out)
+    if (out.messages.map((m: any) => m.parts.map((p: any) => p.text).join("")).join("").includes("could NOT be removed")) seen++
+  }
+  // A note repeated every turn becomes furniture the model stops reading.
+  expect(seen).toBe(1)
+})
+
+test("a collapse that SUCCEEDS says nothing about contamination", async () => {
+  // The other direction: a warning that fires when the transcript really was cleaned is a false alarm,
+  // and a mechanism that always warns teaches the reader to ignore it.
+  const { FabulaRewind } = await import("../fabula-rewind")
+  const h: any = await FabulaRewind({ directory: mkdtempSync(path.join(tmpdir(), "fab-cm-")), sessionID: "cm3" } as any)
+  await h["tool.execute.after"]({ tool: "verify_done", sessionID: "cm3" }, { title: "ok", metadata: { passed: true } })
+  await h["experimental.chat.messages.transform"]({}, { messages: [msg("m1", "cm3", "green")] })
+  for (let i = 0; i < 4; i++) {
+    await h["tool.execute.after"](
+      { tool: "verify_done", sessionID: "cm3" },
+      { title: `FAILED ${i}`, metadata: { passed: false }, output: "red" },
+    )
+  }
+  // messages ABOVE the boundary exist, so the span matches and the collapse applies
+  const out: any = { messages: [msg("m1", "cm3", "green"), msg("m2", "cm3", "failed attempt"), msg("m3", "cm3", "another")] }
+  await h["experimental.chat.messages.transform"]({}, out)
+  const text = out.messages.map((m: any) => m.parts.map((p: any) => p.text).join("")).join("\n")
+  expect(text).not.toContain("could NOT be removed")
+})

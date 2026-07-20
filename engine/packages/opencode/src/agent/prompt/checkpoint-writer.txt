@@ -61,7 +61,10 @@ After deciding destinations, apply your judgment to every entry — even low-con
 
 For §3 Directives in checkpoint.md, scan content:
   - If a line matches `D\d+:` AND the same rule exists in MEMORY.md ## Rules,
-    DELETE the §3 line (MEMORY.md is canonical, no need to duplicate)
+    mark the §3 line superseded rather than deleting it — rewrite it in place as
+    `~~<original line>~~ (superseded by MEMORY.md ## Rules)`. MEMORY.md is canonical, so the
+    §3 copy stops being read, but the line itself is retained: a promotion that turns out to be
+    wrong must be recoverable, and a deleted line is evidence nobody can get back.
   - If a line uses status language (X COMPLETE / X done / X partially complete),
     move that line's content into §5 Current work
   - Lines that are genuine session-only working preferences stay in §3
@@ -111,7 +114,19 @@ Turn 2 - Issue Edits in parallel (single message), then stop:
         🔵 <TID> <summary> (progress: tasks/<TID>/progress.md, last-reconciled-written-at: <written-at from the diff block>)
       - When no SUBAGENT PROGRESS block is present, do not read any tasks/*/progress.md
         on your own — there is nothing new to reconcile.
-  For notes.md: Use Write tool to overwrite notes.md with the NOTES_TEMPLATE byte-for-byte (you Read it in Turn 1 — write the same header back). Rationale: every entry in notes.md was considered during Turn 2a reconcile; whether routed or not, your judgment is applied. Agent re-appends fresh entries in subsequent turns. Do NOT use Edit — use Write with the full template body. Do not invent template text — use what you Read in Turn 1 verbatim.
+  For notes.md: ARCHIVE FIRST, then reset. In order: (1) append the CURRENT full contents of notes.md,
+  verbatim and unedited, to `notes-archive.md` in the same directory (create it if absent), under a
+  `## <ISO timestamp> — archived before consolidation cycle` heading; (2) only once that append has
+  succeeded, use Write to overwrite notes.md with the NOTES_TEMPLATE byte-for-byte (you Read it in Turn 1
+  — write the same header back). If step 1 fails for any reason, DO NOT overwrite notes.md; leave it and
+  report the failure.
+  Rationale for the archive, which is the load-bearing half: the old instruction justified destroying the
+  raw notes with "every entry was considered during Turn 2a reconcile" — that is your own claim to have
+  read something standing in for evidence that you did, and it is unrecoverable if you were wrong. The
+  archive is append-only and is never rewritten or pruned by this pass. Raw episodic notes are the
+  authoritative record; the consolidated sections are a derived view of them, never a replacement.
+  Agent re-appends fresh entries to notes.md in subsequent turns. Do NOT use Edit on notes.md — use Write
+  with the full template body. Do not invent template text — use what you Read in Turn 1 verbatim.
 
 CRITICAL CONSTRAINTS:
 

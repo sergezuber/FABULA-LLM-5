@@ -508,6 +508,35 @@ export const GlobalRoutes = lazy(() =>
           .json()
           .catch(() => ({ disabled: [] as string[] }))
         const disabled = Array.isArray(state?.disabled) ? state.disabled.map(String) : []
+        const explicitlyEnabled = Array.isArray(state?.enabled) ? state.enabled.map(String) : []
+        // The env kill-switch is the FOURTH channel, and the panel could not see it. `isEnabled()` checks
+        // FABULA_DISABLE *first* — before the state file, before the default — so an owner who used it got
+        // a panel cheerfully reporting a plugin as running while its factory returned no hooks. It is also
+        // the switch the manifest descriptions and .env.example point at, and the only way to turn off an
+        // AGENT_PROTECTED plugin from outside the app, which makes it the channel least able to afford a
+        // lying readout.
+        const envDisabled = new Set(
+          (process.env.FABULA_DISABLE || "")
+            .split(",")
+            .map((x) => x.trim())
+            .filter(Boolean),
+        )
+        // A plugin that ships OFF is not "enabled because nobody disabled it". This route computed
+        // `!disabled.includes(id)` and never consulted the plugin's own default, while the plugin's
+        // self-gating (lib/manage.ts isEnabled) does — so the panel reported every default-off plugin as
+        // running while its factory returned no hooks at all. The UI was answering a different question
+        // from the one the user is asking, and answering it confidently.
+        const defaultsOff = new Set<string>(
+          (() => {
+            try {
+              const src = nodeFs.readFileSync(nodePath.join(pluginDir, "lib", "manifest.ts"), "utf8")
+              return [...src.matchAll(/id:\s*"([a-z0-9-]+)"[^}]*?defaultEnabled:\s*false/gs)].map((m) => m[1]!)
+            } catch {
+              // Unreadable manifest: fall back to the old reading rather than hiding plugins that exist.
+              return []
+            }
+          })(),
+        )
         // Human names/descriptions come from the plugin folder's own i18n table (single source of
         // truth — the same one list_plugins and the native menu render). Bun transpiles the TS on
         // the fly; a missing/broken table just means bare ids (fail-open, never a 500).
@@ -524,7 +553,7 @@ export const GlobalRoutes = lazy(() =>
             return {
               id,
               file: `plugin/${f}`,
-              enabled: !disabled.includes(id),
+              enabled: envDisabled.has(id) || disabled.includes(id) ? false : explicitlyEnabled.includes(id) || !defaultsOff.has(id),
               name: str(meta.nameEn) ?? str(meta.name),
               nameRu: str(meta.nameRu),
               desc: str(meta.descEn),

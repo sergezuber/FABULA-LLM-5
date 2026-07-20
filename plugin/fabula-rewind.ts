@@ -38,7 +38,7 @@ const NOTDONE_AFTER = (() => {
   const n = parseInt(process.env.FABULA_NOTDONE_THRESHOLD ?? "", 10)
   return Number.isFinite(n) && n >= 1 ? n : 4
 })()
-const DISABLED = process.env.FABULA_AUTO_REWIND === "0"
+const disabled = () => process.env.FABULA_AUTO_REWIND === "0"
 
 // The whole-tree checkpoint restores files that EXISTED at the green snapshot but cannot know about
 // files created after it — a new broken test/module would survive a rewind and keep the verify red for
@@ -97,17 +97,22 @@ const envInt = (name: string, fallback: number): number => {
   const n = Number(raw)
   return Number.isFinite(n) && n >= 0 ? Math.floor(n) : fallback
 }
-const MAX_ESCALATIONS = envInt("FABULA_ESCALATE_MAX", 2)
+const maxEscalations = () => envInt("FABULA_ESCALATE_MAX", 2)
 // Kill-switch: with this off the harness goes back to asking the model in prose, and buys nothing.
-const ESCALATE_AUTO = String(process.env.FABULA_ESCALATE_AUTO ?? "1").trim().toLowerCase() !== "0"
-const QE_ENABLED = String(process.env.FABULA_QE ?? "1").trim().toLowerCase() !== "0"
+// Read at CALL time, not at module load. Captured in a top-level const, this switch became unreachable
+// the moment the module was imported: no test could turn the mechanism back on, so the harness-fired
+// second opinion — a shipped mechanism of the previous wave — silently lost its entire test coverage the
+// day something set the variable before import. A kill-switch that can only ever be read once is a
+// build-time constant wearing an env var's name.
+const escalateAuto = () => String(process.env.FABULA_ESCALATE_AUTO ?? "1").trim().toLowerCase() !== "0"
+const qeEnabled = () => String(process.env.FABULA_QE ?? "1").trim().toLowerCase() !== "0"
 // How long the harness will WAIT for that second opinion. Deliberately short: this escalation is an
 // enhancement to a turn that is already in trouble, not a dependency of it. The agent is blocked while
 // we wait, so a cloud that is slow or hung must cost seconds and then be forgotten — the alternative is
 // a harness that wedges the user's turn on someone else's outage.
 /** How many FAILED attempts one task will make before giving up on the endpoint entirely. */
-const MAX_ESCALATION_TRIES = envInt("FABULA_ESCALATE_TRIES", 3)
-const ESCALATE_TIMEOUT_MS = envInt("FABULA_ESCALATE_TIMEOUT_MS", 8000)
+const maxEscalationTries = () => envInt("FABULA_ESCALATE_TRIES", 3)
+const escalateTimeoutMs = () => envInt("FABULA_ESCALATE_TIMEOUT_MS", 8000)
 
 // The path resolver is SHARED with the report tool — a local copy had already drifted, so under a test
 // runner the hook wrote one file while the reader read another.
@@ -166,7 +171,7 @@ async function askCloud(features: Record<string, unknown>, note: string, tried: 
         config,
         env: process.env as Record<string, string | undefined>,
         readFile: (p: string) => readFileSync(p, "utf8"),
-        timeoutMs: ESCALATE_TIMEOUT_MS,
+        timeoutMs: escalateTimeoutMs(),
       },
     )
     return res.ok && res.answer ? res.answer : null
@@ -210,7 +215,7 @@ export const FabulaRewind: Plugin = async (input: any) => gate("rewind", ({
   // Watch edits BEFORE they run: a path that doesn't exist yet is a creation — remember it so a
   // rewind can remove it (the whole-tree checkpoint alone can't).
   "tool.execute.before": async (hookInput: any) => {
-    if (DISABLED) return
+    if (disabled()) return
     try {
       const tool = hookInput?.tool
       const paths = EDIT_TOOLS.has(tool)
@@ -234,7 +239,7 @@ export const FabulaRewind: Plugin = async (input: any) => gate("rewind", ({
   },
 
   "tool.execute.after": async (hookInput: any, output: any) => {
-    if (DISABLED || !output) return
+    if (disabled() || !output) return
     try {
       const toolName = hookInput?.tool
       // Accumulate the rewind EVIDENCE during the red window (reset on a green verify): which source files
@@ -358,7 +363,7 @@ export const FabulaRewind: Plugin = async (input: any) => gate("rewind", ({
       // looks not worth its cost. It can never do the reverse and it never runs near a verify — the
       // estimator gates a RETRY, and verify stays the only source of truth. Fail-open by construction:
       // an unreachable or unreadable estimator leaves the decision exactly as the risk score made it.
-      if (verdict.decision === "continue-locally" && risked.redStreak >= 1 && QE_ENABLED) {
+      if (verdict.decision === "continue-locally" && risked.redStreak >= 1 && qeEnabled()) {
         try {
           // The REAL streak, not a hard-coded pair. Fabricating "2 failures" put a false count on the
           // wire to the estimator AND into the ledger record that is supposed to be the honest artifact.
@@ -373,9 +378,9 @@ export const FabulaRewind: Plugin = async (input: any) => gate("rewind", ({
       const triedAndFailed = escalationTries.get(sid) ?? 0
       const mayAsk =
         verdict.decision === "escalate" &&
-        alreadyAsked < MAX_ESCALATIONS &&
-        triedAndFailed < MAX_ESCALATION_TRIES &&
-        ESCALATE_AUTO
+        alreadyAsked < maxEscalations() &&
+        triedAndFailed < maxEscalationTries() &&
+        escalateAuto()
       if (mayAsk) {
         escalations.set(sid, alreadyAsked + 1)
         const opinion = await askCloud(risked, note, action?.failedNotes ?? state.failedNotes)
@@ -503,7 +508,7 @@ export const FabulaRewind: Plugin = async (input: any) => gate("rewind", ({
   // messages. Capture the green boundary at the FIRST transform after a green verify; on a pending rewind,
   // collapse the failed span (id > boundary) into ONE summary. Honest degrade: no boundary → no mutation.
   "experimental.chat.messages.transform": async (_input: any, output: any) => {
-    if (DISABLED) return
+    if (disabled()) return
     try {
       const messages = output?.messages
       if (!Array.isArray(messages) || !messages.length) return

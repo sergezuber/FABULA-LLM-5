@@ -13,8 +13,21 @@ export function auxChain(env: Record<string, string | undefined>): AuxEndpoint[]
     name: "aux-custom", url: env.FABULA_AUX_URL, model: env.FABULA_AUX_MODEL || "",
     headers: env.FABULA_AUX_KEY ? { Authorization: `Bearer ${env.FABULA_AUX_KEY}` } : {},
   })
-  const lm = env.LMSTUDIO_URL || "http://localhost:1234/v1"
-  chain.push({ name: "local-qwen", url: `${lm}/chat/completions`, model: "", headers: {} })
+  // The DEFAULT endpoint is not used under a test runner. An explicitly named one still is — the rule is
+  // "a caller who named an endpoint has decided", exactly as the on-disk stores resolve their paths.
+  //
+  // Measured reason: with the default in place, the unit suite made 18 outbound calls to a real LM Studio,
+  // nine of them full chat completions at 280-600ms, so ~2.5s of one 3s "unit" test was live model
+  // generation. That is what produced a test flaking at the 5s timeout — and it was originally diagnosed
+  // as something else entirely, because turning off an unrelated switch happened to coincide with the
+  // flake clearing. A test that silently depends on a running model server is not a unit test, and a
+  // suite that quietly consumes a paid or busy resource has a cost nobody put in a budget.
+  const explicitLm = (env.LMSTUDIO_URL || "").trim()
+  const underTest = env.NODE_ENV === "test" || env.BUN_TEST || env.FABULA_TEST
+  if (explicitLm || !underTest) {
+    const lm = explicitLm || "http://localhost:1234/v1"
+    chain.push({ name: "local-qwen", url: `${lm}/chat/completions`, model: "", headers: {} })
+  }
   if (env.NVIDIA_API_KEY) chain.push({
     name: "nvidia-flash", url: "https://integrate.api.nvidia.com/v1/chat/completions",
     model: "deepseek-ai/deepseek-v4-flash", headers: { Authorization: `Bearer ${env.NVIDIA_API_KEY}` },

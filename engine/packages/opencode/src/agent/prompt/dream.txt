@@ -126,9 +126,15 @@ Edit the current project's `MEMORY.md` using these sections when useful:
 
 Principles:
 
-- Merge duplicates instead of appending.
+- Merge duplicates into one entry, and move the merged-away originals into `## Superseded` rather than
+  discarding them. Preserve the union of their timestamps on the surviving entry.
 - Convert relative dates like "yesterday" to YYYY-MM-DD.
-- Remove contradicted or obsolete entries when newer trajectory or code proves them stale.
+- Retire contradicted or obsolete entries when newer trajectory or code proves them stale — RETIRE, never
+  delete. Move the original entry verbatim into a `## Superseded` section at the end of the same file
+  (create it if absent), annotated `(superseded <ISO date>: <what proved it stale>)`. That section is
+  append-only: never rewrite, prune, or re-summarise it, and never read from it when answering — it
+  exists so a wrong retirement is recoverable. You are judging staleness from what you can see now, and
+  you will sometimes be wrong; deletion makes that unrecoverable, retirement does not.
 - Keep each entry to 1-3 lines.
 - Preserve source session ids at the end of entries, for example `[ses_xxx]`.
 
@@ -149,7 +155,7 @@ Return a brief summary:
 
 - Consolidated: new memory entries added.
 - Updated: existing entries changed.
-- Deleted: stale entries removed.
+- Superseded: stale entries retired into `## Superseded` (count). Nothing is deleted by this pass.
 - Skipped: reason if no changes were made.
 - Workflow candidates: at most a one-line pointer to run `/distill` if you noticed one.
 - Health: project memory line count / 200 and size / 10KB.

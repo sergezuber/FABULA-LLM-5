@@ -5,6 +5,7 @@
 
 import type { Plugin } from "@mimo-ai/plugin"
 import { isEnabled } from "./lib/manage"
+import { pinAwareTruncate } from "./lib/memserve"
 import { promises as fs, realpathSync } from "node:fs"
 import * as path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -49,7 +50,10 @@ async function memoryBlock(nowMs: number): Promise<string> {
   try {
     const text = (await fs.readFile(MEMORY_FILE, "utf8")).trim()
     if (text) {
-      const capped = text.length > MEMORY_CAP ? text.slice(0, MEMORY_CAP) + "\n… (truncated)" : text
+      // Pin-aware, because the naive slice was POSITIONAL: whether a hard constraint reached the model
+      // depended on where in the file someone happened to type it. A rule at the bottom of MEMORY.md was
+      // invisible; the same rule three lines higher was honoured. That is an accident, not a policy.
+      const capped = pinAwareTruncate(text, MEMORY_CAP)
       block = "<operating-memory>\n" + capped + "\n</operating-memory>"
     }
   } catch { block = "" }

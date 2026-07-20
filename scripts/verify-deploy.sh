@@ -81,6 +81,11 @@ check_marker "modeOrigin"                      "W6 · the permission-mode origin
 # contains it, because the real sentence reads differently. A marker written from memory tests the memory.
 check_marker "notes-archive.md"                "W7 · the raw notes are archived before the reset"
 check_marker "## Superseded"                   "W7 · dream retires rather than deletes"
+# W8, verbatim again — probing this same binary with invented phrases ("not checkable here", "reproduce
+# probe") reported MISSING twice from a binary that carries the real ones. Those two live in PLUGIN files,
+# which never enter this binary at all; only the engine-side strings belong here.
+check_marker "asserted by the receipt"         "W8 · the CLI names what it did not check"
+check_marker "FABULA_RECHECK"                  "W8 · the wave switch"
 
 printf '\n'
 if [ "$fail" -eq 0 ]; then echo "DEPLOY: FRESH — the app runs this tree's engine"; else echo "DEPLOY: STALE — rebuild with ./build.sh (or the engine step) before claiming a wave is shipped"; fi

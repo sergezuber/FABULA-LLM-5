@@ -64,7 +64,11 @@ export function updateRewind(
       `Reverted your last ${redStreak} change(s): each kept the verify RED.`,
       failedNotes.length ? "What was tried (and failed): " + failedNotes.map((n, i) => `(${i + 1}) ${n}`).join("; ") : "",
       "Files are back at the last state that passed verify. Take a DIFFERENT approach — do not repeat the above.",
-      "If a different approach also fails, call escalate_to_cloud for a second opinion from a stronger model.",
+      // NB the harness may ALREADY have fetched a second opinion for this very red (W6: escalation is a
+      // harness decision, not a request). When it did, its answer is appended to this same tool result
+      // and asking again here would buy a duplicate against a paid endpoint — so this line speaks only
+      // to the case where none arrived.
+      "If no second opinion appears below and a different approach also fails, escalate_to_cloud is available.",
     ].filter(Boolean).join(" ")
     // reset the streak so we don't rewind again immediately on the next red
     return { state: { redStreak: 0, lastGreenCheckpoint: state.lastGreenCheckpoint, failedNotes: [], rewinds: rewinds + 1, hadGreen: state.hadGreen },

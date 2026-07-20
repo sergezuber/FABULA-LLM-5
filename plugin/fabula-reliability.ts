@@ -12,6 +12,7 @@
 
 import type { Plugin } from "@mimo-ai/plugin"
 import { gate } from "./lib/manage"
+import { dropSessionChannels } from "./lib/beltwire"
 import { tool } from "@mimo-ai/plugin"
 import { LoopGuard, eofNotice } from "./lib/loopguard"
 import { newExploreState, observeExplore, type ExploreState } from "./lib/explorebudget"
@@ -121,7 +122,13 @@ export const FabulaReliability: Plugin = async () => gate("reliability", ({
     const id = p.sessionID || p.info?.id || p.id || p.session?.id
     const sid = typeof id === "string" ? id : ""
     if (type === "session.deleted") {
-      if (sid) guard.dropSession(sid)
+      if (sid) {
+        guard.dropSession(sid)
+        // The router's belt + shadow-executor channels live on globalThis for the life of the server
+        // process. Loop state was already dropped here; those two were not, so every session ever
+        // routed stayed resident — and the shadow channel holds tool CLOSURES, not just data.
+        dropSessionChannels(sid)
+      }
       return
     }
     if (type === "session.error") {

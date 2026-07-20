@@ -94,3 +94,70 @@ export function buildEscalationMessages(input: EscalationInput): { role: string;
     { role: "user", content: parts.join("\n\n") },
   ]
 }
+
+// ── W6: the harness-fired second opinion ────────────────────────────────────────────────────────────
+// Until W6 the harness never escalated. It appended a SENTENCE to a steer — "call escalate_to_cloud for
+// a second opinion" — and depended on the model to comply, which is precisely the shape RULE #9 forbids:
+// an observation that a model will not reliably do X is a specification for a mechanism, not a request.
+// This is that mechanism, shared by the tool and by the automatic path so there is ONE network route.
+//
+// It NEVER throws. An escalation that fails must cost the run nothing at all: no cloud, a bad key, a
+// timeout and an HTTP error all degrade to "no second opinion available", and the local run continues.
+
+export interface SecondOpinion {
+  ok: boolean
+  /** the stronger model's answer, when there is one */
+  answer?: string
+  /** why there is none — a configuration fact or a transport failure, never an exception */
+  error?: string
+  provider?: string
+  model?: string
+}
+
+export interface SecondOpinionDeps {
+  config: any
+  env: Record<string, string | undefined>
+  readFile: (p: string) => string
+  fetchImpl?: typeof fetch
+  timeoutMs?: number
+}
+
+export async function secondOpinion(input: EscalationInput, deps: SecondOpinionDeps): Promise<SecondOpinion> {
+  try {
+    if (!deps.config) return { ok: false, error: "no engine config found" }
+    const target = pickCloudProvider(deps.config, deps.env.FABULA_ESCALATE_MODEL || deps.env.FABULA_ESCALATE_PROVIDER)
+    if (!target) return { ok: false, error: "no cloud provider configured to escalate to (all providers are local)" }
+    const apiKey = resolveApiKey(target.apiKeyRef, { env: deps.env, readFile: deps.readFile })
+    const url = target.baseURL.replace(/\/$/, "") + "/chat/completions"
+    const doFetch = deps.fetchImpl ?? fetch
+    const ctl = new AbortController()
+    const timer = setTimeout(() => ctl.abort(), deps.timeoutMs ?? 60_000)
+    try {
+      const r = await doFetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) },
+        body: JSON.stringify({
+          model: target.model,
+          messages: buildEscalationMessages(input),
+          max_tokens: 1024,
+          temperature: 0.3,
+          stream: false,
+        }),
+        signal: ctl.signal,
+      } as any)
+      if (!r.ok) {
+        const body = await r.text().catch(() => "")
+        return { ok: false, error: `cloud provider ${target.providerId} returned HTTP ${r.status}${body ? ": " + body.slice(0, 200) : ""}`, provider: target.providerId, model: target.model }
+      }
+      const j: any = await r.json()
+      const msg = j?.choices?.[0]?.message
+      const text = (msg?.content || msg?.reasoning_content || "").toString().trim()
+      if (!text) return { ok: false, error: `cloud provider ${target.providerId} returned an empty answer`, provider: target.providerId, model: target.model }
+      return { ok: true, answer: text, provider: target.providerId, model: target.model }
+    } finally {
+      clearTimeout(timer)
+    }
+  } catch (e: any) {
+    return { ok: false, error: e?.name === "AbortError" ? "the cloud provider timed out" : String(e?.message ?? e) }
+  }
+}

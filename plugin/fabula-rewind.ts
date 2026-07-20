@@ -14,11 +14,17 @@
 // larger engine work — so the steer summary carries the failed-attempt context forward instead.
 
 import type { Plugin } from "@mimo-ai/plugin"
-import { existsSync, unlinkSync } from "node:fs"
-import { isAbsolute, join, relative } from "node:path"
+import { existsSync, unlinkSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { isAbsolute, join, relative, dirname } from "node:path"
+import { homedir, tmpdir } from "node:os"
 import { gate } from "./lib/manage"
 import { snapshot, restore } from "./lib/checkpoint"
 import { initRewind, updateRewind, RewindState } from "./lib/rewind"
+import { escalationDecision, attemptCost } from "./lib/risk"
+import { looksLikeVerifyCommand, verdictFromTestOutput } from "./lib/verifycmd"
+import { qeVerdict, qeBlocksRetry } from "./lib/qe"
+import { secondOpinion } from "./lib/escalate"
+import { appendDecision, initLedger, askLedgerPath as sharedLedgerPath, type AskLedger } from "./lib/askledger"
 import { EDIT_TOOLS, editPaths } from "./lib/edittools"
 import { diagnose } from "./lib/diagnose"
 import { nonIdempotentEffect, renderLedger, type SideEffect } from "./lib/sidefx"
@@ -44,11 +50,26 @@ const states = new Map<string, RewindState>()
 const createdSince = new Map<string, Set<string>>() // sid → workspace-relative paths created after the last green
 // W2 evidence, all reset on a green verify:
 const editedSince = new Map<string, Set<string>>()   // sid → edited source paths since last green (#2 diagnosis)
+const editCounts = new Map<string, Map<string, number>>() // sid → path → how many times it was edited (W6 churn)
 const sidefxSince = new Map<string, SideEffect[]>()   // sid → non-idempotent effects since last green (#3 ledger)
 const greenPending = new Map<string, boolean>()       // sid → capture the conversation boundary at the next transform
 const greenBoundary = new Map<string, string>()       // sid → max message id present at the last green (#1 boundary)
 const pendingRewind = new Map<string, string>()       // sid → the summary to collapse the failed span to (#1)
+const collapseMisses = new Map<string, number>()      // sid → transcript collapses that could NOT be applied
+// W6 escalation economics, all reset on a green verify:
+const streakStart = new Map<string, number>()         // sid → when the current red streak began (wall-clock cost)
+const escalations = new Map<string, number>()         // sid → second opinions actually DELIVERED this task
+const escalationTries = new Map<string, number>()     // sid → attempts that came back empty (a dead endpoint)
+const shellReds = new Map<string, number>()            // sid → failed suites seen through the shell (advisory only)
+const BASH_TOOLS = new Set(["bash", "bash_tool", "shell", "execute_code"])
 function editedFor(sid: string): Set<string> { let s = editedSince.get(sid); if (!s) { s = new Set(); editedSince.set(sid, s) } return s }
+/** Record that `path` was edited again. The Set above answers "which files"; this answers "how often",
+ *  which is the question the churn feature actually asks. */
+function noteEdit(sid: string, p: string): void {
+  let m = editCounts.get(sid)
+  if (!m) { m = new Map(); editCounts.set(sid, m) }
+  m.set(p, (m.get(p) ?? 0) + 1)
+}
 function fxFor(sid: string): SideEffect[] { let a = sidefxSince.get(sid); if (!a) { a = []; sidefxSince.set(sid, a) } return a }
 function stateFor(sid: string): RewindState {
   let s = states.get(sid)
@@ -62,6 +83,98 @@ function createdFor(sid: string): Set<string> {
 }
 // Bound the maps without nuking the ACTIVE session mid-streak (a wiped state loses the green anchor
 // and can later mint a false "none has ever passed" verdict).
+// ── W6 helpers ──────────────────────────────────────────────────────────────────────────────────────
+// How many second opinions one task may buy. Escalation spends against a paid endpoint, so "ask when
+// stuck" must not become "ask on every red" — an unbounded feedback edge is the exact class W4 spent a
+// whole wave removing.
+/** An explicitly set 0 MEANS zero — it is how the owner turns a budget off. Only a value that is not a
+ *  number at all falls back to the default. (Three knobs here each treated "explicitly zero" differently
+ *  before: one disabled, one silently became 8000, one silently became 32 — the same reflex that once had
+ *  a "protect the user" default overriding an explicit XDG_DATA_HOME.) */
+const envInt = (name: string, fallback: number): number => {
+  const raw = (process.env[name] ?? "").trim()
+  if (raw === "") return fallback
+  const n = Number(raw)
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : fallback
+}
+const MAX_ESCALATIONS = envInt("FABULA_ESCALATE_MAX", 2)
+// Kill-switch: with this off the harness goes back to asking the model in prose, and buys nothing.
+const ESCALATE_AUTO = String(process.env.FABULA_ESCALATE_AUTO ?? "1").trim().toLowerCase() !== "0"
+const QE_ENABLED = String(process.env.FABULA_QE ?? "1").trim().toLowerCase() !== "0"
+// How long the harness will WAIT for that second opinion. Deliberately short: this escalation is an
+// enhancement to a turn that is already in trouble, not a dependency of it. The agent is blocked while
+// we wait, so a cloud that is slow or hung must cost seconds and then be forgotten — the alternative is
+// a harness that wedges the user's turn on someone else's outage.
+/** How many FAILED attempts one task will make before giving up on the endpoint entirely. */
+const MAX_ESCALATION_TRIES = envInt("FABULA_ESCALATE_TRIES", 3)
+const ESCALATE_TIMEOUT_MS = envInt("FABULA_ESCALATE_TIMEOUT_MS", 8000)
+
+// The path resolver is SHARED with the report tool — a local copy had already drifted, so under a test
+// runner the hook wrote one file while the reader read another.
+const askLedgerPath = () => sharedLedgerPath(process.env as Record<string, string | undefined>)
+
+/** Append one escalation decision — FIRED or NOT — so the harness can later be scored on when it asks
+ *  for help (Ask-F1). Recording only the times we escalated would make the metric unfalsifiable: the
+ *  decisions NOT to ask are half the evidence. Never throws; a ledger failure must cost the run nothing. */
+function recordAsk(sid: string, verdict: { decision: string; score: number; reason: string }, features: Record<string, unknown>, fired: boolean, failure?: string) {
+  try {
+    const file = askLedgerPath()
+    let ledger: AskLedger
+    try {
+      ledger = JSON.parse(readFileSync(file, "utf8"))
+    } catch {
+      ledger = initLedger()
+    }
+    const next = appendDecision(ledger, {
+      id: `ask_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}`,
+      ts: safeNow(),
+      sessionID: sid,
+      decision: verdict.decision,
+      fired,
+      // The outcome is NOT known yet and is deliberately left null: guessing it here would be the
+      // "unknown counted as success" lie the metric exists to avoid.
+      helped: null,
+      score: verdict.score,
+      reason: failure ? `${verdict.reason} (escalation attempted but ${failure})` : verdict.reason,
+      features,
+    })
+    mkdirSync(dirname(file), { recursive: true })
+    writeFileSync(file, JSON.stringify(next))
+  } catch {
+    /* the ledger is observability, never a dependency of the run */
+  }
+}
+
+/** Fetch the second opinion. Returns null on ANY failure — no cloud configured, bad key, timeout, HTTP
+ *  error — because a failed escalation must be indistinguishable from one that was never attempted. */
+async function askCloud(features: Record<string, unknown>, note: string, tried: string[]): Promise<string | null> {
+  try {
+    const cfgPath = process.env.MIMOCODE_CONFIG || join(process.cwd(), "fabula.config.json")
+    let config: unknown = null
+    try {
+      config = JSON.parse(readFileSync(cfgPath, "utf8"))
+    } catch {
+      config = null
+    }
+    const res = await secondOpinion(
+      {
+        task: `A coding task in this workspace keeps failing its verification. Latest failure: ${note || "(no error line captured)"}`,
+        tried: tried.length ? tried.map((t, i) => `(${i + 1}) ${t}`).join("; ") : undefined,
+        context: `Harness evidence: ${JSON.stringify(features)}`,
+      },
+      {
+        config,
+        env: process.env as Record<string, string | undefined>,
+        readFile: (p: string) => readFileSync(p, "utf8"),
+        timeoutMs: ESCALATE_TIMEOUT_MS,
+      },
+    )
+    return res.ok && res.answer ? res.answer : null
+  } catch {
+    return null
+  }
+}
+
 function evictOthers(map: Map<string, unknown>, keep: string) {
   if (map.size <= 500) return
   for (const k of map.keys()) {
@@ -107,7 +220,10 @@ export const FabulaRewind: Plugin = async (input: any) => gate("rewind", ({
       const sid = hookInput?.sessionID || "?"
       const workspace = input?.directory || process.cwd()
       evictOthers(createdSince, sid)
-      if (EDIT_TOOLS.has(tool)) for (const p of paths) editedFor(sid).add(p) // #2 diagnosis file attribution
+      if (EDIT_TOOLS.has(tool)) {
+        if (!streakStart.has(sid)) streakStart.set(sid, safeNow()) // the attempt's cost clock (see above)
+        for (const p of paths) { editedFor(sid).add(p); noteEdit(sid, p) } // #2 diagnosis + W6 churn
+      }
       for (const p of paths) {
         const abs = isAbsolute(p) ? p : join(workspace, p)
         const rel = relative(workspace, abs)
@@ -125,14 +241,61 @@ export const FabulaRewind: Plugin = async (input: any) => gate("rewind", ({
       // the attempts edited (#2 diagnosis attribution) + which calls had non-idempotent side effects (#3).
       if (toolName && toolName !== "verify_done") {
         const sid0 = hookInput?.sessionID || "?"
-        if (EDIT_TOOLS.has(toolName)) for (const p of editPaths(toolName, hookInput?.args)) editedFor(sid0).add(p)
+        if (EDIT_TOOLS.has(toolName)) {
+          // The attempt's clock starts with the WORK, not with the failure. It used to start on the first
+          // red — so `elapsedMs` was `now − now ≈ 0` at exactly the moment the early rung consults it, and
+          // the "how much has this attempt already cost" signal could never speak on the only red where
+          // it is asked. Three redesigns of the score never fixed that, because it was never the score.
+          if (!streakStart.has(sid0)) streakStart.set(sid0, safeNow())
+          for (const p of editPaths(toolName, hookInput?.args)) { editedFor(sid0).add(p); noteEdit(sid0, p) }
+        }
         const fx = nonIdempotentEffect(toolName, hookInput?.args)
         if (fx) fxFor(sid0).push(fx)
+        // A test suite run through the SHELL is still a verification. Everything below keys on
+        // `verify_done`, so a model that types `npm test` into bash produced no streak, no rewind, no
+        // escalation and no ledger record — the run looked healthy because nothing was watching, and the
+        // decision corpus quietly became a sample of one testing style. Recognised conservatively (see
+        // `looksLikeVerifyCommand`): a false positive here could push a healthy run toward giving up.
+        if (BASH_TOOLS.has(toolName) && looksLikeVerifyCommand(String(hookInput?.args?.command ?? hookInput?.args?.cmd ?? ""))) {
+          const text = typeof output?.output === "string" ? output.output : ""
+          const v = verdictFromTestOutput(text, typeof output?.metadata?.exitCode === "number" ? output.metadata.exitCode : null)
+          // ONLY a red is actionable from a shell, and it feeds a SEPARATE counter.
+          //
+          // Two things were wrong when this first landed. It trusted a "green" inferred from text — the
+          // engine supplies no exit code for bash — and this repository's own runner prints `1732 pass
+          // 3 fail` on a FAILING suite, so a broken run reset the streak, cleared the notes and refunded
+          // the rewind budget. And it wrote into the SAME state `verify_done` drives, which silently
+          // halved constants calibrated against verify_done events: a model that runs pytest before
+          // verify_done was rewound after ONE real failure and reached NOT DONE in two instead of four.
+          // The spec-card calls that rewind threshold untouchable; adding a second event source to its
+          // counter touched it from the other side.
+          //
+          // So: shell evidence informs the ADVISORY escalation decision and the ledger, and never the
+          // rewind/terminal ladder. Observing is worth doing; deciding a revert on a guess is not.
+          if (v === "red") {
+            const n = (shellReds.get(sid0) ?? 0) + 1
+            shellReds.set(sid0, n)
+            if (!streakStart.has(sid0)) streakStart.set(sid0, safeNow())
+            const cs = editCounts.get(sid0)
+            const shellRisk = {
+              redStreak: n,
+              sameFileChurn: cs ? [...cs.values()].reduce((a, k) => a + Math.max(0, k - 1), 0) : 0,
+              elapsedMs: attemptCost({ elapsedMs: Math.max(0, safeNow() - (streakStart.get(sid0) ?? safeNow())) }),
+            }
+            const shellVerdict = escalationDecision(shellRisk)
+            recordAsk(sid0, shellVerdict, { ...shellRisk, via: "shell" }, false)
+            if (shellVerdict.decision !== "continue-locally" && typeof output.output === "string") {
+              output.output +=
+                `\n\n⚖ FABULA saw ${n} failed verification(s) run through the shell. ${shellVerdict.reason}` +
+                ` Run \`verify_done\` so the harness can act on it — from bash it can only watch.`
+            }
+          }
+        }
         return
       }
       const sid = hookInput?.sessionID || "?"
       evictOthers(states, sid)
-      for (const m of [editedSince, sidefxSince, greenBoundary, pendingRewind, greenPending] as Map<string, unknown>[]) evictOthers(m, sid)
+      for (const m of [editedSince, editCounts, sidefxSince, greenBoundary, pendingRewind, greenPending, collapseMisses, streakStart, escalations, escalationTries, shellReds] as Map<string, unknown>[]) evictOthers(m, sid)
       const workspace = input?.directory || process.cwd()
 
       // "Verify never ran" (no command detected, spawn error → plain-string result, no `passed` key)
@@ -151,7 +314,9 @@ export const FabulaRewind: Plugin = async (input: any) => gate("rewind", ({
         const { state } = updateRewind(stateFor(sid), { green: true, checkpoint: ckId }, THRESHOLD)
         states.set(sid, state)
         createdSince.set(sid, new Set()) // everything on disk is now part of the green state
-        editedSince.set(sid, new Set()); sidefxSince.set(sid, []) // fresh evidence window after green
+        editedSince.set(sid, new Set()); sidefxSince.set(sid, []); editCounts.delete(sid) // fresh evidence window after green
+        streakStart.delete(sid)   // W6: the cost clock belongs to a streak, and this streak is over
+        collapseMisses.delete(sid) // a green is a fresh conversation window too
         greenPending.set(sid, true)      // capture the conversation boundary at the next transform
         pendingRewind.delete(sid)        // a green recovered the run — nothing to collapse
         return
@@ -162,6 +327,82 @@ export const FabulaRewind: Plugin = async (input: any) => gate("rewind", ({
       const prev = stateFor(sid)
       const { state, action } = updateRewind(prev, { green: false, note }, THRESHOLD, NOTDONE_AFTER)
       states.set(sid, state)
+
+      // ── W6: DECIDE whether to ask a stronger model, and if so, ASK. ────────────────────────────
+      // Until W6 this was a sentence in a steer hoping the model would call escalate_to_cloud; RULE #9
+      // says an observation that a model will not reliably do X is a specification for a mechanism.
+      // The decision is made from measured evidence (how many reds, thrashing on the same file, how
+      // much wall-clock this streak has already cost, how many times we already reverted) rather than
+      // from the bare counter — and it is bounded, never fires on a green, and never blocks the run.
+      if (!streakStart.has(sid)) streakStart.set(sid, safeNow())
+      // TRUE churn: how many times an attempt went BACK to a file it had already changed. The first
+      // version passed the count of DISTINCT edited paths, which is the inverse of the contract — a run
+      // thrashing one file ten times scored 1, while a healthy broad edit across six files scored 6 and
+      // looked like the pathological case.
+      const counts = editCounts.get(sid)
+      const churn = counts ? [...counts.values()].reduce((a, n) => a + Math.max(0, n - 1), 0) : 0
+      // The same failure line coming back is a near-duplicate at the level that matters here: the run is
+      // re-arriving at a state it has already been in.
+      const notes = state.failedNotes ?? []
+      const repeats = notes.length - new Set(notes).size
+      const risked = {
+        redStreak: prev.redStreak + 1,
+        sameFileChurn: churn,
+        nearDuplicates: repeats,
+        elapsedMs: attemptCost({ elapsedMs: Math.max(0, safeNow() - (streakStart.get(sid) ?? safeNow())) }),
+        rewinds: state.rewinds ?? 0,
+        hasGreenAnchor: !!state.lastGreenCheckpoint,
+      }
+      let verdict = escalationDecision(risked)
+      // QE's ONLY power: promote "keep trying locally" to "ask now" when another attempt on this diff
+      // looks not worth its cost. It can never do the reverse and it never runs near a verify — the
+      // estimator gates a RETRY, and verify stays the only source of truth. Fail-open by construction:
+      // an unreachable or unreadable estimator leaves the decision exactly as the risk score made it.
+      if (verdict.decision === "continue-locally" && risked.redStreak >= 1 && QE_ENABLED) {
+        try {
+          // The REAL streak, not a hard-coded pair. Fabricating "2 failures" put a false count on the
+          // wire to the estimator AND into the ledger record that is supposed to be the honest artifact.
+          const realHistory = Array.from({ length: risked.redStreak }, () => ({ green: false }))
+          const qe = await qeVerdict(String(note || ""), realHistory)
+          if (qeBlocksRetry(qe)) {
+            verdict = { ...verdict, decision: "escalate", reason: `quality estimate promoted this to an escalation: ${qe.reason}` }
+          }
+        } catch { /* an estimator that fails must cost the run nothing */ }
+      }
+      const alreadyAsked = escalations.get(sid) ?? 0
+      const triedAndFailed = escalationTries.get(sid) ?? 0
+      const mayAsk =
+        verdict.decision === "escalate" &&
+        alreadyAsked < MAX_ESCALATIONS &&
+        triedAndFailed < MAX_ESCALATION_TRIES &&
+        ESCALATE_AUTO
+      if (mayAsk) {
+        escalations.set(sid, alreadyAsked + 1)
+        const opinion = await askCloud(risked, note, action?.failedNotes ?? state.failedNotes)
+        // `fired` records what HAPPENED, not what was decided. Writing it before the call made the
+        // ledger claim escalations that delivered nothing — and Ask-F1, the metric this wave exists to
+        // make honest, then scored those non-events as escalations. A call that failed also refunds the
+        // budget: two transient timeouts must not permanently exhaust a task's second opinions.
+        // Refunding the DELIVERY budget on failure keeps the ledger honest, but it must not turn the
+        // cap into "unbounded attempts": against a cloud that always fails, every escalate-rung red
+        // would try again and each try costs the blocked turn its timeout. Attempts carry their own,
+        // larger bound so a broken endpoint is tried a few times and then left alone.
+        if (!opinion) {
+          escalations.set(sid, alreadyAsked)
+          escalationTries.set(sid, (escalationTries.get(sid) ?? 0) + 1)
+        }
+        recordAsk(sid, verdict, risked, !!opinion, opinion ? undefined : "the cloud returned nothing")
+        if (opinion && typeof output.output === "string") {
+          // Planted on the tool result the model just read — the steer pattern this harness has
+          // measured the model actually acts on, unlike a nudge buried in the prompt.
+          output.output += `\n\n🛰️ SECOND OPINION (fetched by the harness after ${risked.redStreak} failed verification(s) — you did not have to ask):\n${opinion}`
+          if (output.metadata && typeof output.metadata === "object")
+            (output.metadata as Record<string, unknown>).secondOpinion = { redStreak: risked.redStreak, score: verdict.score }
+        }
+      } else {
+        recordAsk(sid, verdict, risked, false)
+      }
+
       if (!action) return
 
       // Terminal rung (Greenpaper §2): the ladder is exhausted — surface an explicit NOT DONE verdict
@@ -226,7 +467,18 @@ export const FabulaRewind: Plugin = async (input: any) => gate("rewind", ({
 
       if (typeof output.output === "string") {
         if (restored) {
-          output.output += `\n\n🔄 AUTO-REWIND${reverted}: ${groundedSteer}`
+          // Whether the CONVERSATION can also be rewound is a separate question from whether the FILES
+          // were: the transcript collapse needs a green boundary captured by the transform hook. If we
+          // never got one — or the last collapse could not match the span — say so plainly instead of
+          // implying a clean retry, because the model reads the failed attempts either way and a false
+          // "we started over" is worse than no claim at all.
+          const canCollapse = greenBoundary.has(sid) && (collapseMisses.get(sid) ?? 0) === 0
+          const contextNote = canCollapse
+            ? ""
+            : ` NOTE: the failed attempts above could NOT be removed from this conversation — they are still` +
+              ` in your context. Do not re-read them as if they were current; treat everything after the last` +
+              ` green verification as discarded.`
+          output.output += `\n\n🔄 AUTO-REWIND${reverted}: ${groundedSteer}${contextNote}`
           pendingRewind.set(sid, `🔄 Rewound ${action.redStreak} failed attempt(s) to the last green state; files are back at green. ${grounded}${ledger} Take a DIFFERENT approach.`)
           if (output.metadata && typeof output.metadata === "object")
             output.metadata.autoRewind = { toCheckpoint: action.toCheckpoint, reverted: action.redStreak }
@@ -266,8 +518,16 @@ export const FabulaRewind: Plugin = async (input: any) => gate("rewind", ({
       const summary = pendingRewind.get(sid)
       const boundary = greenBoundary.get(sid)
       if (summary && boundary) {
-        collapseFailedSpan(messages, boundary, summary)
-        pendingRewind.delete(sid) // one collapse per rewind (idempotent)
+        const res = collapseFailedSpan(messages, boundary, summary)
+        // Only a collapse that ACTUALLY happened retires the request. The core reports `applied` and the
+        // first version of this call threw that away: when the span could not be matched the transcript
+        // kept every failed attempt while the model had already been told the run was back at green —
+        // the retry then ran in exactly the contaminated context this mechanism exists to remove, and
+        // nothing anywhere said so. A failed collapse now stays pending and is retried next transform.
+        if (res.applied) pendingRewind.delete(sid)
+        else collapseMisses.set(sid, (collapseMisses.get(sid) ?? 0) + 1)
+      } else if (summary && !boundary) {
+        collapseMisses.set(sid, (collapseMisses.get(sid) ?? 0) + 1)
       }
     } catch { /* never break the turn */ }
   },

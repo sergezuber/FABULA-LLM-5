@@ -16,7 +16,7 @@ FABULA is an **agent harness** built on one bet: **trust belongs to the proof, n
 
 ## The loop doesn't give up — and is built not to end in a story
 
-A red verify doesn't stop the run: the model iterates against the real failing output. Repeated reds don't stop it either — the harness rewinds the files to the last green checkpoint, atomically, and steers a different approach. A dead end pulls one second opinion from a stronger model, and the local model keeps driving. **NOT YET DONE is a transit state, not a verdict.**
+A red verify doesn't stop the run: the model iterates against the real failing output. Repeated reds don't stop it either — the harness rewinds the files to the last green checkpoint, atomically, and steers a different approach. A dead end pulls one second opinion from a stronger model — fetched by the harness, not left to the model to ask for — and the local model keeps driving. **NOT YET DONE is a transit state, not a verdict.**
 
 And the run won't quietly end in a claim. If source changed but the tests never ran, the force-verify gate re-enters and makes the model run them; if the retry budget is spent with the change still unverified, the final message is stamped **NOT DONE (unverified)** over the real failing output. A finished run is built to land in one of two honest states — **VERIFIED**, with a replayable receipt, or an explicit **NOT DONE** — not a confident "done" you were meant to take on faith. It's a strong best-effort gate, not a proof of impossibility: heavy context compaction, or handing the whole task to a subagent, can still slip past it.
 
@@ -149,7 +149,7 @@ Then watch the machine refuse to finish until the proof exists — on your machi
 | **judge** | A turn that ends before the request is fulfilled — an independent judge reads the transcript and refuses the stop until it's done, not planned or promised. It is handed the trajectory the harness *measured* (greens/reds, rewinds, unverified edits), and a "done" is overridden outright when those dynamics say otherwise. |
 | **provenance** | Work of unknown origin — every receipt carries a sha256 of the exact context (system prompt + tool schemas + router profile), a byte-stability verdict, and (v0.2) the request-text hash + the serving model's descriptor, with an optional real weights digest. |
 | **rewind** | Digging the hole deeper — repeated red verifies roll the files back to the last green checkpoint, atomically, from the harness's own shadow-git. The failed attempts leave your context so the retry starts clean; the steer names the recurring root cause; and any non-idempotent side effect (an install, a migration, a POST) is flagged as not-undone. |
-| **escalate** | Looping on a dead end — the auto-rewind steers the model to fetch one cloud second opinion, then it keeps driving. |
+| **escalate** | Looping on a dead end — when the measured evidence agrees another local attempt is not worth its cost (verifications failing in a row, attempts churning the same file, time already burned), the harness itself fetches one cloud second opinion and hands it to the model, which keeps driving. Advice a model may ignore is not a mechanism. Bounded per task; the old constants remain a floor, so nothing gets carried past the point the run should stop. |
 
 Around the gates: web, shell, sandboxed code execution, drift-proof file edits, a real Chromium, memory and hand-off notes, checkpoints and undo, SSRF/redaction/injection defense on every call. The full map of every plugin and tool: [`docs/PLUGINS.md`](docs/PLUGINS.md).
 

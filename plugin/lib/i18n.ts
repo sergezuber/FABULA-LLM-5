@@ -132,14 +132,14 @@ export const PLUGIN_I18N: Record<string, PluginI18n> = {
   selfextend: {
     tags: ["code"],
     nameRu: "Саморасширение (пишет тулы)",
-    descEn: "Lets the model author a NEW tool/plugin for itself when a capability is missing (create_plugin). The harness scaffolds it and enforces the one-plugin-per-file contract before writing; callable after the next engine start. The supervised model grows its own supervised tool belt.",
-    descRu: "Позволяет модели написать себе НОВЫЙ тул/плагин, когда возможности не хватает (create_plugin). Обвязка генерирует каркас и детерминированно проверяет контракт «один плагин — один файл» до записи; тул доступен после следующего старта движка. Поднадзорная модель наращивает свой поднадзорный пояс инструментов.",
+    descEn: "Lets the model author a NEW tool/plugin for itself when a capability is missing (create_plugin). The harness scaffolds it, enforces the one-plugin-per-file contract before writing, and refuses a body that spawns processes, evaluates code at runtime, reads credential material or edits the supervision layer's own state — a self-written plugin runs with full privileges ahead of every guard. It is a screen, not a sandbox. Callable after the next engine start. The supervised model grows its own supervised tool belt.",
+    descRu: "Позволяет модели написать себе НОВЫЙ тул/плагин, когда возможности не хватает (create_plugin). Обвязка генерирует каркас, детерминированно проверяет контракт «один плагин — один файл» до записи и отказывает телу, которое запускает процессы, выполняет код на лету, читает учётные данные или правит состояние самого надзорного слоя — самописный плагин работает с полными правами раньше всех гвардов. Это экран, а не песочница. Тул доступен после следующего старта движка. Поднадзорная модель наращивает свой поднадзорный пояс инструментов.",
   },
   escalate: {
     tags: ["code", "graph"],
     nameRu: "Эскалация в облако (второе мнение)",
-    descEn: "When you're stuck — the same fix keeps failing verification, or you can't find the root cause — escalate_to_cloud asks a stronger cloud model for a second opinion on the same problem and returns a concrete root cause + next step, so you stop looping on a dead-end approach. Needs a cloud provider in the config.",
-    descRu: "Когда ты застрял — одна и та же правка снова не проходит проверку, или не находится корневая причина — escalate_to_cloud запрашивает у более сильной облачной модели второе мнение по той же задаче и возвращает конкретную причину + следующий шаг, чтобы ты перестал крутиться на тупиковом подходе. Нужен облачный провайдер в конфиге.",
+    descEn: "When you're stuck — the same fix keeps failing verification, or you can't find the root cause — escalate_to_cloud asks a stronger cloud model for a second opinion on the same problem and returns a concrete root cause + next step, so you stop looping on a dead-end approach. The harness also fires it ITSELF when the measured evidence agrees another local attempt is not worth its cost — advice a model may ignore is not a mechanism. Bounded per task and disableable. Needs a cloud provider in the config.",
+    descRu: "Когда ты застрял — одна и та же правка снова не проходит проверку, или не находится корневая причина — escalate_to_cloud запрашивает у более сильной облачной модели второе мнение по той же задаче и возвращает конкретную причину + следующий шаг, чтобы ты перестал крутиться на тупиковом подходе. Обвязка вызывает его и САМА, когда измеренные улики сходятся на том, что ещё одна локальная попытка не окупится — совет, который модель вольна проигнорировать, механизмом не является. Ограничено по числу на задачу и отключается. Нужен облачный провайдер в конфиге.",
   },
   rewind: {
     tags: ["code", "housekeeping"],

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.2.2"
+export const FABULA_VERSION = "0.2.3"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.2.3",
+    date: "2026-07-20",
+    items: [
+      {
+        ru: "Обвязка теперь САМА зовёт второе мнение и САМА себя не разоружает. (1) Когда проверки падают подряд, решение «просить ли помощи» больше не сводится к счётчику: складываются наблюдаемые улики — сколько раз проверка была красной, возвращается ли агент правкой в один и тот же файл, сколько времени уже сожжено на этой серии. Если несколько независимых сигналов сходятся, второе мнение запрашивается РАНЬШЕ, чем счётчик дошёл бы до порога; при этом ни одна улика не может пронести прогон МИМО прежних порогов — старые константы остались полом. И запрос уходит сам: раньше обвязка лишь советовала модели позвать помощь, а совет модель вольна проигнорировать. (2) Каждое такое решение пишется в журнал вместе с исходом, так что впервые можно измерить, вовремя ли обвязка просит помощи, а не только что она это умеет. (3) Надзорный слой больше не выключается изнутри прогона: режим «полный доступ» действует, только если его включили ВЫ (в настройках или переменной окружения) — выставленный самим агентом он записывается, показывается и не действует; ключевые плагины защиты нельзя отключить изнутри прогона; файлы, где всё это хранится, закрыты и от файловых инструментов, и от шелла, в том числе через символическую ссылку. (4) Плагин, который агент пишет сам себе, проверяется не только на форму, но и на возможности: запуск процессов, выполнение кода на лету, чтение учётных данных — отказ на этапе записи. Это экран, а не песочница, и так и написано в его описании. Всё перечисленное отключается переменными окружения.",
+        en: "The harness now asks for a second opinion ITSELF, and can no longer disarm itself. (1) When verifications keep failing, the decision to ask for help is no longer a bare counter: observable evidence adds up — how many verifications went red, whether attempts keep returning to the same file, how much time the streak has burned. When several independent signals agree, the second opinion is requested EARLIER than the counter would have; and no evidence can carry a run PAST the old thresholds, which remain a floor. The request also fires by itself: previously the harness only advised the model to ask, and advice is something a model may ignore. (2) Every such decision is recorded with its outcome, so for the first time it is possible to measure whether the harness asks for help at the right moments rather than merely that it can. (3) The supervision layer can no longer be switched off from inside a run: full-access mode counts only when YOU set it (in settings or an environment variable) — set by the agent it is recorded, surfaced and ignored; the core protective plugins cannot be disabled from inside a run; and the files holding all of this are closed to the file tools and to the shell alike, including via a symlink. (4) A plugin the agent writes for itself is now checked for capabilities as well as shape: spawning processes, evaluating code at runtime, reading credential material are refused at write time. It is a screen, not a sandbox, and its own description says so. Everything above can be disabled via environment variables.",
+      },
+    ],
+  },
   {
     version: "0.2.2",
     date: "2026-07-19",

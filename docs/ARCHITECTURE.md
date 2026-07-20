@@ -104,7 +104,7 @@ point every request passes:
    (`FABULA_MAX_CONCURRENT_UPSTREAM`, default 1; `0` = unlimited). Excess requests queue
    FIFO; a queued streaming client receives SSE-comment keepalives, and once those commit
    the response an upstream error travels as an in-band SSE event rather than a second HTTP
-   status line. Waits past `FABULA_ADMIT_WAIT_MAX` **fail open** — a gate that blocks would
+   status line. Waits past the caller's ceiling **fail open** (`FABULA_ADMIT_WAIT_MAX` for a silent caller, the longer `FABULA_ADMIT_WAIT_MAX_STREAM` for a streaming one that keepalives keep alive) — a gate that blocks would
    be worse than no gate. Metadata (`GET /v1/models`, the app's liveness probe) and
    embeddings bypass the queue entirely. Measured on this hardware with four concurrent
    *unique* heavy prefills: **41.1s unserialized vs 2.4s serialized**; with a warm shared

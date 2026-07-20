@@ -19,5 +19,5 @@ verifies, an automatic file rewind, a steered cloud second opinion.
 | green without a test | reproduce-gate downgrades "done" until a test exercises the fix | [`plugin/fabula-reproduce-gate.ts`](../plugin/fabula-reproduce-gate.ts) |
 | green without understanding | change-quiz grades the agent against its own diff | [`plugin/fabula-change-quiz.ts`](../plugin/fabula-change-quiz.ts) |
 | red ×N | auto-rewind atomically restores the files to the last green shadow-git checkpoint and steers a different approach | [`plugin/fabula-rewind.ts`](../plugin/fabula-rewind.ts) |
-| still stuck | the steer points at `escalate_to_cloud` — one second opinion from a stronger model; the local model keeps driving | [`plugin/fabula-escalate.ts`](../plugin/fabula-escalate.ts) |
+| still stuck | the steer points at `escalate_to_cloud` — and since W6 the harness fires it directly, because a steer the model may ignore is a request, not a mechanism — one second opinion from a stronger model; the local model keeps driving | [`plugin/fabula-escalate.ts`](../plugin/fabula-escalate.ts) |
 | fully-gated green | the Proof-of-Done receipt mints itself | [`plugin/fabula-receipt.ts`](../plugin/fabula-receipt.ts) |

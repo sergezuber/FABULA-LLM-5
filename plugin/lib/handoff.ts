@@ -48,9 +48,39 @@ export function renderHandoff(h: Handoff): string {
 export async function writeHandoff(key: string, h: Handoff): Promise<void> {
   await fs.mkdir(HANDOFF_DIR, { recursive: true })
   const p = handoffPath(key)
+  // W7: saving under an existing key used to destroy its predecessor outright — the record was simply
+  // gone, not archived and not marked. That is the destructive-summarisation pattern the memory work is
+  // built against: agents depend on raw experience and frequently disregard condensed experience even
+  // when condensed is all they are given, and a store that overwrites cannot ever hand back what it
+  // replaced. So the predecessor is APPENDED to a per-key history first and the successor records what
+  // it supersedes. Nothing is lost; the current record is still one plain read at the same path.
+  const prev = await readHandoff(key)
+  if (prev) {
+    const histPath = path.join(HANDOFF_DIR, `${key}.history.jsonl`)
+    await fs.appendFile(histPath, JSON.stringify({ ...prev, supersededBy: h.ts, retiredAt: Date.now() }) + "\n", "utf8")
+    ;(h as any).supersedes = (prev as any).id ?? prev.ts
+    ;(h as any).previousVersion = prev.ts
+  }
   const tmp = `${p}.${process.pid}.${Math.floor(Math.random() * 1e6)}.tmp`
   await fs.writeFile(tmp, JSON.stringify(h, null, 2), "utf8")
   await fs.rename(tmp, p)
+}
+
+/** Every version ever written under this key, oldest first, with the current one last. The history is
+ *  append-only: this is what makes "the predecessor is recoverable" true rather than aspirational. */
+export async function handoffHistory(key: string): Promise<Handoff[]> {
+  const out: Handoff[] = []
+  try {
+    const raw = await fs.readFile(path.join(HANDOFF_DIR, `${key}.history.jsonl`), "utf8")
+    for (const line of raw.split("\n")) {
+      if (!line.trim()) continue
+      const h = parseHandoff(line)
+      if (h) out.push(h)
+    }
+  } catch { /* no history yet — a key written once has none */ }
+  const cur = await readHandoff(key)
+  if (cur) out.push(cur)
+  return out
 }
 export async function readHandoff(key: string): Promise<Handoff | null> {
   try { return parseHandoff(await fs.readFile(handoffPath(key), "utf8")) } catch { return null }

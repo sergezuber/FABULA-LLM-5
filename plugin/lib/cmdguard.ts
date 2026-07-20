@@ -134,6 +134,53 @@ export function checkCommand(rawCmd: string): CmdVerdict {
   if (/<\(\s*[^)]*\b(curl|wget|fetch)\b/.test(m))
     return { blocked: true, code: "procsubst_remote_exec", reason: "process substitution <(…) of a remote download (RCE). Fetch to a file and inspect it first." }
 
+  // 2e. Writing the SUPERVISION LAYER'S OWN STATE from a shell.
+  //
+  // `set_permission_mode` and `disable_plugin` refuse to disarm the guards from inside a run, and the
+  // write-tool path guard refuses the files — but `bash` reaches neither, and a run that can redirect a
+  // shell into those files does not need either tool: one `echo '{"mode":"bypass"}' >` turns every guard
+  // off, one `{"disabled":["security"]}` stops the layer loading at all. Guarding the tools while leaving
+  // the shell is guarding a door in a wall that is not there.
+  //
+  // Matched by TARGET rather than by verb, because the verb is the easy part to vary: >, >>, tee, cp, mv,
+  // dd, install, python -c, sed -i all write, and enumerating them is a losing game. Reads are untouched —
+  // inspecting the state is legitimate and is how a run explains what it is allowed to do.
+  // The TARGET is matched against the un-blanked command: `blankSingleQuotes` erases quoted literals so
+  // that data cannot look like execution, but here the quoted literal IS the target — a path inside
+  // quotes is the same path, and testing the blanked text let `python3 -c "open('…json','w')"` through.
+  // The write must REFER to the store, not merely co-occur with it. The first version asked "does the
+  // command mention the file AND contain any write verb anywhere", which blocked ordinary reads —
+  // `grep mode <store> | tee /tmp/out`, `cat <store> && cp a b` — while its own comment promised reads
+  // were untouched. Each pattern below binds the verb to the target.
+  const STORE = String.raw`[^\s;|&]*fabula-(?:permissions|state)\.json`
+  const WRITES_THE_STORE = new RegExp(
+    [
+      String.raw`>{1,2}\s*${STORE}`,                                  // … > store   /   … >> store
+      String.raw`\b(?:tee)\b[^|;&]*\s${STORE}`,                       // tee store
+      String.raw`\b(?:cp|mv|dd|install)\b[^|;&]*\s${STORE}\s*$`,      // cp/mv/… <src> store
+      // `ln` is the one verb where the store can be EITHER argument: in `ln -s SOURCE DEST` it is the
+      // SOURCE, and the link then makes an innocuous-looking path write it. Binding every verb to the
+      // destination lost this — the guard got measurably weaker inside the round meant to strengthen it,
+      // and shipped under a count that was one too high. Match the store anywhere in an `ln`.
+      String.raw`\bln\b[^|;&]*${STORE}`,
+      String.raw`\bdd\b[^|;&]*of=${STORE}`,                           // dd of=store
+      String.raw`\bsed\b[^|;&]*-i[^|;&]*${STORE}`,                     // sed -i … store
+      String.raw`\btruncate\b[^|;&]*${STORE}`,
+      String.raw`\b(?:python3?|perl|ruby|node|deno|bun)\b[^|;&]*\s-(?:c|e|p)\b[^|;&]*${STORE}`,
+    ].join("|"),
+  )
+  if (WRITES_THE_STORE.test(norm))
+    return {
+      blocked: true,
+      code: "supervision_state",
+      reason:
+        "this command writes the file that records whether FABULA's guards are on and which plugins load. " +
+        "Disarming the supervision layer from inside a run is not something a run gets to do — the owner " +
+        "changes it in the app (Settings ▸ Permissions / Plugins) or with manage-cli. " +
+        "NOTE this is a NAME match: a path reached through a variable, a glob or a helper script is not " +
+        "caught here, and the file-level guard is the backstop for those.",
+    }
+
   // 3. mkfs — (re)format a filesystem
   if (/\bmkfs(\.\w+)?\b/.test(m))
     return { blocked: true, code: "mkfs", reason: "mkfs formats a filesystem and destroys all data on the target device." }

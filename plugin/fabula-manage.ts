@@ -90,14 +90,51 @@ export const FabulaManage: Plugin = async () => ({
       },
     }),
 
+    escalation_report: tool({
+      description:
+        "Report how well the harness has been deciding WHEN to ask a stronger model for help: how many " +
+        "escalation decisions were recorded, how many fired, and — for the ones whose outcome is known — " +
+        "precision/recall/F1 (Ask-F1). Outcomes that are not yet known are excluded, never counted as " +
+        "successes, and the support count is shown so a perfect-looking score over two records reads as " +
+        "what it is.",
+      args: {},
+      async execute() {
+        const { askF1 } = await import("./lib/askledger")
+        const { readFileSync } = await import("node:fs")
+        // The SAME resolver the hook writes through — a second copy of this logic is how the report
+        // ended up reading a different file than the one being written.
+        const file = (await import("./lib/askledger")).askLedgerPath(process.env as Record<string, string | undefined>)
+        let ledger: unknown
+        try {
+          ledger = JSON.parse(readFileSync(file, "utf8"))
+        } catch {
+          return `escalation_report: no decisions recorded yet (${file}).`
+        }
+        const m = askF1(ledger)
+        const pct = (v: number | null) => (v === null ? "undefined" : `${(v * 100).toFixed(0)}%`)
+        return [
+          `Escalation decisions — ${m.retained} retained of ${m.totalSeen} seen` +
+            (m.dropped ? `, ${m.dropped} evicted (this describes the retained window)` : ""),
+          `fired: ${m.tp + m.fp} · not fired: ${m.fn + m.tn} · outcome still unknown: ${m.unknown}`,
+          `precision ${pct(m.precision)} · recall ${pct(m.recall)} · F1 ${pct(m.f1)}  [support ${m.support}]`,
+          m.note,
+        ].join("\n")
+      },
+    }),
     disable_plugin: tool({
       description: "Disable a FABULA plugin so it stops loading on the next Restart Server (⌘⇧R). The plugin " +
-        "manager itself cannot be disabled.",
+        "manager itself cannot be disabled, and neither can the supervision layer (guards and done-gates) — " +
+        "the owner turns those off from the app, not the run.",
       args: { plugin: z.string().describe("plugin id") },
       async execute(args: any) {
         if (args.plugin === "manage") return "The plugin manager ('manage') cannot disable itself."
         if (!pluginById(args.plugin)) return `No plugin "${args.plugin}". Ids: ${MANIFEST.map((m) => m.id).join(", ")}`
-        setEnabled(args.plugin, false)
+        try {
+          // origin "agent": the call came from the model, so the supervision layer is off limits.
+          setEnabled(args.plugin, false, "agent")
+        } catch (e: any) {
+          return `disable_plugin: ${e?.message ?? e}`
+        }
         return `Disabled "${args.plugin}". Restart the server (⌘⇧R) to apply. Re-enable any time with enable_plugin.`
       },
     }),

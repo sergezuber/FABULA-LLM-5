@@ -20,7 +20,7 @@ export const FabulaSelfExtend: Plugin = async () =>
     tool: {
       create_plugin: tool({
         description:
-          "Author a NEW FABULA tool/plugin for yourself when a capability is missing. Provide the tool " +
+          "SCREENED, NOT SANDBOXED: the body is checked against a deny-list of capability patterns (spawning processes, runtime eval, credential paths, editing the guards' own state, network imports) and refused if it matches. A determined author can still get around a deny-list, and a written plugin runs with full privileges from the next start. Author a NEW FABULA tool/plugin for yourself when a capability is missing. Provide the tool " +
           "name, what it does, and the execute() body (plain TypeScript that ends in `return \"...\"` or " +
           "`return { output: \"...\" }`; `args.input` is your string argument, `ctx.directory` is the cwd). " +
           "The harness validates the one-plugin-per-file contract and writes the plugin; it becomes " +

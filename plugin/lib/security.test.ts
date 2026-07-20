@@ -101,3 +101,44 @@ test("checkWritePath allows normal project files", () => {
   expect(checkWritePath("./README.md").blocked).toBe(false)
   expect(checkWritePath("~/projects/app/.env").blocked).toBe(false) // .env allowed (ask-tier, not hardline)
 })
+
+// ── the supervision layer's own files, and the symlink that used to walk past every rule (W6) ─────
+test("checkWritePath blocks the files that record whether the guards are on", () => {
+  expect(checkWritePath("~/.config/fabula/fabula-permissions.json").blocked).toBe(true)
+  expect(checkWritePath("~/.config/fabula/fabula-state.json").blocked).toBe(true)
+  expect(checkWritePath("/somewhere/else/fabula-permissions.json").blocked).toBe(true)
+  expect(checkWritePath("~/.config/fabula/theme.json").blocked).toBe(false)
+})
+
+test("checkWritePath resolves symlinks before matching", async () => {
+  // Every rule compares strings, so `ln -s <target> ./notes.json` followed by a write to `./notes.json`
+  // walked straight past all of them: the guard was checking the name the caller chose rather than the
+  // file it lands on.
+  const { mkdtempSync, rmSync, symlinkSync, writeFileSync, mkdirSync } = await import("node:fs")
+  const os = await import("node:os")
+  const path = await import("node:path")
+  const dir = mkdtempSync(path.join(os.tmpdir(), "fab-pathguard-"))
+  try {
+    const real = path.join(dir, "fabula-permissions.json")
+    writeFileSync(real, "{}")
+    const innocent = path.join(dir, "notes.json")
+    symlinkSync(real, innocent)
+    expect(checkWritePath(innocent).blocked).toBe(true)
+
+    // …and through a symlinked DIRECTORY, where the file itself may not exist yet
+    const guarded = path.join(dir, "guarded")
+    mkdirSync(guarded)
+    const alias = path.join(dir, "alias")
+    symlinkSync(guarded, alias)
+    expect(checkWritePath(path.join(alias, "fabula-state.json")).blocked).toBe(true)
+
+    // an ordinary symlink to an ordinary file is still fine
+    const plain = path.join(dir, "plain.txt")
+    writeFileSync(plain, "hi")
+    const link = path.join(dir, "link.txt")
+    symlinkSync(plain, link)
+    expect(checkWritePath(link).blocked).toBe(false)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

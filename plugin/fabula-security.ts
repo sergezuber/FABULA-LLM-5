@@ -64,12 +64,20 @@ export const FabulaSecurity: Plugin = async () => gate("security", ({
       if (v.blocked) throw new Error(ssrfBlockedMessage(v, args.url))
     }
 
-    // write-path guard — backdoor/persistence targets (softened when edits are pre-approved)
-    if (WRITE_TOOLS.has(tool) && !editsPreApproved()) {
+    // write-path guard — backdoor/persistence targets.
+    //
+    // `acceptEdits` softens this for ordinary edits, which is its purpose. It must NOT soften the
+    // supervision layer's own state: `acceptEdits` is a mode the agent can set on itself, so treating it
+    // as blanket pre-approval let two sanctioned calls re-open every guard here — including the
+    // authorized_keys / sudoers / cron / LaunchAgents rules that predate this wave. Pre-approving your
+    // edits is not the same as pre-approving the file that says whether your edits are checked.
+    if (WRITE_TOOLS.has(tool)) {
       const p = args.filePath ?? args.path ?? args.file ?? ""
       if (p) {
         const v = checkWritePath(p)
-        if (v.blocked) throw new Error(writeBlockedMessage(v, p))
+        if (v.blocked && (v.code === "supervision_state" || !editsPreApproved())) {
+          throw new Error(writeBlockedMessage(v, p))
+        }
       }
     }
   },
@@ -77,11 +85,16 @@ export const FabulaSecurity: Plugin = async () => gate("security", ({
   tool: {
     set_permission_mode: tool({
       description: "Set the permission mode (persists across restarts): default (normal guards), plan " +
-        "(read-only — writes blocked), acceptEdits (file edits pre-approved), bypass (skip FABULA guards).",
-      args: { mode: z.string().describe("default | plan | acceptEdits | bypass") },
+        "(read-only — writes blocked), acceptEdits (file edits pre-approved). NOTE: 'bypass' (guards off) " +
+        "is an OWNER setting — asking for it here is recorded but does NOT disable the guards; the owner " +
+        "sets it in the app or via FABULA_PERMISSION_MODE.",
+      args: { mode: z.string().describe("default | plan | acceptEdits") },
       async execute(args: any) {
-        const r = setPermissionMode(String(args.mode))
-        return r.ok ? `Permission mode set to "${r.mode}".` : `set_permission_mode: ${r.error}`
+        // origin "agent": this call came from the model. A bypass asked for here is stored and reported
+        // but never honoured — supervision that its subject can switch off is not supervision.
+        const r = setPermissionMode(String(args.mode), "agent")
+        if (!r.ok) return `set_permission_mode: ${r.error}`
+        return r.note ? `Permission mode "${r.mode}" ${r.note}` : `Permission mode set to "${r.mode}".`
       },
     }),
     allow_command: tool({

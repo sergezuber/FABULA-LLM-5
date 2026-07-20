@@ -93,7 +93,32 @@ export function isEnabled(id: string): boolean {
 export function gate<T>(id: string, plugin: T): T | Record<string, never> {
   return isEnabled(id) ? plugin : {}
 }
-export function setEnabled(id: string, on: boolean): State {
+/**
+ * Plugins the AGENT may not switch off. These are the supervision layer itself: the guards that contain
+ * the run, and the gates that decide whether "done" is proven. A model that can disable them can hand
+ * itself an unguarded, unverified run — and the entire premise here is that the guarantees come from the
+ * harness rather than from the model choosing to keep them on.
+ *
+ * The OWNER may still disable any of them (the app's Plugins panel, `manage-cli`, `FABULA_DISABLE`).
+ * This is about who is asking, not about making the switch unreachable.
+ */
+export const AGENT_PROTECTED = ["security", "reproduce-gate", "change-quiz", "rewind", "reliability"] as const
+
+export type ToggleOrigin = "owner" | "agent"
+
+export function setEnabled(id: string, on: boolean, origin: ToggleOrigin = "owner"): State {
+  if (!on && origin === "agent" && (AGENT_PROTECTED as readonly string[]).includes(id)) {
+    // Refused, and deliberately not silently: the caller reports it, so an attempt is visible rather
+    // than looking like it worked.
+    throw new Error(
+      `"${id}" is part of the supervision layer and cannot be disabled from inside the run. ` +
+        `The owner can turn it off in the app (Settings ▸ Plugins), with manage-cli, or via FABULA_DISABLE.`,
+    )
+  }
+  return setEnabledUnchecked(id, on)
+}
+
+function setEnabledUnchecked(id: string, on: boolean): State {
   const st = readState()
   st.disabled = st.disabled.filter((x) => x !== id)
   st.enabled = st.enabled.filter((x) => x !== id)

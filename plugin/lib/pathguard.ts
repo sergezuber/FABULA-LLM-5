@@ -21,6 +21,26 @@ function expand(p: string): string {
 export function checkWritePath(rawPath: string): PathVerdict {
   const p = expand(rawPath)
   if (!p) return OK
+  // Resolve symlinks before matching. Every rule below compares STRINGS, so `ln -s <target> ./notes.json`
+  // followed by a write to `./notes.json` walked straight past all of them — the guard was checking the
+  // name the caller chose rather than the file it lands on. `realpath` on the PARENT (the file itself may
+  // not exist yet) plus the basename gives the true destination without requiring the write to have
+  // happened first.
+  const real = ((): string => {
+    try {
+      const fs = require("node:fs") as typeof import("node:fs")
+      if (fs.existsSync(p)) return fs.realpathSync(p)
+      const dir = path.dirname(p)
+      if (fs.existsSync(dir)) return path.join(fs.realpathSync(dir), path.basename(p))
+    } catch { /* an unresolvable path is checked as written — never fail open on an error here */ }
+    return p
+  })()
+  const verdict = matchWriteRules(real)
+  if (verdict.blocked) return verdict
+  return real === p ? OK : matchWriteRules(p)
+}
+
+function matchWriteRules(p: string): PathVerdict {
   const home = os.homedir()
   const hits: Array<[RegExp | string, string, string]> = [
     [path.join(home, ".ssh", "authorized_keys"), "ssh_authorized_keys", "writing SSH authorized_keys installs a login backdoor."],
@@ -32,6 +52,13 @@ export function checkWritePath(rawPath: string): PathVerdict {
     [/\/cron(tab|\.d)\b|\/var\/(at|spool\/cron)\//, "cron", "writing cron entries installs persistence."],
     [/\/(Library|System)\/LaunchDaemons\//, "launchd", "writing LaunchDaemons installs persistence."],
     [path.join(home, "Library", "LaunchAgents"), "launchagent", "writing LaunchAgents installs persistence."],
+    // THE SUPERVISION LAYER'S OWN STATE. `set_permission_mode` and `disable_plugin` refuse to disarm the
+    // guards from inside a run — but both of those decisions are stored as plain JSON, and a run that can
+    // write the file does not need the tools at all: one `echo '{"mode":"bypass"}' >` and every guard is
+    // off, or one `{"disabled":["security", …]}` and the whole layer stops loading. Guarding the tool and
+    // leaving the file is guarding the front door of a house with no walls.
+    [/fabula-permissions\.json$/, "supervision_state", "this file records whether the guards are on; editing it from inside a run disarms them."],
+    [/fabula-state\.json$/, "supervision_state", "this file records which plugins load; editing it from inside a run can switch the guards off."],
   ]
   for (const [pat, code, reason] of hits) {
     const m = typeof pat === "string" ? p === pat || p.startsWith(pat) : pat.test(p)

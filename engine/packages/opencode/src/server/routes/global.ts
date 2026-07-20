@@ -603,8 +603,16 @@ export const GlobalRoutes = lazy(() =>
         const p = nodePath.join(Global.Path.config, "fabula-permissions.json")
         const state = (await Bun.file(p)
           .json()
-          .catch(() => ({}))) as { mode?: string; allow?: Record<string, boolean> }
-        if (body.mode) state.mode = body.mode
+          .catch(() => ({}))) as { mode?: string; modeOrigin?: string; allow?: Record<string, boolean> }
+        if (body.mode) {
+          state.mode = body.mode
+          // This route IS the owner — it is only reachable from Settings ▸ Permissions and the CLI.
+          // Stamping the origin is load-bearing: the guards honour `bypass` only when the owner set it,
+          // and without this line an earlier agent-set origin stayed on the record forever. One harmless
+          // agent call was enough to kill the owner's own bypass switch, with the UI still showing it on
+          // and no error anywhere.
+          state.modeOrigin = "owner"
+        }
         if (body.allowAdd?.trim()) state.allow = { ...state.allow, [body.allowAdd.trim()]: true }
         if (body.allowRemove) {
           const allow = { ...state.allow }

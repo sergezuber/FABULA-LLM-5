@@ -20,6 +20,8 @@ import * as path from "node:path"
 import { isWriteTool } from "./roles"
 
 export type PermissionMode = "default" | "acceptEdits" | "plan" | "bypass"
+/** Who put the run in its current mode. Only an owner-set `bypass` actually disarms the guards. */
+export type ModeOrigin = "owner" | "agent"
 const MODES: PermissionMode[] = ["default", "acceptEdits", "plan", "bypass"]
 
 interface Store { mode?: PermissionMode; allow?: Record<string, boolean> }
@@ -51,10 +53,35 @@ export function permissionMode(): PermissionMode {
   return MODES.includes(env) ? env : "default"
 }
 
-export function setPermissionMode(mode: string): { ok: boolean; mode?: PermissionMode; error?: string } {
+/**
+ * Set the run's permission mode. `origin` records WHO set it, and that is load-bearing rather than
+ * decorative: an agent-set `bypass` is stored and reported but does not disarm the guards (see
+ * `shouldBypassGuards`). Everything else an agent sets — plan, acceptEdits, back to default — takes
+ * effect normally, because those only ever RESTRICT it.
+ */
+export function setPermissionMode(mode: string, origin: ModeOrigin = "owner"): { ok: boolean; mode?: PermissionMode; error?: string; note?: string } {
   if (!MODES.includes(mode as PermissionMode)) return { ok: false, error: `unknown mode "${mode}" (use: ${MODES.join(", ")})` }
-  const s = load(); s.mode = mode as PermissionMode; save(s)
+  const s = load()
+  s.mode = mode as PermissionMode
+  s.modeOrigin = origin
+  save(s)
+  if (mode === "bypass" && origin === "agent") {
+    return {
+      ok: true,
+      mode: mode as PermissionMode,
+      note:
+        "recorded, but NOT honoured: bypass disables the command/SSRF/path guards for the whole run, so it " +
+        "is an owner decision. Set it from the app (Settings ▸ Permissions) or FABULA_PERMISSION_MODE if you " +
+        "really want the guards off; the guards stay ON for this run.",
+    }
+  }
   return { ok: true, mode: mode as PermissionMode }
+}
+
+/** Was the current `bypass` set by the agent rather than the owner? Legacy stores carry no origin at
+ *  all — those are treated as OWNER-set, because they predate this field and were written by the UI. */
+export function bypassWasSetByAgent(): boolean {
+  return load().modeOrigin === "agent"
 }
 
 /** A stable signature for a tool call, used as the allow-list key. */
@@ -88,9 +115,18 @@ export function isPlanBlocked(tool: string | undefined, args: any): boolean {
   return permissionMode() === "plan" && isWriteTool(tool, args)
 }
 
-/** Guards are skipped when the whole run is in `bypass` mode OR this exact command was pre-allowed. */
+/**
+ * Guards are skipped when the whole run is in `bypass` mode OR this exact command was pre-allowed.
+ *
+ * `bypass` is an OWNER decision, never an agent one. It disables the command guard, the SSRF guard and
+ * the path guard for the rest of the run, so a model that can set it can disarm the entire supervision
+ * layer that exists to contain it — and the whole thesis of this harness is that the guarantees come
+ * from the harness, not from the model's good intentions. So the mode is honoured ONLY when it was set
+ * outside the agent's reach: the env var, or the UI/CLI writing the persisted store. A mode the AGENT
+ * set through `set_permission_mode` is recorded, surfaced, and ignored here.
+ */
 export function shouldBypassGuards(tool: string | undefined, args: any): boolean {
-  if (permissionMode() === "bypass") return true
+  if (permissionMode() === "bypass" && !bypassWasSetByAgent()) return true
   return isCommandAllowed(commandSignature(tool, args))
 }
 

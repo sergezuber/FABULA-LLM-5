@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.2.6"
+export const FABULA_VERSION = "0.2.7"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.2.7",
+    date: "2026-07-20",
+    items: [
+      {
+        ru: "Долгая задача «прочти все главы и разбери» больше не роняет модель. Раньше такое чтение набивало в один контекст целую книгу, и за пределом памяти видеокарты сервер модели падал посреди ответа — красное «модель упала … Exit code: null» после многих минут работы. Причины было две, закрыты обе. (1) Модель грузилась с окном 256K и 4 параллельными слотами — это учетверяло память под кэш; теперь окно 128K и 2 слота (для одиночной работы скорость та же, память вчетверо меньше), и этот безопасный дефолт прописан в самой LM Studio, так что переживает перезапуск. (2) Новый страж бюджета контекста: у границы окна он велит агенту сжать прочитанное в сводку и выкинуть сырой текст, а на запрос «прочитать всё» — читать порциями с накопительной сводкой, чтобы переполнение вообще не начиналось. На обычных ходах страж бездействует и оставляет сообщение байт-в-байт — обычная работа не платит ничего. Отключается FABULA_CTX_GUARD=0.",
+        en: "A long \"read all the chapters and analyse them\" task no longer crashes the model. That kind of reading used to load a whole book into one context, and past the GPU's memory budget the model server died mid-answer — the red \"the model has crashed … Exit code: null\" after many minutes of work. There were two causes; both are closed. (1) The model was loaded with a 256K window and 4 parallel slots, which quadrupled the memory reserved for the cache; it is now a 128K window with 2 slots (for single-user work the speed is identical and the memory is a quarter), and that safe default is written into LM Studio itself so it survives a restart. (2) A new context-budget guard: near the edge of the window it tells the agent to summarise what it has read and drop the raw text, and on a \"read everything\" request it steers to reading in batches with a running summary, so the overflow never begins. On ordinary turns the guard does nothing and leaves the message byte-for-byte — normal work pays nothing. Kill-switch FABULA_CTX_GUARD=0.",
+      },
+    ],
+  },
   {
     version: "0.2.6",
     date: "2026-07-20",

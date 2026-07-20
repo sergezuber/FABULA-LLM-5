@@ -57,6 +57,12 @@ export const PLUGIN_I18N: Record<string, PluginI18n> = {
     descEn: "Injects your curated memory into the agent, and merges multiple system messages into one for providers that reject more than one.",
     descRu: "Подмешивает вашу память в контекст агента и склеивает несколько системных сообщений в одно для строгих провайдеров.",
   },
+  ctxguard: {
+    tags: ["reliability", "context"],
+    nameRu: "Защита бюджета контекста",
+    descEn: "Stops a single turn from outgrowing the model's context window. A 'read every chapter / all files' task loads the whole corpus into one context, and past the device's memory budget the model server crashes mid-answer ('the model has crashed … Exit code: null'). Near the window it tells the agent to summarise what it has read and drop the raw text; on a bulk-read request it steers to reading in batches with a running summary. Idle on normal turns, so it costs nothing until the context is genuinely large.",
+    descRu: "Не даёт одному ходу перерасти контекстное окно модели. Задача «прочти все главы / все файлы» грузит весь корпус в один контекст, и за пределом памяти устройства сервер модели падает посреди ответа («модель упала … Exit code: null»). У границы окна велит агенту сжать прочитанное в сводку и выкинуть сырой текст; на запрос «прочитать всё» направляет читать порциями с накопительной сводкой. На обычных ходах бездействует — ничего не стоит, пока контекст не стал по-настоящему большим.",
+  },
   ops: {
     tags: ["ops"],
     nameRu: "Планировщик и операции",

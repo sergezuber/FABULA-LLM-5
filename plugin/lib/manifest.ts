@@ -112,6 +112,11 @@ export const MANIFEST: PluginMeta[] = [
     deps: [...NPM_BUNDLED],
   },
   {
+    id: "ctxguard", file: "fabula-ctxguard.ts", name: "Context-budget guard", core: true, defaultEnabled: true,
+    description: "Keeps a single turn from ballooning past the socket's window: a 'read all chapters / every file' task loads the whole corpus into one context, and any model on any backend has a finite device KV-cache budget — past it the serving process runs out of memory and dies mid-generation (the red 'model crashed … Exit code: null'). A messages.transform hook estimates the accumulated context and, at a high-water mark, plants a consolidate-and-shed directive; on an unbounded bulk-read ask (EN+RU) it steers to bounded batches with a running summary from the start. INERT below the high-water mark, so ordinary turns are byte-identical and pay nothing. Kill-switch: FABULA_CTX_GUARD=0; knobs FABULA_CONTEXT_WINDOW / FABULA_CTX_HIGH_WATER.",
+    tools: [], deps: [...NPM_BUNDLED],
+  },
+  {
     id: "ops", file: "fabula-ops.ts", name: "Scheduling & ops", defaultEnabled: true,
     description: "Recurring/one-off jobs via launchd, a run-ledger with overdue detection, notifications.",
     tools: ["schedule_task", "list_scheduled", "cancel_scheduled", "send_notification"],

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.2.5"
+export const FABULA_VERSION = "0.2.6"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.2.6",
+    date: "2026-07-20",
+    items: [
+      {
+        ru: "Модель больше не думает, что сегодня другой день. В системном промте была ЗАШИТА дата, и модель верила ей — поэтому «новости за сегодня» она привязывала к дате недельной давности (и, не имея доступа к сети без веб-поиска, попросту их выдумывала). Теперь актуальная дата вычисляется на КАЖДОМ ходу и подаётся модели как единственно верная, а зашитая дата из промта убрана. Плюс: список плагинов в статус-панели теперь прокручивается, а при наведении показывает имя и назначение плагина, а не путь к файлу.",
+        en: "The model no longer thinks today is a different day. The system prompt had a HARDCODED date and the model believed it — so \"today's news\" was anchored to a date weeks in the past (and, with no network access short of web search, it simply made the news up). The current date is now computed on EVERY turn and given to the model as authoritative, and the baked-in date is removed from the prompt. Also: the plugin list in the status panel now scrolls, and hovering a plugin shows its name and what it does rather than a file path.",
+      },
+    ],
+  },
   {
     version: "0.2.5",
     date: "2026-07-20",

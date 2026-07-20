@@ -106,6 +106,19 @@ export const FabulaContext: Plugin = async (input: any) => {
   return {
     "experimental.chat.system.transform": async (_i: any, output: any) => {
       if (!output || !Array.isArray(output.system)) return
+      // THE CURRENT DATE, computed at turn time — not baked into the prompt file. A hardcoded date in
+      // system-prompt.md ("Tuesday, June 09, 2026") made the model believe that was today, so a request
+      // for "today's news" was anchored to a date weeks in the past. Whatever a static prompt says, this
+      // line is authoritative and correct every day, because it is evaluated now.
+      try {
+        const now = new Date()
+        const human = now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })
+        const iso = now.toISOString().slice(0, 10)
+        output.system.push(
+          `[FABULA] The current date is ${human} (${iso}). This is authoritative — ignore any other "current date" stated elsewhere in this prompt. ` +
+            `For anything that could have changed since your training cutoff — news, prices, releases, "today"/"latest" — use the web search tool rather than answering from memory, and never present a remembered or guessed date as today's.`,
+        )
+      } catch { /* never break a turn over the date line */ }
       try {
         const facts = await gather(dir, Date.now())
         const block = formatProjectContext(facts)

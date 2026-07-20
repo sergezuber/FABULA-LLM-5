@@ -6,7 +6,7 @@ import { Tabs } from "@mimo-ai/ui/tabs"
 import { useMutation } from "@tanstack/solid-query"
 import { showToast } from "@mimo-ai/ui/toast"
 import { useNavigate } from "@solidjs/router"
-import { type Accessor, createEffect, createMemo, For, type JSXElement, onCleanup, Show } from "solid-js"
+import { type Accessor, createEffect, createMemo, createResource, For, type JSXElement, onCleanup, Show } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
 import { useLanguage } from "@/context/language"
@@ -17,6 +17,17 @@ import { useSync } from "@/context/sync"
 import { useCheckServerHealth, type ServerHealth } from "@/utils/server-health"
 
 const pollMs = 10_000
+
+/** One plugin as the /global/fabula/plugins route describes it — the SAME enriched shape the Settings
+ *  page uses, so a human name and a plain-language description exist here rather than a bare file path. */
+type PluginInfo = { id: string; file: string; name?: string; nameRu?: string; desc?: string; descRu?: string; tags?: string[] }
+
+async function fetchPluginInfo(): Promise<PluginInfo[]> {
+  const res = await fetch("/global/fabula/plugins").catch(() => undefined)
+  if (!res?.ok) return []
+  const body = (await res.json().catch(() => undefined)) as { plugins?: PluginInfo[] } | undefined
+  return body?.plugins ?? []
+}
 
 const pluginEmptyMessage = (value: string, file: string): JSXElement => {
   const parts = value.split(file)
@@ -242,7 +253,22 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   const plugins = createMemo(() =>
     (sync.data.config.plugin ?? []).map((item) => (typeof item === "string" ? item : item[0])),
   )
-  const pluginCount = createMemo(() => plugins().length)
+  // Enriched plugin metadata (name + plain-language description), fetched once from the same route the
+  // Settings page uses. Falls back to the raw config list if the route is unreachable, so the panel is
+  // never emptier than it was before.
+  const [pluginInfo] = createResource(fetchPluginInfo)
+  // Same RU check the Settings page uses — the html lang attribute, not an invented accessor.
+  const ru = () => document.documentElement.lang.startsWith("ru")
+  const cleanId = (raw: string) => raw.replace(/^.*\//, "").replace(/^fabula-/, "").replace(/\.ts$/, "")
+  const enrichedPlugins = createMemo<PluginInfo[]>(() => {
+    const info = pluginInfo() ?? []
+    if (info.length) return [...info].sort((a, b) => cleanId(a.id).localeCompare(cleanId(b.id)))
+    // route not ready — show the raw list rather than nothing, with the id doing double duty as the name
+    return plugins().map((p) => ({ id: cleanId(p), file: p }))
+  })
+  const pluginName = (row: PluginInfo) => (ru() ? (row.nameRu ?? row.name) : (row.name ?? row.nameRu)) ?? cleanId(row.id)
+  const pluginDesc = (row: PluginInfo) => (ru() ? (row.descRu ?? row.desc) : (row.desc ?? row.descRu)) ?? ""
+  const pluginCount = createMemo(() => (pluginInfo()?.length || plugins().length))
   const pluginEmpty = createMemo(() => pluginEmptyMessage(language.t("dialog.plugins.empty"), "opencode.json"))
 
   return (
@@ -422,16 +448,31 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
 
         <Tabs.Content value="plugins">
           <div class="flex flex-col px-2 pb-2">
-            <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
+            {/* Bounded height + a visible scrollbar: the list is 34 rows and used to be clipped with no
+                way to reach the ones below the fold. */}
+            <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14 max-h-80 overflow-y-auto fabula-scrollbar">
               <Show
-                when={plugins().length > 0}
+                when={enrichedPlugins().length > 0}
                 fallback={<div class="text-14-regular text-text-base text-center my-auto">{pluginEmpty()}</div>}
               >
-                <For each={plugins()}>
+                <For each={enrichedPlugins()}>
                   {(plugin) => (
-                    <div class="flex items-center gap-2 w-full px-2 py-1">
-                      <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
-                      <span class="text-14-regular text-text-base truncate">{plugin}</span>
+                    // The whole row carries a native title so hovering explains WHAT the plugin is and
+                    // WHAT it does, instead of the file:// path that said nothing a user could act on.
+                    <div
+                      class="flex flex-col gap-0.5 w-full px-2 py-1.5 rounded-sm hover:bg-surface-raised-base"
+                      title={pluginDesc(plugin) ? `${pluginName(plugin)} — ${pluginDesc(plugin)}` : pluginName(plugin)}
+                    >
+                      <div class="flex items-center gap-2 w-full">
+                        <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
+                        <span class="text-14-regular text-text-base truncate">{pluginName(plugin)}</span>
+                        <Show when={plugin.tags?.length}>
+                          <span class="text-11-regular text-text-muted shrink-0 ml-auto">{plugin.tags!.slice(0, 2).join(" · ")}</span>
+                        </Show>
+                      </div>
+                      <Show when={pluginDesc(plugin)}>
+                        <span class="text-11-regular text-text-muted line-clamp-1 pl-3.5">{pluginDesc(plugin)}</span>
+                      </Show>
                     </div>
                   )}
                 </For>

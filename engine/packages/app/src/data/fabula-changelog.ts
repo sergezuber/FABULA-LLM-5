@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.2.4"
+export const FABULA_VERSION = "0.2.5"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.2.5",
+    date: "2026-07-20",
+    items: [
+      {
+        ru: "Чек о выполненной работе перестал утверждать больше, чем проверяет. Он всегда делал два очень разных заявления: «код проходит свои тесты» — это ДОРОГО подделать, и это всегда по-настоящему перепроверялось прогоном патча в одноразовом дереве; и «работала вот эта модель, вот эти веса, вот такой контекст» — это ПОДДЕЛАТЬ ДЁШЕВО, и это просто печаталось обратно из того же файла, который проверка должна была проверять. То есть проверялась трудная половина, а лёгкая возвращалась эхом, и в выводе они выглядели одинаково. Теперь каждое утверждение о личности попадает ровно в одно из трёх состояний и называет его: перепроверено здесь, здесь непроверяемо, либо НЕСОВПАДЕНИЕ. Несовпадение валит утверждение о личности, но никогда — о работе: пересчёт доказывает, что стоит на ЭТОЙ машине сейчас, поэтому проверяющий на другой машине честно говорит «здесь проверить нельзя», а не «твоя работа не доказана». Самое дешёвое противоречие — когда хеш дескриптора не совпадает с дескриптором, напечатанным рядом, — ловится вообще без сети, кем угодно и навсегда. Плюс: если строгая проверка воспроизводимости не отработала и деградировала до мягкой, чек теперь ОБ ЭТОМ ГОВОРИТ, а отсутствие вердикта печатается как «неизвестно», а не как зелёный. Отключается переменной FABULA_RECHECK=0, возвращающей прежний вывод байт-в-байт.",
+        en: "The Proof-of-Done receipt stopped asserting more than it checks. It always made two very different claims: 'the code passes its tests' — EXPENSIVE to forge, and always genuinely re-run by replaying the patch in a throwaway worktree; and 'this model, these weights, this context' — CHEAP to forge, and simply printed back out of the very file the verification was meant to be checking. The hard half was verified and the easy half was echoed, and in the output they looked the same. Now every identity claim lands in exactly one of three states and names it: re-verified here, not checkable here, or MISMATCH. A mismatch fails the identity claim and never the work claim: recomputing proves what THIS machine serves now, so a verifier elsewhere honestly says 'I cannot check this here' rather than 'your work is unproven'. The cheapest contradiction of all — a descriptor hash that does not match the descriptor printed beside it — is detectable with no network, by anyone, forever. Also: when the strict reproduce probe could not run and degraded to the permissive fallback, the receipt now SAYS SO, and an absent verdict prints as unknown rather than as a pass. FABULA_RECHECK=0 restores the previous output byte-for-byte.",
+      },
+    ],
+  },
   {
     version: "0.2.4",
     date: "2026-07-20",

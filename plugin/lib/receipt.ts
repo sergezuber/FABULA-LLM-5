@@ -12,6 +12,21 @@ import { classifyPath } from "./reprogate"
 
 export type Host = "local" | "cloud" | "unknown"
 
+/** The reproduce gate's OWN verdict, carried verbatim into the artifact.
+ *
+ *  `lib/reprogate.ts` produces an exact vocabulary — validated / fake (passes on base) / post-fails /
+ *  sibling-failed / not-validated(<reason>) — and no receipt module read a word of it, so a receipt
+ *  minted after the strict probe degraded to its permissive fallback was byte-indistinguishable from one
+ *  where the probe ran and passed. ABSENCE is its own state and is never a pass: hook order here is a
+ *  glob scan, so the receipt can mint before the gate has stamped anything. */
+export interface GateProof {
+  /** validated | degraded | failed | unknown */
+  claim: string
+  /** the raw mark, kept so an auditor reads what the gate actually said, not a paraphrase */
+  mark?: string
+  reason: string
+}
+
 export interface GateRecord {
   /** protocol gate id — verify | reproduce | comprehension | auto-rewind | loop-guard | second-opinion */
   id: string
@@ -79,6 +94,8 @@ export interface Receipt {
   /** git HEAD at mint time — the deterministic base the patch applies to (absent outside a git repo) */
   base?: string
   gates: GateRecord[]
+  /** what the reproduce gate itself concluded — absent means it never spoke */
+  gateProof?: GateProof
   artifact: ReceiptArtifact
   verification: ReceiptVerification
   /** one command a third party runs to re-verify the artifact deterministically */
@@ -182,6 +199,8 @@ export function recordTask(state: ReceiptState, text: string): void {
 
 // ── assembly ───────────────────────────────────────────────────────────────
 export interface BuildInput {
+  /** the reproduce gate's own verdict, when it recorded one */
+  gateProof?: GateProof
   state: ReceiptState
   verify: ReceiptVerification
   diff: string
@@ -216,6 +235,7 @@ export function buildReceipt(inp: BuildInput): Receipt {
     gates,
     artifact: { kind: "git-diff", files, bytes: byteLen(diff), patch: patchPath, truncated: truncated || undefined },
     verification: verify,
+    ...(inp.gateProof ? { gateProof: inp.gateProof } : {}),
     replay: buildReplay(workdir, verify.cmd, patchPath, base, mintedAt, verify.cwd),
     ...(provenance ? { provenance } : {}),
   }
@@ -275,6 +295,13 @@ const HOST_LABEL: Record<Host, string> = { local: "local", cloud: "cloud", unkno
 
 export function renderReceiptMarkdown(r: Receipt): string {
   const when = r.mintedAt ? new Date(r.mintedAt).toISOString() : "(time unavailable)"
+  // Every identity claim this document makes is ASSERTED by the run that minted it — this file is written
+  // at mint time, on the producing machine, and nothing here re-derives anything. Saying so beside each
+  // claim is the difference between a record and a proof. The gate verdict made it into this artifact
+  // while the identity states did not, and that asymmetry is exactly the fourth, unstated category the
+  // wave exists to remove: a reader met `weights digest: … (2 files, 3.00 GB actually hashed)` — a
+  // sentence asserting a measurement — with nothing to say whether anyone had checked it.
+  const ASSERTED = " — asserted by this run, not checkable here (re-derive it with `verify_receipt`)"
   const verdict = r.verification.passed ? "VERIFIED" : "NOT DONE"
   const lines: string[] = []
   lines.push(`# FABULA receipt — ${verdict}`)
@@ -288,6 +315,24 @@ export function renderReceiptMarkdown(r: Receipt): string {
   lines.push("")
   lines.push(`## Gates that fired`)
   for (const g of r.gates) lines.push(`- **${g.id}** — ${g.forced}`)
+  // The reproduce gate's OWN verdict, in its own words. A degraded probe must READ as weaker than a
+  // validated one to someone skimming — carrying the mark into the JSON while the rendered artifact
+  // stayed silent would satisfy the letter and lose the entire point, since the rendered form is what a
+  // reader actually meets. Absence renders as UNKNOWN and never as a pass.
+  // Read plainly, in this file, on purpose: a switch that only exists inside a helper is a switch nobody
+  // auditing THIS surface can find. `FABULA_RECHECK=0` restores the pre-W8 rendering byte-for-byte.
+  const w8 = String(process.env.FABULA_RECHECK ?? "1").trim() !== "0"
+  if (!w8) {
+    // pre-W8 output, byte-for-byte: no gate line at all
+  } else if (r.gateProof) {
+    const mark = r.gateProof.claim === "validated" ? "✅" : r.gateProof.claim === "failed" ? "❌" : "⚠️"
+    lines.push(`- ${mark} **reproduce probe:** ${r.gateProof.reason}${r.gateProof.mark ? ` \`${r.gateProof.mark}\`` : ""}`)
+  } else if (w8) {
+    lines.push(
+      `- ⚠️ **reproduce probe:** NO verdict was recorded for this run — this receipt cannot say whether the ` +
+        `fail-to-pass probe ran. Absence of a mark is not a pass.`,
+    )
+  }
   lines.push("")
   lines.push(`## Artifact`)
   lines.push(`- git diff · ${r.artifact.files} file(s) · ${r.artifact.bytes} bytes${r.artifact.patch ? ` · \`${r.artifact.patch}\`` : ""}`)
@@ -303,24 +348,29 @@ export function renderReceiptMarkdown(r: Receipt): string {
   lines.push("")
   if (r.provenance) {
     lines.push(`## Context provenance`)
-    lines.push(`- **prefix:** \`${r.provenance.bundlePrefixHash.slice(0, 16)}\` (system \`${r.provenance.systemHash.slice(0, 8)}\` · tools \`${r.provenance.toolsHash.slice(0, 8)}\` · ${r.provenance.toolCount} tools)`)
-    if (r.provenance.inputHash) lines.push(`- **input:** \`${r.provenance.inputHash.slice(0, 16)}\` (sha256 of the user-turn request text)`)
+    // Guarded per-field. The block checked only that `provenance` EXISTS and then reached straight into
+    // `bundlePrefixHash.slice(...)`, so a receipt carrying any partial provenance — a model descriptor
+    // without a prefix, say — threw while being RENDERED. Minting is the last step of a verified run, so
+    // the crash would land after the work was already done and lose the artifact that proves it.
+    if (r.provenance.bundlePrefixHash)
+    lines.push(`- **prefix:** \`${r.provenance.bundlePrefixHash.slice(0, 16)}\` (system \`${(r.provenance.systemHash ?? "").slice(0, 8)}\` · tools \`${(r.provenance.toolsHash ?? "").slice(0, 8)}\` · ${r.provenance.toolCount} tools)${w8 ? ASSERTED : ""}`)
+    if (r.provenance.inputHash) lines.push(`- **input:** \`${r.provenance.inputHash.slice(0, 16)}\` (sha256 of the user-turn request text)${w8 ? ASSERTED : ""}`)
     if (r.provenance.modelDescriptorHash) {
       const d = r.provenance.modelDescriptor
       const detail = d ? ` (${[d.arch, d.quantization, d.publisher].filter(Boolean).join(" · ")})` : ""
-      lines.push(`- **model descriptor:** \`${r.provenance.modelDescriptorHash.slice(0, 16)}\`${detail} — serving build/quant, not a weights hash`)
+      lines.push(`- **model descriptor:** \`${r.provenance.modelDescriptorHash.slice(0, 16)}\`${detail} — serving build/quant, not a weights hash${w8 ? ASSERTED : ""}`)
     }
     if (r.provenance.weightsDigest)
       lines.push(
-        `- **weights digest:** \`${r.provenance.weightsDigest.digest.slice(0, 16)}\` (${r.provenance.weightsDigest.files} files, ${(r.provenance.weightsDigest.bytes / 1e9).toFixed(2)} GB actually hashed)`,
+        `- **weights digest:** \`${r.provenance.weightsDigest.digest.slice(0, 16)}\` (${r.provenance.weightsDigest.files} files, ${(r.provenance.weightsDigest.bytes / 1e9).toFixed(2)} GB actually hashed)${w8 ? ASSERTED : ""}`,
       )
-    if (r.provenance.routerProfile) lines.push(`- **router profile:** ${r.provenance.routerProfile}`)
+    if (r.provenance.routerProfile) lines.push(`- **router profile:** ${r.provenance.routerProfile}${w8 ? ASSERTED : ""}`)
     lines.push(`- **engine:** ${r.provenance.engineVersion} · **steps:** ${r.provenance.step}`)
     if (typeof r.provenance.midTurnBreaks === "number")
       lines.push(
         r.provenance.midTurnBreaks === 0
-          ? `- **byte-stability:** held (0 mid-turn prefix changes)`
-          : `- **byte-stability:** ⚠️ ${r.provenance.midTurnBreaks} unplanned mid-turn prefix change(s) — KV-cache breaks`,
+          ? `- **byte-stability:** held (0 mid-turn prefix changes)${w8 ? ASSERTED : ""}`
+          : `- **byte-stability:** ⚠️ ${r.provenance.midTurnBreaks} unplanned mid-turn prefix change(s) — KV-cache breaks${w8 ? ASSERTED : ""}`,
       )
     lines.push("")
   }

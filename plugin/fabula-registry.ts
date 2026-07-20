@@ -1,3 +1,4 @@
+import { recheckIdentity, renderIdentity, recheckEnabled } from "./lib/recheck"
 // FABULA Proof Registry (§ disrupt #1). Turns a LOCAL Proof-of-Done receipt into something the rest
 // of the world can find and re-verify: a content-addressed store keyed by SHA256(patch + verify cmd).
 //
@@ -233,12 +234,45 @@ export const FabulaRegistry: Plugin = async (input: any) => {
           if (patch == null) return `verify_receipt: found the receipt but not its patch (need a sibling patch.diff). id=${receiptId("", r.verification!.cmd!).slice(0, 8)}…`
           const res = replay(projectDir, r, patch)
           if ("error" in res) return `verify_receipt: cannot replay — ${res.error}`
-          const head = res.status === "VERIFIED" ? "✅ VERIFIED" : "❌ NOT DONE"
+          // ── RECOMPUTE the identity, do not echo it ────────────────────────────────────────────
+          // The work above is genuinely re-run. Until W8 the identity beside it was printed straight out
+          // of the very JSON this command exists to check — so the expensive claim was verified and the
+          // cheap, trivially forged one was repeated back in the same breath, with nothing in the output
+          // telling them apart. Every identity claim now lands in exactly one of three states, named.
+          //
+          // A contradiction fails the IDENTITY, never the WORK: recomputing a descriptor proves what is
+          // being served NOW on THIS machine, so a verifier elsewhere can only ever say "not checkable
+          // here". Failing someone's proof because this box serves a different quantisation would be
+          // this command committing the exact overclaim it was built to remove.
+          // Same switch, read plainly on this surface too — `FABULA_RECHECK=0` restores the pre-W8
+          // output of this command byte-for-byte.
+          const w8 = String(process.env.FABULA_RECHECK ?? "1").trim() !== "0" && recheckEnabled()
+          const identity = w8 ? await recheckIdentity(r) : { claims: [], reVerified: 0, notCheckable: 0, contradicted: 0, ok: true, summary: "" }
+          // The header must not OPEN with a verified verdict when an identity claim was contradicted: a
+          // reader skims the first line, and "VERIFIED" anywhere in it is what they take away. The work
+          // result is still reported — on its own line, unchanged — because the tests did pass and saying
+          // otherwise would be the mirror overclaim.
+          const head =
+            identity.contradicted > 0
+              ? "❌ IDENTITY MISMATCH — the recomputed identity does not match this receipt"
+              : res.status === "VERIFIED"
+                ? "✅ VERIFIED"
+                : "❌ NOT DONE"
+          const workLine =
+            identity.contradicted > 0
+              ? `\nwork: the patch replayed and the recorded command ${res.status === "VERIFIED" ? "PASSED" : "FAILED"} — the contradiction above is about WHO/WHAT produced it, not about the tests`
+              : ""
           const prov = (r as { provenance?: { bundlePrefixHash?: string; routerProfile?: string; midTurnBreaks?: number } }).provenance
           const provLine = prov?.bundlePrefixHash
             ? `\ncontext: prefix ${prov.bundlePrefixHash.slice(0, 16)}${prov.routerProfile ? ` · profile ${prov.routerProfile}` : ""}${typeof prov.midTurnBreaks === "number" ? ` · byte-stability ${prov.midTurnBreaks === 0 ? "held" : `BROKEN ×${prov.midTurnBreaks}`}` : ""}`
             : ""
-          return `${head} — ${r.model?.id || "?"} (${r.model?.host || "?"})${trusted ? "" : " · untrusted source"}\ntask: ${(r.task || "").slice(0, 120)}\ncmd: ${r.verification!.cmd}${provLine}\n\n${res.output}`
+          const idLine = w8 ? renderIdentity(identity) : ""
+          const gateLine = !w8
+            ? ""
+            : (r as any).gateProof
+            ? `\ngate: ${(r as any).gateProof.reason}`
+            : `\ngate: NO reproduce-probe verdict recorded in this receipt — it cannot say whether the probe ran (absence is not a pass)`
+          return `${head} — ${r.model?.id || "?"} (${r.model?.host || "?"})${trusted ? "" : " · untrusted source"}\ntask: ${(r.task || "").slice(0, 120)}\ncmd: ${r.verification!.cmd}${provLine}${workLine}${gateLine}${idLine ? `\n\n${idLine}` : ""}\n\n${res.output}`
         },
       }),
 

@@ -1,3 +1,4 @@
+import { gateVerdictOf } from "./lib/recheck"
 // FABULA-LLM-5 — Proof-of-Done receipt (LOCK: done leaves evidence, not a claim). This plugin is a
 // READ-ONLY consumer of the run: it watches passively (model, task, edits, which gates fired), and when
 // a verify_done comes back GREEN and no other gate has downgraded it, it mints a machine-readable
@@ -115,6 +116,16 @@ function writeReceipt(dir: string, mdBody: (patch?: string) => string, jsonBody:
   } catch { return null }
 }
 
+/** The reproduce gate stamps its marks on the verify part's metadata. Read them here so the artifact
+ *  carries what the gate concluded — including that it could not conclude anything. */
+function gateProofFrom(output: any): import("./lib/receipt").GateProof | undefined {
+  const m = output?.metadata || {}
+  const marks = m.marks || m.reproduceMarks || (typeof m.failToPass === "string" ? m : undefined)
+  if (!marks || typeof marks !== "object") return undefined
+  const v = gateVerdictOf(marks)
+  return v.claim === "unknown" && !v.mark ? undefined : { claim: v.claim, mark: v.mark, reason: v.reason }
+}
+
 function verificationFrom(output: any): ReceiptVerification {
   const m = output?.metadata || {}
   const txt = typeof output?.output === "string" ? output.output : ""
@@ -178,8 +189,8 @@ async function mint(dir: string, state: ReceiptState, output: any, sessionID?: s
   const provenance = await enrichedProvenance(sessionID, state)
   const written = writeReceipt(
     dir,
-    (patch) => renderReceiptMarkdown(buildReceipt({ state, verify, diff, workdir: dir, mintedAt, patchPath: patch, base, truncated, provenance })),
-    (patch) => renderReceiptJSON(buildReceipt({ state, verify, diff, workdir: dir, mintedAt, patchPath: patch, base, truncated, provenance })),
+    (patch) => renderReceiptMarkdown(buildReceipt({ state, verify, diff, workdir: dir, mintedAt, patchPath: patch, base, truncated, provenance, gateProof: gateProofFrom(output) })),
+    (patch) => renderReceiptJSON(buildReceipt({ state, verify, diff, workdir: dir, mintedAt, patchPath: patch, base, truncated, provenance, gateProof: gateProofFrom(output) })),
     diff,
     truncated,
   )

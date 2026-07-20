@@ -70,11 +70,48 @@ _PREFIX_LOCK = threading.Lock()
 # degenerate setting must be the SAFE one); a wait longer than the budget ADMITS anyway (fail-open) —
 # a gate that blocks is worse than no gate, because it would wedge the live app.
 MAX_CONCURRENT_UPSTREAM = int(os.environ.get("FABULA_MAX_CONCURRENT_UPSTREAM", "1") or 1)
-# A queued NON-streaming caller (the goal judge, embeddings, /v1/models) receives no keepalive — there is
-# no SSE frame to send one in — so this ceiling is how long such a caller can sit silent. Keep it short
-# enough that the caller survives it; past the ceiling the gate fails open and the request proceeds.
-ADMIT_WAIT_MAX = float(os.environ.get("FABULA_ADMIT_WAIT_MAX", "60"))
-_ADMISSION = AdmissionGate(MAX_CONCURRENT_UPSTREAM, wait_timeout=ADMIT_WAIT_MAX)
+# How long a queued caller may wait before the gate FAILS OPEN and lets it through. ONE number for every
+# caller was wrong, and measurably so: a STREAMING caller is kept alive by SSE keepalives and can safely
+# wait a long time, while a NON-STREAMING caller (the goal judge, embeddings, /v1/models) sits in total
+# silence and must not. With a single 60s ceiling and ~30s generations, 3 of 5 parallel workflow-graph
+# steps failed open and hit the model together — the gate degrading precisely under the load it exists
+# for. So the ceiling splits by what the caller can survive.
+def _positive(value, fallback):
+    """A ceiling must always be a usable positive number: garbage in the environment falls back rather
+    than disabling the gate or blocking forever."""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return fallback
+    return v if v == v and v > 0 and v != float("inf") else fallback
+
+
+# Resolved at import, like every other knob here, because that is when this process reads its config.
+ADMIT_WAIT_MAX = _positive(os.environ.get("FABULA_ADMIT_WAIT_MAX"), 60.0)                    # silent caller
+ADMIT_WAIT_MAX_STREAM = max(
+    ADMIT_WAIT_MAX, _positive(os.environ.get("FABULA_ADMIT_WAIT_MAX_STREAM"), 300.0)
+)                                                                                            # keepalive-able
+
+
+def admit_wait_max(is_stream=False, env=None):
+    """How long may THIS caller wait for its slot?
+
+    A STREAMING caller receives `: fabula-adapter queued Ns` keepalives while it waits, so a long wait is
+    visible and survivable. A SILENT caller (the goal judge, embeddings, /v1/models) has no such channel:
+    every second it waits is a second it cannot distinguish from a hang, so its ceiling stays exactly
+    where it was before this split and never rises above it.
+
+    One number for both was measurably wrong: with a 60s ceiling and ~30s generations, 3 of 5 parallel
+    workflow-graph steps failed open and hit the model together — the gate degrading precisely under the
+    load it exists for.
+    """
+    if env is None:
+        return ADMIT_WAIT_MAX_STREAM if is_stream else ADMIT_WAIT_MAX
+    silent = _positive(env.get("FABULA_ADMIT_WAIT_MAX"), 60.0)
+    if not is_stream:
+        return silent
+    return max(silent, _positive(env.get("FABULA_ADMIT_WAIT_MAX_STREAM"), 300.0))
+_ADMISSION = AdmissionGate(MAX_CONCURRENT_UPSTREAM, wait_timeout=ADMIT_WAIT_MAX)  # per-caller ceiling passed per acquire
 # W5 measured idle budget: replaces the flat constant once a key has enough evidence of its own.
 _IDLE = IdleBaseline(flat=float(os.environ.get("FABULA_STREAM_IDLE_TIMEOUT", "120")))
 # Kill-switch for the READ-ONLY half (break classification + injection audit). Off = the pre-W5 line,
@@ -425,7 +462,7 @@ class Handler(BaseHTTPRequestHandler):
         # behind a long generation would break the app's health checks for nothing.
         _gated = method == "POST" and ("/chat/completions" in self.path or self.path.rstrip("/").endswith("/completions"))
         if _gated:
-            self._adm = _ADMISSION.acquire(timeout=ADMIT_WAIT_MAX, on_wait=_keepalive)
+            self._adm = _ADMISSION.acquire(timeout=admit_wait_max(is_stream), on_wait=_keepalive)
         else:
             self._adm = None
         self._headers_committed = _ka

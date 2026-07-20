@@ -149,3 +149,53 @@ describe("beltVisible — THE shared visibility decision (М10 byte-parity)", ()
     expect(beltVisible("bash", new Set(), entry)).toBe(true)
   })
 })
+
+describe("the shadow channel is bounded (W6)", () => {
+  // This map hangs off `globalThis` and the server is long-lived, so every session ever routed used to
+  // keep its tool CLOSURES alive for the life of the process.
+  const mk = (id: string) => new Map([["t", { execute: async () => id } as any]])
+  const ids = (n: number, p = "ses_cap_") => Array.from({ length: n }, (_, i) => `${p}${i}`)
+  const cleanup: string[] = []
+  const stash = (id: string) => {
+    cleanup.push(id)
+    stashShadow(id, mk(id))
+  }
+  afterEach(() => {
+    for (const id of cleanup.splice(0)) clearShadow(id)
+  })
+
+  test("older sessions are released once the cap is passed", () => {
+    const all = ids(80)
+    for (const id of all) stash(id)
+    // the newest are resident…
+    expect(shadowFor(all[79]!, "t")).toBeDefined()
+    // …and the oldest have been let go
+    expect(shadowFor(all[0]!, "t")).toBeUndefined()
+  })
+
+  test("the session being written is NEVER the one evicted", () => {
+    // Dropping a live session's entry would silently change its tool prefix mid-run — the byte-parity
+    // break this module exists to avoid.
+    for (const id of ids(80, "ses_live_")) {
+      stash(id)
+      expect(shadowFor(id, "t")).toBeDefined()
+    }
+  })
+
+  test("an ACTIVELY USED session is never evicted in favour of newer idle ones", () => {
+    // "Oldest" must mean least recently USED, not first seen. With insertion order, a session that
+    // re-stashes on every prompt build stayed the oldest key forever and was evicted by the next other
+    // session's write — the one case the eviction promises cannot happen. Measured on the pre-fix order:
+    // dropped once across 60 interleaved stashes; zero times after.
+    const busy = "ses_busy"
+    cleanup.push(busy)
+    for (const id of ids(60, "ses_churn_")) {
+      stashShadow(busy, mk(busy))
+      stash(id)
+      // checked INSIDE the loop: by the end busy has simply been re-stashed, so a final-state assertion
+      // would pass against both orders and prove nothing.
+      expect(shadowFor(busy, "t")).toBeDefined()
+    }
+    expect(shadowFor("ses_churn_0", "t")).toBeUndefined() // the quiet old ones were still released
+  })
+})

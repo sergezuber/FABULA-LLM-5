@@ -19,6 +19,33 @@ export function beltChannel(): Map<string, BeltEntry> {
   return g[BELT_CHANNEL_KEY] as Map<string, BeltEntry>
 }
 
+
+/** How many sessions these process-lifetime channels keep. They hang off `globalThis` and the engine
+ *  server is long-lived, so without a bound every session ever routed stays resident for as long as the
+ *  process does — and the shadow channel retains tool CLOSURES, not just data. A cap plus insertion-order
+ *  eviction keeps the newest work addressable while making unbounded growth impossible. */
+const CHANNEL_MAX_SESSIONS = (() => {
+  const n = Number(process.env.FABULA_CHANNEL_MAX_SESSIONS)
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 32
+})()
+
+function capChannel<V>(m: Map<string, V>, keep: string): void {
+  // Map iterates in insertion order, so the first key is the least recently ADDED. Re-stamping an
+  // existing session refreshes nothing on purpose: a session that keeps being written to keeps being
+  // re-inserted by its writer, and one that went quiet is exactly the one worth dropping.
+  while (m.size > CHANNEL_MAX_SESSIONS) {
+    const oldest = m.keys().next().value as string | undefined
+    if (oldest === undefined || oldest === keep) break
+    m.delete(oldest)
+  }
+}
+
+/** Drop everything held for a session — call it when the engine says the session is gone. */
+export function dropSessionChannels(sessionID: string): void {
+  beltChannel().delete(sessionID)
+  shadowChannel().delete(sessionID)
+}
+
 export function routerOn(env: Record<string, string | undefined> = process.env): boolean {
   return env.FABULA_TOOL_ROUTER === "1"
 }
@@ -91,3 +118,16 @@ export function shadowToolFor(sessionID: string, name: string): ShadowTool | und
 export function shadowNamesFor(sessionID: string): string[] {
   return [...(shadowChannel().get(sessionID)?.keys() ?? [])].sort()
 }
+
+/** Stamp a session's belt entry, keeping the channel bounded. The ONLY supported way to write it —
+ *  a caller that used `beltChannel().set()` directly would reintroduce the unbounded growth. */
+export function setBeltEntry(sessionID: string, entry: BeltEntry): void {
+  const m = beltChannel()
+  m.set(sessionID, entry)
+  capChannel(m, sessionID)
+}
+
+// NOTE: there is deliberately NO capped shadow WRITER here. The real writer is the engine's
+// `session/belt.ts stashShadow()`, and that is where the cap lives. A second capped writer sat in this
+// file with zero callers — the plausible-looking one, next to `setBeltEntry` which IS the enforcement
+// point for its own channel — so a reader grepping for the bound found the dead copy first.

@@ -100,8 +100,38 @@ function shadowChannel(): Map<string, Map<string, ShadowTool>> {
   return g[SHADOW_KEY] as Map<string, Map<string, ShadowTool>>
 }
 
+/** Sessions whose shadow executors stay resident. This map hangs off `globalThis` and the server is
+ *  long-lived, so without a bound every session ever routed keeps its tool CLOSURES alive for as long as
+ *  the process runs. The plugin side added a cap; this is the writer that actually runs on every prompt
+ *  build, and it had none — the cap was real code with no callers. */
+const SHADOW_MAX_SESSIONS = (() => {
+  // An explicitly set 0 means "no cap" — the owner's choice, honoured. Only junk falls back.
+  const raw = (process.env.FABULA_CHANNEL_MAX_SESSIONS ?? "").trim()
+  if (raw === "") return 32
+  const n = Number(raw)
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 32
+})()
+
 export function stashShadow(sessionID: string, tools: Map<string, ShadowTool>): void {
-  shadowChannel().set(sessionID, tools)
+  const m = shadowChannel()
+  // Re-insert so the session being written is always the most RECENT key. A plain `set` leaves an
+  // existing key where it was first inserted, so "oldest" meant FIRST SEEN rather than least recently
+  // used: a long-running session that re-stashes on every prompt build stayed the oldest key forever and
+  // was evicted by the next OTHER session's write — the one case the eviction below promises cannot
+  // happen. Measured on the pre-fix order: the actively-used session was dropped once across 60
+  // interleaved stashes, and zero times after. (It is dropped, not lost — the next build re-stashes it —
+  // so the cost is a lookup miss inside the turn, not permanent loss. The bound itself was never in
+  // question: an interleaved write from any other session still evicts, so nothing grew unbounded.)
+  m.delete(sessionID)
+  m.set(sessionID, tools)
+  // Evict least-recently-stashed first, and never the session being written: dropping a LIVE session's
+  // entry would silently change its tool prefix mid-run, which is the byte-parity break this file exists
+  // to avoid. Only older, quiet sessions are released.
+  while (SHADOW_MAX_SESSIONS > 0 && m.size > SHADOW_MAX_SESSIONS) {
+    const oldest = m.keys().next().value as string | undefined
+    if (oldest === undefined || oldest === sessionID) break
+    m.delete(oldest)
+  }
 }
 
 export function shadowFor(sessionID: string, toolName: string, parentID?: string | null): ShadowTool | undefined {

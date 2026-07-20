@@ -17,7 +17,7 @@
 import { tool } from "@mimo-ai/plugin"
 import { z } from "zod"
 import { gate } from "./lib/manage"
-import { beltChannel, decideBelt, routerOn, shadowNamesFor, shadowToolFor, taskTextFrom } from "./lib/beltwire"
+import { beltChannel, setBeltEntry, decideBelt, routerOn, shadowNamesFor, shadowToolFor, taskTextFrom } from "./lib/beltwire"
 
 // Debug tap (FABULA_ROUTER_DEBUG=1): raw stderr writes bypass any console redirection in the
 // engine's plugin sandbox — the channel that made the silent-hook class debuggable.
@@ -88,7 +88,7 @@ export const FabulaToolRouter = async () => {
         const current = beltChannel().get(sessionID)?.profileId
         const { entry, reason } = decideBelt(text, current)
         if (current === entry.profileId) return // same profile → no-op, prefix bytes unchanged
-        beltChannel().set(sessionID, { ...entry, watermark: input?.messageID })
+        setBeltEntry(sessionID, { ...entry, watermark: input?.messageID })
         console.log(
           `[fabula-toolrouter] session=${String(sessionID).slice(0, 8)} profile=${entry.profileId} (${reason}; hide=${entry.hide.length}+${entry.hideGlobs.length}g)`,
         )

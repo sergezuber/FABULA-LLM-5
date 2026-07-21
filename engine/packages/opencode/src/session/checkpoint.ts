@@ -310,6 +310,13 @@ function composeWriterPrompt(input: {
     "<system-reminder>",
     "You are now operating in checkpoint-writer mode. Ignore the general coding-assistant framing in the system prompt above. The read, write, edit, glob, grep, and task tools are available; do not invoke others.",
     "",
+    "PROJECT FILES ARE BLOCKED FOR YOU. Reading any file outside the four paths below is REFUSED by the",
+    "harness — measured live, a writer that kept retrying project files burned its entire run on refusals",
+    "and never wrote the checkpoint, so the session lost its progress. Do not try even once. Everything",
+    "you need is the conversation transcript you were HANDED and the four files below. Your run has ONE",
+    "purpose: WRITE the checkpoint from that transcript. If the transcript seems thin, write the sections",
+    "you can and keep the rest as they were — a partial checkpoint is progress, an unwritten one is not.",
+    "",
     "========================================================================",
     "ABSOLUTE PATHS — USE THESE VERBATIM. NEVER COMPUTE, INFER, OR MODIFY.",
     "========================================================================",
@@ -884,16 +891,49 @@ export const layer: Layer.Layer<
       // writer settles. Fork into the layer's scope so the watcher survives
       // tryStartCheckpointWriter returning (background: true semantics) but is still tied
       // to the layer's lifetime — no orphan fiber on shutdown.
+      // The watermark may advance ONLY when the checkpoint FILE actually changed. It used to advance on
+      // ANY settle: measured live, six consecutive writers burned their runs on read-guard refusals and
+      // finished with zero writes, each "successful" settle advanced the watermark anyway, and every
+      // transcript slice handed to them was excluded from all future deltas — progress lost forever,
+      // checkpoint frozen at its first state, and five rebuilds in 13 minutes re-commanded the main
+      // agent to start the task over. The signal is the file itself (mtime+size), not the model's word.
+      const checkpointStatBefore = yield* Effect.promise(() =>
+        import("node:fs/promises").then((fs) =>
+          fs.stat(checkpointPath(input.sessionID)).then(
+            (st) => ({ mtimeMs: st.mtimeMs, size: st.size }),
+            () => ({ mtimeMs: 0, size: -1 }),
+          ),
+        ),
+      )
       yield* Effect.gen(function* () {
         const outcome = yield* Deferred.await(result.outcome)
-        yield* Effect.sync(() =>
-          Database.use((d) =>
-            d.update(SessionTable)
-              .set({ last_checkpoint_message_id: endMessageID as MessageID })
-              .where(eq(SessionTable.id, input.sessionID))
-              .run(),
+        const checkpointStatAfter = yield* Effect.promise(() =>
+          import("node:fs/promises").then((fs) =>
+            fs.stat(checkpointPath(input.sessionID)).then(
+              (st) => ({ mtimeMs: st.mtimeMs, size: st.size }),
+              () => ({ mtimeMs: 0, size: -1 }),
+            ),
           ),
         )
+        const checkpointTouched =
+          checkpointStatAfter.mtimeMs > checkpointStatBefore.mtimeMs ||
+          checkpointStatAfter.size !== checkpointStatBefore.size
+        if (outcome.status === "success" && checkpointTouched) {
+          yield* Effect.sync(() =>
+            Database.use((d) =>
+              d.update(SessionTable)
+                .set({ last_checkpoint_message_id: endMessageID as MessageID })
+                .where(eq(SessionTable.id, input.sessionID))
+                .run(),
+            ),
+          )
+        } else {
+          log.warn("writer settled without touching the checkpoint — watermark NOT advanced", {
+            sessionID: input.sessionID,
+            status: outcome.status,
+            checkpointTouched,
+          })
+        }
 
         // F40: capture pending before deleting the slot so a queued writer
         // (held while writer1 was running) can fire as a fresh writer.
@@ -1166,6 +1206,45 @@ export const layer: Layer.Layer<
       lines.push("")
 
       // Section 3: tasks ledger (hierarchical with subtasks).
+      // MEASURED files-read ledger — the harness's own tool history, not the writer's prose. Measured
+      // live: a frozen checkpoint said "next action: read all 29 chapters" while chapters 1-10 had
+      // already been read 3-4 times each; every rebuild re-commanded a full re-read and the session
+      // circled for 20 minutes. The model may distrust a summary; it cannot distrust the ledger of its
+      // own executed calls. Pure DB scan, no model, capped by the same budget style as every section.
+      const readLedger = (() => {
+        const counts = new Map<string, number>()
+        for (const m of MessageV2.page({ sessionID, agentID: "main", limit: 400 }).items) {
+          if (m.info.role !== "assistant") continue
+          for (const part of m.parts) {
+            if (part.type !== "tool") continue
+            const t = (part as { tool?: string }).tool
+            if (t !== "read" && t !== "view") continue
+            const fp = ((part as { state?: { input?: { file_path?: unknown; path?: unknown } } }).state?.input?.file_path ??
+              (part as { state?: { input?: { file_path?: unknown; path?: unknown } } }).state?.input?.path)
+            if (typeof fp === "string" && fp) counts.set(fp, (counts.get(fp) ?? 0) + 1)
+          }
+        }
+        return counts
+      })()
+      if (readLedger.size > 0) {
+        lines.push("## Files ALREADY READ this session (measured from the tool ledger — not a summary)")
+        lines.push(
+          "Do NOT re-read these from scratch: continue with files NOT on this list, and consult notes/checkpoint for what was found in them. Re-open one only to quote something specific.",
+        )
+        let budget = caps.files_read ?? 3000
+        for (const [fp, n] of [...readLedger.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+          const line = `- ${fp}${n > 1 ? ` (×${n})` : ""}`
+          const cost = Token.estimate(line)
+          if (budget - cost < 0) {
+            lines.push(`… and ${readLedger.size} total — list truncated by budget`)
+            break
+          }
+          lines.push(line)
+          budget -= cost
+        }
+        lines.push("")
+      }
+
       lines.push("## Tasks ledger")
       if (tasks.length === 0) {
         lines.push("(none)")

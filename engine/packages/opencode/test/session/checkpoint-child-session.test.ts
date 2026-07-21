@@ -226,9 +226,9 @@ describe("checkpoint writer child-session isolation", () => {
     provideTmpdirInstance(() =>
       Effect.gen(function* () {
         yield* resetSpawnLog
-        // Have actor.spawn resolve outcome immediately so the settle watcher fires.
-        settleNextSuccess.value = true
-
+        // Explicit settlement (T9/T10 pattern): the watermark requires the checkpoint FILE to change
+        // between spawn and settle, so the file write must land BEFORE the outcome settles — an
+        // instant-settle stub races the write and flakes.
         const svc = yield* SessionCheckpoint.Service
         const { info, endMessageID } = yield* seedParentSession()
 
@@ -238,6 +238,20 @@ describe("checkpoint writer child-session isolation", () => {
           promptOps: {} as never,
         })
         expect(outcome).toBe("started")
+
+        // The watermark advances ONLY when the checkpoint FILE actually changed: a settle without a
+        // write used to advance it anyway, and six real writers that burned their runs on refusals
+        // each discarded a transcript slice forever. Simulate the write the settle now requires.
+        const memoryRoot = yield* (yield* Memory.Service).root()
+        yield* Effect.promise(async () => {
+          const fs = await import("node:fs/promises")
+          const path = await import("node:path")
+          const cpDir = path.join(memoryRoot, "sessions", info.id)
+          await fs.mkdir(cpDir, { recursive: true })
+          await fs.writeFile(path.join(cpDir, "checkpoint.md"), "# Session checkpoint\nwritten by T3 fixture\n")
+        })
+        expect(pendingOutcomes.length).toBe(1)
+        yield* Deferred.succeed(pendingOutcomes[0], { status: "success", finalText: "ok" } as AgentOutcome)
 
         // Poll the parent row until the settle watcher (forkIn'd inside the
         // layer's scope) advances last_checkpoint_message_id. The watcher runs
@@ -387,16 +401,18 @@ describe("checkpoint writer child-session isolation", () => {
         expect(r2).toBe("started")
         expect(spawnLog.count).toBe(2)
 
-        // Sanity: the parent's last_checkpoint_message_id was advanced by the
-        // settle watcher even on failure (current behavior — bookkeeping is
-        // unconditional in checkpoint.ts:801-808). Asserted here so a future
-        // change to gate the update on success would surface as a test diff.
+        // The bookkeeping is now GATED, and this is the assertion the old comment predicted would
+        // surface: a FAILED writer must NOT advance the watermark. Measured live before the gate: six
+        // writers burned their runs on read-guard refusals with zero writes, each settle advanced the
+        // watermark anyway, every transcript slice handed to them was excluded from all future deltas,
+        // the checkpoint froze at its first state, and five rebuilds re-commanded the main agent to
+        // restart the task — circular reading of chapters 1-10.
         const parentRow = yield* Effect.sync(() =>
           Database.use((d) =>
             d.select().from(SessionTable).where(eq(SessionTable.id, info.id)).get(),
           ),
         )
-        expect(parentRow?.last_checkpoint_message_id).toBe(endMessageID)
+        expect(parentRow?.last_checkpoint_message_id ?? null).toBe(null)
       }),
       { config: { checkpoint: { fork: true } } },
     ),

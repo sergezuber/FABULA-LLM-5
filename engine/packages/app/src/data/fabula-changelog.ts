@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.3.3"
+export const FABULA_VERSION = "0.3.4"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.3.4",
+    date: "2026-07-21",
+    items: [
+      {
+        ru: "Длинная задача перестала ходить по кругу, перечитывая одни и те же главы. По логам: сохранитель состояния, лишённый доступа к файлам проекта, сжигал свои попытки об отказы и завершался БЕЗ записи — но каждое его завершение всё равно сдвигало отметку «этот кусок разговора уже сохранён», навсегда выбрасывая несохранённый кусок; чекпоинт замирал на первом состоянии («следующий шаг: прочитать все 29 глав»), и каждое восстановление командовало агенту начать чтение заново — главы 1-10 были прочитаны по 3-4 раза. Закрыто тремя правками. (1) Отметка сдвигается ТОЛЬКО если файл чекпоинта реально изменился — сигнал берётся у файловой системы, не у модели. (2) В восстановление добавлен ИЗМЕРЕННЫЙ список уже прочитанных файлов — из журнала выполненных вызовов, которому нельзя не верить, с прямым указанием продолжать с непрочитанных. (3) Сохранителю прямо сказано: файлы проекта заблокированы, не пробуй ни разу, пиши из переданного разговора; частичная запись лучше отсутствующей.",
+        en: "A long task no longer circles re-reading the same chapters. From the logs: the state writer, blocked from project files, burned its attempts on refusals and finished WITHOUT writing — yet every finish still advanced the \"this slice is saved\" watermark, discarding the unsaved slice forever; the checkpoint froze at its first state (\"next step: read all 29 chapters\"), and every rebuild commanded the agent to start reading over — chapters 1-10 were read 3-4 times each. Closed with three repairs. (1) The watermark advances ONLY if the checkpoint file actually changed — the signal comes from the filesystem, not the model. (2) The rebuild now carries a MEASURED list of files already read — from the ledger of executed calls, which cannot be disbelieved, with a direct instruction to continue with unread ones. (3) The writer is told outright: project files are blocked, do not try even once, write from the transcript you were handed; a partial checkpoint beats an unwritten one.",
+      },
+    ],
+  },
   {
     version: "0.3.3",
     date: "2026-07-21",

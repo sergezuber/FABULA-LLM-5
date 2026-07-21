@@ -279,6 +279,10 @@ const InfoSchema = Schema.Struct({
           actor_ledger: Schema.optional(PositiveInt).annotate({
             description: "Token cap for the actor ledger section of rebuild context. Default: 500.",
           }),
+          files_read: Schema.optional(PositiveInt).annotate({
+            description:
+              "Token cap for the measured files-already-read ledger in rebuild context. Default: 3000.",
+          }),
           memory_titles: Schema.optional(PositiveInt).annotate({
             description: "Token cap for memory titles in rebuild context. Default: 500.",
           }),

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.3.0"
+export const FABULA_VERSION = "0.3.1"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.3.1",
+    date: "2026-07-21",
+    items: [
+      {
+        ru: "Долгие ходы перестали заново пересчитывать сотни килобайт промпта. Замер на живой сессии: переиспользование кэша застыло на 34-37%, около 430 КБ пересчитывались на каждом шаге, и холодные пересчёты затягивались настолько, что сторож обрывал здоровые ответы. Корень: два служебных напоминания («контекст заполняется» и «шаги повторяются») подмешивались к раннему сообщению истории только в памяти — на одних ходах они есть, на других нет, — и каждое мигание меняло байты в начале истории, обесценивая кэш всего, что после. Теперь напоминание записывается в историю насовсем: один сдвиг кэша при появлении и ноль после; его текст больше не меняется от хода к ходу. Попутно закрыт второй способ того же класса: адаптер читал часть настроек до загрузки .env, из-за чего эти настройки молча игнорировались; порядок исправлен. Проверено на стенде: последовательные ходы теперь переиспользуют 100% префикса.",
+        en: "Long turns stopped recomputing hundreds of kilobytes of prompt. Measured live: cache reuse was frozen at 34-37%, about 430 KB re-computed on every step, and cold recomputes ran long enough that the watchdog cut healthy responses. Root cause: two service reminders (\"context is filling up\" and \"steps are repeating\") were attached to an EARLY message of the history in memory only — present on some turns, absent on others — and every flicker changed bytes near the start of history, invalidating the cache of everything after. The reminder is now written into history permanently: one cache shift when it appears and none after; its wording no longer varies between turns. A second door of the same class was closed alongside: the adapter read some settings before loading .env, so those settings were silently ignored; the order is corrected. Verified on the rig: consecutive turns now reuse 100% of the prefix.",
+      },
+    ],
+  },
   {
     version: "0.3.0",
     date: "2026-07-21",

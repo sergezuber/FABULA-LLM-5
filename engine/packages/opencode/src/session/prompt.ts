@@ -2964,13 +2964,23 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             const cfg = yield* config.get()
             const pressure = pressureLevel({ cfg, tokens: lastFinished.tokens, model })
             if (pressure >= 2) {
-              // Inject nudge as a synthetic text part on the last user message
+              // Inject the nudge as a PERSISTED synthetic part on the last user message. It used to be an
+              // in-memory push: present on builds where the trigger held, gone when it did not — and in an
+              // agent session the last REAL user message sits near the START of history, so every toggle
+              // changed bytes there and re-prefilled everything after it. Measured live: the shared prefix
+              // froze at 221,838 bytes across nine consecutive requests while the prompt grew to 650KB —
+              // ~430KB re-prefilled per step, reuse stuck at 34-37%. Persisting makes the reminder
+              // immutable history (exactly how loop-guard steers already live in tool results): one
+              // prefix change when it first fires, byte-stable forever after. The wording is also fixed:
+              // it previously flipped between ">70%" and ">85%" with pressure — two different byte
+              // strings in the same slot; the dedupe key ("Context is filling up") now matches the whole
+              // message, so the first firing is the only firing per user turn.
               const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
               if (
                 lastUserMsg &&
                 !lastUserMsg.parts.some((p) => p.type === "text" && p.text?.includes("Context is filling up"))
               ) {
-                lastUserMsg.parts.push({
+                const nudge = yield* sessions.updatePart({
                   id: PartID.ascending(),
                   messageID: lastUserMsg.info.id,
                   sessionID,
@@ -2978,12 +2988,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   synthetic: true,
                   text: [
                     "<system-reminder>",
-                    `Context is filling up (${pressure >= 3 ? ">85%" : ">70%"}).`,
+                    "Context is filling up.",
                     "If you have important learnings or decisions from this session,",
                     "consider writing them to memory now before context may be reset.",
                     "</system-reminder>",
                   ].join("\n"),
                 })
+                lastUserMsg.parts.push(nudge)
               }
             }
           }
@@ -3006,6 +3017,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               recentSignatures.length === REPEATED_STEP_THRESHOLD &&
               recentSignatures.every((sig) => sig === recentSignatures[0])
             if (repeating) {
+              // PERSISTED for the same reason as the memory-flush nudge above: an in-memory push toggled
+              // with the repetition detector — present on a repeating build, gone the moment one step
+              // differed — flipping bytes at a message near the START of history and re-prefilling
+              // everything after it on every toggle. Persisting turns it into immutable history: one
+              // prefix change when it first fires, none after; a later REAL user message re-arms it.
               const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
               if (
                 lastUserMsg &&
@@ -3013,7 +3029,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   (p) => p.type === "text" && p.text?.includes("repeating the same action"),
                 )
               ) {
-                lastUserMsg.parts.push({
+                const nudge = yield* sessions.updatePart({
                   id: PartID.ascending(),
                   messageID: lastUserMsg.info.id,
                   sessionID,
@@ -3029,6 +3045,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                     "</system-reminder>",
                   ].join("\n"),
                 })
+                lastUserMsg.parts.push(nudge)
               }
             }
           }

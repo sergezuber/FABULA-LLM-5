@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.3.8"
+export const FABULA_VERSION = "0.3.9"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.3.9",
+    date: "2026-07-21",
+    items: [
+      {
+        ru: "Возобновление длинной задачи после перезапуска больше не умирает на одном объявлении плана. Раньше ход без вызова инструментов считался «разговором» и его остановка чтилась без проверки; теперь признак задачи — свойство всей сессии (в окне есть работа инструментами или граница восстановления), и остановка такого хода всегда проходит через судью завершённости. Беседы без следов задачи в окне завершаются сразу, как раньше; в сессии с задачей остановка стоит одну ограниченную проверку.",
+        en: "Resuming a long task after a restart no longer dies at a single plan announcement. A turn that called no tools used to count as a 'conversation' and its stop was honored unchecked; task-ness is now a property of the whole session (tool work or a recovery boundary anywhere in the window), so such a stop always reaches the completion judge. Conversations with no task traces in the window still end immediately; in a task session a stop costs one bounded check.",
+      },
+    ],
+  },
   {
     version: "0.3.8",
     date: "2026-07-21",

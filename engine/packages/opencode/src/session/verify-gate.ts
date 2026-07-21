@@ -159,6 +159,28 @@ export function turnMadeToolCalls(messages: readonly ScanMessage[]): boolean {
   return false
 }
 
+/**
+ * Does the WINDOW carry evidence that a task ran in this session? Two structural witnesses, no
+ * language analysis: an assistant turn that called tools (work happened), or a rebuild/checkpoint
+ * boundary on a user message (which only exists because the harness was preserving a task in
+ * flight — the same part `postCompactionStall` keys on). Session-scoped on purpose: measured
+ * 2026-07-21 (ses_079ede1e4ffe…), an app restart mid book-analysis + «продолжай» produced a
+ * text-only plan announcement; the TURN was tool-free, so the turn-scoped test classified a task
+ * session as a conversation and the stop-layer honored the stop without consulting the judge.
+ *
+ * Honest scope of the checkpoint witness: the rebuild boundary is TOKEN-threshold-driven, so a very
+ * long pure conversation that crosses it is reclassified as a task session for the rest of its life —
+ * its stops then cost one bounded judge call each (auto cap, comparative framing). Accepted: the cost
+ * of a spurious judge call is seconds; the cost of the missing one was a silently dead long task.
+ */
+export function sessionShowsTaskEvidence(messages: readonly ScanMessage[]): boolean {
+  return messages.some((m) =>
+    m.role === "assistant"
+      ? m.parts.some((p) => p.type === "tool")
+      : m.role === "user" && m.parts.some((p) => p.type === "checkpoint"),
+  )
+}
+
 export function goalStopLayerFires(input: { auto: boolean; messages: readonly ScanMessage[] }): boolean {
   // The short-circuit exists for CONVERSATIONAL turns — the "answers, then loops and cannot stop"
   // failure it was built against was a chat question judged by a same-model judge on a 200k context.
@@ -168,7 +190,16 @@ export function goalStopLayerFires(input: { auto: boolean; messages: readonly Sc
   // row, 2026-07-21). A turn that was actively CALLING TOOLS is not a conversation — it is a task, and
   // a task's stop must reach the judge (which is bounded by MAX_GOAL_REACT and the hard-veto, and whose
   // comparative framing already knows an informational request is satisfied by a direct answer).
-  return input.auto === true && answerIsTerminal(input.messages) && !turnMadeToolCalls(input.messages)
+  // Scope refinement (measured same day, the restart hole): conversation-vs-task is a property of the
+  // SESSION, not of one turn — a tool-free announcement inside a session full of tool work must still
+  // reach the judge, or a restart + «продолжай» dies at a single text-only plan. Both earlier conjuncts
+  // are subsumed today: any current-turn tool part is session evidence (turnMadeToolCalls), and a
+  // non-terminal answer requires an edit TurnEvent, which is itself an assistant tool part
+  // (answerIsTerminal) — so `terminal && !evidence` reduces to `!evidence`. answerIsTerminal is kept
+  // as defense-in-depth: it reads the SAME artifact signal as the force-verify gate, and if turnEvents
+  // ever learns a non-tool edit source the three-factor form stays correct without anyone remembering
+  // this reduction.
+  return input.auto === true && answerIsTerminal(input.messages) && !sessionShowsTaskEvidence(input.messages)
 }
 
 /**

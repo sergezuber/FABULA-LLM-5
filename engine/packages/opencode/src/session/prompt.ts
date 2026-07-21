@@ -4,7 +4,7 @@ import z from "zod"
 import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
 import { classifyAssistantStep } from "./classify"
-import { needsForcedVerify, hasVerifyCommand, goalStopLayerFires, trajectoryFeatures, badDynamicsSignature, postCompactionStall, FORCE_VERIFY_REMINDER, FORCE_VERIFY_NOT_DONE, type ScanMessage } from "./verify-gate"
+import { needsForcedVerify, hasVerifyCommand, goalStopLayerFires, sessionShowsTaskEvidence, trajectoryFeatures, badDynamicsSignature, postCompactionStall, FORCE_VERIFY_REMINDER, FORCE_VERIFY_NOT_DONE, type ScanMessage } from "./verify-gate"
 import { auditEntry, mcpSourceFor, schemaTokenBreakdown, renderBreakdown, type ToolAuditEntry } from "./tool-audit"
 import { beltFor, beltMasks, beltVisible, stashShadow, NEVER_MASK, type ShadowTool } from "./belt"
 import { readdir } from "node:fs/promises"
@@ -2280,6 +2280,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               sid: sessionID,
               auto: active.auto === true,
               stopLayer: goalStopLayerFires({ auto: active.auto === true, messages: scan }),
+              sessTask: sessionShowsTaskEvidence(scan),
             })
             if (goalStopLayerFires({ auto: active.auto === true, messages: scan })) {
               yield* slog.info("goal stop-layer: AUTO goal + no verifiable artifact; answer is terminal; honoring stop", {

@@ -207,7 +207,11 @@ export function Titlebar() {
               sidebar header (no floating overlay); the titlebar shows it only when collapsed. */}
           <Show when={!layout.sidebar.opened()}>
             <TooltipKeybind
-              class={web() ? "hidden xl:flex shrink-0 ml-14" : "hidden xl:flex shrink-0 ml-2"}
+              // md, NOT xl: the desktop sidebar itself renders from md up (`hidden md:block` in
+              // layout.tsx), so its reopen control must exist on the SAME breakpoints. With xl here,
+              // any window between 768 and 1280px could collapse the sidebar (that button lives inside
+              // the panel, ungated) but never expand it back — the only affordance was gone.
+              class={web() ? "hidden md:flex shrink-0 ml-14" : "hidden md:flex shrink-0 ml-2"}
               placement="bottom"
               title={language.t("command.sidebar.toggle")}
               keybind={command.keybind("sidebar.toggle")}

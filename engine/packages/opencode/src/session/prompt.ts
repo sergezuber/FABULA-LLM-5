@@ -3237,8 +3237,35 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               }
             }
 
-            // F39: no checkpoint — fall back to compaction (LLM-driven lossy summary).
-            // Better than mechanical trim: preserves semantic content via summary.
+            // No checkpoint: the harness STILL resets deterministically, without any model. F39 used to
+            // fall back to model compaction here, and the live record of that path is damning: a ~180KB
+            // cold-prefill summarize is MINUTES of silence (looks frozen — measured twice being aborted
+            // by an app restart mid-generation, MessageAbortedError, "Compaction did not finish"), it can
+            // be hijacked by a tool-saturated transcript, and it costs a full model run. The rebuild
+            // boundary is instant, assembled from measured data only (recent asks + the files-read
+            // ledger + tasks), cannot be hijacked and cannot be aborted mid-model-call. Model compaction
+            // remains for the MANUAL /compact and for the last-resort branch below when even the
+            // boundary cannot be produced (e.g. nothing renderable yet).
+            const lastMsgID = msgs.length > 0 ? msgs[msgs.length - 1].info.id : undefined
+            const insertedNoCp = lastMsgID
+              ? yield* checkpoint
+                  .insertRebuildBoundary({
+                    sessionID,
+                    boundary: lastMsgID,
+                    lastMessageInfo: computeLastMessageInfo(msgs.map((m) => m.info)),
+                    agentID: lastUser.agentID,
+                    agent: lastUser.agent,
+                    model: { providerID: model.providerID, modelID: model.id },
+                    boundaryCreatedAt: msgs[msgs.length - 1]?.info.time.created,
+                  })
+                  .pipe(Effect.catch(() => Effect.succeed(false)))
+              : false
+            if (insertedNoCp) {
+              yield* prune.resetThresholds(sessionID)
+              yield* slog.info("overflow with no checkpoint — deterministic rebuild boundary inserted", { sessionID })
+              skipOverflowCheck = true
+              continue
+            }
             yield* compaction
               .create({
                 sessionID,

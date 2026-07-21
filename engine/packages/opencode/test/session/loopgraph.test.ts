@@ -50,7 +50,7 @@ describe("ALDG registry", () => {
   // re-entry constructs forces a human to classify the new one (register it as an edge, or confirm it is
   // ordinary control flow and update the constant). It counts inner-loop `continue`s too — that is the
   // deliberate trade: a noisy tripwire beats a blind spot.
-  const RE_ENTRY_CONSTRUCTS = 43 // 29 bare `continue` + 14 `return "continue" as const` (2026-07-21: +1 post-compaction-stall, +1 compaction-failure-rescue — both REGISTERED in RE_ENTRY_EDGES, each cap 1 by construction)
+  const RE_ENTRY_CONSTRUCTS = 44 // 30 bare `continue` + 14 `return "continue" as const` (2026-07-21: +post-compaction-stall, +compaction-failure-rescue, +overflow-no-checkpoint-rebuild — all REGISTERED in RE_ENTRY_EDGES)
 
   test("no new re-entry construct slipped in unclassified (tripwire)", () => {
     const bare = PROMPT.match(/(?<!["'])\bcontinue\b\s*(?:;|\n)/g)?.length ?? 0

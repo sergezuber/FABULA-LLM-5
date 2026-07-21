@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.3.6"
+export const FABULA_VERSION = "0.3.7"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.3.7",
+    date: "2026-07-21",
+    items: [
+      {
+        ru: "Переполнение контекста больше не запускает минуты молчаливой генерации. Разбор по базе показал: «зависание» на этот раз было долгой модельной сводкой — холодный пересчёт ~180 тысяч знаков это несколько минут тишины, за которые сессию дважды перезапустили, обрывая сводку на лету («Compaction did not finish»). Теперь при переполнении, даже если чекпоинт ещё не успел появиться, обвязка сразу ставит мгновенную границу восстановления из измеренных данных — запрос, журнал прочитанных файлов, задачи; её нельзя ни угнать, ни оборвать посреди генерации, и она ничего не стоит. Модельная сводка осталась для ручного сжатия и как последний резерв. Грань зарегистрирована в реестре циклов. И отдельное правило на будущее: перезапуск приложения посреди работающей задачи обрывает её текущий шаг — новые версии подхватывайте между задачами.",
+        en: "A context overflow no longer launches minutes of silent generation. The database showed this \"freeze\" was a long model summarization — a cold recompute of ~180K characters is several minutes of silence, during which the session was restarted twice, aborting the summary mid-flight (\"Compaction did not finish\"). Now, on overflow, even when no checkpoint exists yet, the harness immediately inserts an instant rebuild boundary assembled from measured data — the ask, the ledger of files read, the tasks; it cannot be hijacked or aborted mid-generation, and it costs nothing. Model summarization remains for manual compaction and as a last resort. The edge is registered in the loop registry. And a rule worth stating: restarting the app mid-task aborts its current step — pick up new versions between tasks.",
+      },
+    ],
+  },
   {
     version: "0.3.6",
     date: "2026-07-21",

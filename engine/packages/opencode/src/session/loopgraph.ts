@@ -180,6 +180,16 @@ export const RE_ENTRY_EDGES: readonly ReEntryEdge[] = [
       "the assistant repeated identical text; an inline recovery block injects a steer and re-enters. Bounded by TEXT_LOOP_MAX_RECOVERY (2)",
   },
   {
+    id: "overflow-no-checkpoint-rebuild",
+    fn: "(inline block — session/prompt.ts overflow router, no-checkpoint branch)",
+    counter: "skipOverflowCheck",
+    cap: 1,
+    capSource:
+      "prompt.ts overflow router: the inserted boundary raises skipOverflowCheck and resets thresholds; the next overflow requires genuinely new growth past a re-derived threshold, and the boundary itself trims the context — the same bound the pre-existing hasCheckpoint rebuild branch has always had",
+    description:
+      "context overflow in a session with NO checkpoint yet: instead of a minutes-long, abortable, hijackable model summarization (measured twice being killed mid-generation by an app restart), the harness inserts the model-free rebuild boundary (measured files-read ledger + recent asks) and continues. Model compaction remains for manual /compact and as last resort when the boundary cannot render",
+  },
+  {
     id: "compaction-failure-rescue",
     fn: "(inline block — session/prompt.ts compact branch, on compaction.process → stop)",
     counter: "compactionRescued",

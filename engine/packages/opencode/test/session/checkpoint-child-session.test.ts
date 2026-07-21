@@ -443,6 +443,23 @@ describe("checkpoint writer child-session isolation", () => {
         //      failure (otherwise the writers.delete race documented in
         //      prune.ts:321-329 would leave the counter un-incremented and
         //      the test flaky).
+        // Establish the session's prompt baseline the way a real session does. Thresholds are measured
+        // against the room ABOVE the constant prompt cost (system + tool schemas), which is re-sent on
+        // every request and says nothing about progress — on the real build that constant alone was
+        // 40,291 tokens against a 131,072 window and crossed the first 20% threshold before any work
+        // existed. A fixture that reports the SAME token count on every call therefore describes a
+        // conversation that never grows, and correctly never crosses anything; real token counts rise
+        // monotonically as context accumulates. This first call carries the prompt cost only, so the
+        // 50,000 below is genuine growth above it. Nothing about the failure-counter behaviour under
+        // test changes.
+        yield* prune.fireCheckpoints({
+          sessionID: info.id,
+          model: fakeModel,
+          tokens: { input: 10_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } } as never,
+          promptOps: {} as never,
+        })
+        expect(spawnLog.count).toBe(0) // the prompt alone must not spawn a writer
+
         for (let attempt = 1; attempt <= 3; attempt++) {
           const before = spawnLog.count
           yield* prune.fireCheckpoints({

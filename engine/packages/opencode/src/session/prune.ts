@@ -89,6 +89,39 @@ export function parseThreshold(s: string, windowSize: number): number {
  * - Throws only when maxAllowed itself is <= 0 (model context too small to
  *   accommodate the safety buffer — no recovery available).
  */
+/**
+ * Re-express window-fraction thresholds as fractions of the space actually AVAILABLE to the conversation.
+ *
+ * Thresholds are percentages of the context window compared against the TURN'S TOTAL tokens — and that
+ * total is dominated by a constant that has nothing to do with how far the conversation has got: the
+ * system prompt plus every tool schema, re-sent on every single request. Measured on this project's own
+ * build: the FIRST assistant turn already costs 40,291 tokens against a 131,072 window, i.e. 30.7% of it,
+ * while the default first threshold is 20% (26,214). So the first checkpoint of EVERY session fired before
+ * any work existed, spawning a full model run to summarise a conversation consisting of one user message.
+ * A threshold crossed by the prompt alone measures the prompt, not progress.
+ *
+ * Subtracting the baseline outright is the obvious move and it is WRONG: the last threshold would land at
+ * baseline + 0.8·window = 145,148 on the numbers above, i.e. PAST the window, so the final save — the one
+ * that exists to rescue state before overflow — would fire after the overflow it guards against. Instead
+ * each threshold keeps its meaning as a fraction and is mapped into the region above the baseline, so 20%
+ * means "a fifth of the room the conversation actually has" and 80% still lands safely inside the window
+ * (112,916 of 131,072 on the same numbers).
+ *
+ * `baseline` is MEASURED per session — the smallest total ever observed there, which is the irreducible
+ * cost of the prompt for this model, prompt and tool set. Nothing is tuned or assumed: change the prompt,
+ * the model or the belt and it re-derives itself. A baseline at or above the window degrades to the old
+ * absolute thresholds rather than producing nonsense.
+ */
+export function rescaleAboveBaseline(
+  thresholds: readonly number[],
+  windowSize: number,
+  baseline: number,
+): number[] {
+  if (!(windowSize > 0) || !(baseline > 0) || baseline >= windowSize) return [...thresholds]
+  const room = windowSize - baseline
+  return thresholds.map((t) => Math.round(baseline + (t / windowSize) * room))
+}
+
 export function resolveThresholds(raw: readonly string[], windowSize: number, reserved?: number): number[] {
   const effectiveReserved = reserved ?? CHECKPOINT_RESERVED
   const maxAllowed = windowSize - effectiveReserved
@@ -175,6 +208,11 @@ export const layer: Layer.Layer<
     // (and had a checkpoint writer enqueued). Prevents re-firing on the same
     // threshold every turn.
     const crossed = new Map<SessionID, Set<number>>()
+    // Smallest total ever seen for a session = the irreducible prompt cost (system + tool schemas), which
+    // is re-sent every request and says nothing about how far the conversation has got. MEASURED, never
+    // assumed, and self-correcting: a smaller observation lowers it, so a baseline first taken mid-session
+    // (after a restart, say) repairs itself instead of delaying every later checkpoint.
+    const promptBaseline = new Map<SessionID, number>()
     // Per-session signal: the max threshold was just crossed; prompt.ts should
     // trigger discard+rebuild on the next loop iteration.
     const maxCrossed = new Set<SessionID>()
@@ -288,8 +326,8 @@ export const layer: Layer.Layer<
 
       // resolveThresholds throws on invalid config; we let that propagate so
       // the user sees the error fast at the first overflow check.
-      const thresholds = resolveThresholds(raw, windowSize, cfg.checkpoint?.reserved)
-      if (thresholds.length === 0) return
+      const resolved = resolveThresholds(raw, windowSize, cfg.checkpoint?.reserved)
+      if (resolved.length === 0) return
 
       const maxFailures = cfg.checkpoint?.max_writer_failures ?? MAX_WRITER_FAILURES
 
@@ -297,12 +335,24 @@ export const layer: Layer.Layer<
         input.tokens.total ||
         input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write
 
+      // Track the session's irreducible prompt cost, then measure thresholds against the room the
+      // CONVERSATION actually has rather than against a number the prompt alone already exceeds.
+      const seenBaseline = promptBaseline.get(input.sessionID)
+      const baseline = seenBaseline === undefined ? currentTokens : Math.min(seenBaseline, currentTokens)
+      promptBaseline.set(input.sessionID, baseline)
+      const thresholds = rescaleAboveBaseline(resolved, windowSize, baseline)
+
       const already = crossed.get(input.sessionID) ?? new Set<number>()
       const maxThreshold = thresholds[thresholds.length - 1]
 
-      for (const t of thresholds) {
+      // Iterate by INDEX: `already` is keyed by the RESOLVED (baseline-independent) threshold, while the
+      // comparison uses the rescaled one. Keying the set by the rescaled value would let a lowered
+      // baseline shift every key and re-fire checkpoints the session had already taken.
+      for (let i = 0; i < thresholds.length; i++) {
+        const t = thresholds[i]
+        const key = resolved[i]
         if (currentTokens < t) break // sorted ascending; nothing more to trigger
-        if (already.has(t)) continue
+        if (already.has(key)) continue
 
         const outcome = yield* checkpoint
           .tryStartCheckpointWriter({
@@ -353,7 +403,7 @@ export const layer: Layer.Layer<
           }).pipe(Effect.forkDetach)
         }
 
-        already.add(t)
+        already.add(key)
         log.info("checkpoint triggered", { threshold: t, currentTokens })
 
         if (t === maxThreshold) maxCrossed.add(input.sessionID)

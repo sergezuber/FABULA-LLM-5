@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.2.9"
+export const FABULA_VERSION = "0.3.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.3.0",
+    date: "2026-07-21",
+    items: [
+      {
+        ru: "Каждая сессия больше не тратит один полный прогон модели впустую. Чтобы длинный разговор не терялся, обвязка периодически сохраняет его состояние, и моменты сохранения назначались в процентах от объёма памяти модели. Но в этот объём каждый запрос заново входит постоянная часть — описание агента и всех инструментов, — и на этой сборке она одна занимает 40 291 единиц из 131 072, то есть 31%, тогда как первое сохранение назначено на 20%. Порог оказывался пройден ещё до того, как вы что-либо попросили: сохранялся разговор из одного сообщения, и на это уходил целый прогон модели. Теперь проценты отсчитываются от места, реально доступного разговору, а постоянная часть измеряется у самой сессии — поэтому ничего не подкручено под конкретную сборку: смените модель, промпт или набор инструментов, и отсчёт перестроится сам. Последнее сохранение при этом по-прежнему происходит ДО переполнения — простое вычитание сдвинуло бы его за границу памяти и лишило смысла, поэтому сделано иначе.",
+        en: "Every session no longer wastes one full model run on nothing. To keep a long conversation from being lost, the harness periodically saves its state, and the moments to save were set as percentages of the model's memory. But every request re-includes a constant part — the description of the agent and of every tool — and on this build that alone takes 40,291 units out of 131,072, i.e. 31%, while the first save is set at 20%. The threshold was therefore crossed before you had asked for anything: a conversation of one message was saved, and a whole model run went into it. The percentages now count from the room actually available to the conversation, and the constant part is measured from the session itself — so nothing is tuned to one build: change the model, the prompt or the tool set and the count re-derives itself. The final save still happens BEFORE an overflow: plain subtraction would have pushed it past the memory limit and defeated its purpose, so it is done differently.",
+      },
+    ],
+  },
   {
     version: "0.2.9",
     date: "2026-07-21",

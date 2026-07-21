@@ -492,6 +492,16 @@ function selectedOperation(args: any): string | null {
   return null
 }
 
+/** The leading verb of an MCP tool's operation segment: `mcp__github__list_issues` → "list". */
+function mcpOperationVerb(tool: string): string | null {
+  if (typeof tool !== "string" || !tool.startsWith("mcp__")) return null
+  const segments = tool.split("__").filter(Boolean)
+  const last = segments[segments.length - 1]
+  if (!last) return null
+  const head = last.split("_")[0]
+  return head ? head.toLowerCase() : null
+}
+
 export function isIdempotent(tool: string, args?: any): boolean {
   // A MULTIPLEXER decides by its ARGUMENT, not its name. `task` is one: `list` reads, `done` mutates —
   // and because the whole tool sat in the mutating deny-list, its READ operations inherited the write
@@ -502,6 +512,15 @@ export function isIdempotent(tool: string, args?: any): boolean {
   // yet, which is why this asks the ARGUMENT rather than growing a list of tool names.
   const op = selectedOperation(args)
   if (op && READ_OPERATION_VERBS.has(op)) return true
+
+  // Same rule, applied to the operation as expressed in the NAME. An MCP tool spells its operation out
+  // (`mcp__github__list_issues`), and measuring the real tool population in this project's own store shows
+  // MCP tools are essentially the entire unclassified set — the tools neither list knows about, and so the
+  // ones that had no no-progress cover at all. Reading the verb off the name closes that without inventing
+  // a classification for opaque tools or risking a wrong block on someone's integration: it is the same
+  // open vocabulary, and an unfamiliar verb falls through to the unchanged behaviour below.
+  const verb = mcpOperationVerb(tool)
+  if (verb && READ_OPERATION_VERBS.has(verb)) return true
 
   // Everything else keeps the previous classification EXACTLY. In particular a mutating call stays exempt,
   // and that is not an oversight: an identical RESULT proves the agent learned nothing new, but it does

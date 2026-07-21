@@ -56,9 +56,33 @@ describe("no-progress detection is by evidence, not by tool name", () => {
     expect(blocked).toBe(true)
   })
 
-  test("KNOWN LIMIT, asserted rather than implied: a tool with no operation argument is still unprotected", () => {
-    // Not fixed here, and deliberately not bundled: covering opaque unknown tools needs its own evidence
-    // about what blocking them would cost. Pinned so the gap is visible instead of assumed closed.
+  test("an MCP tool's operation is read off its NAME — the real unclassified population", () => {
+    // Measuring this project's own store shows MCP tools are essentially the entire set that neither
+    // list knows about, i.e. the tools that had no cover at all. Their name spells the operation out.
+    const g = new LoopGuard()
+    g.resetTurn(SID)
+    let blocked = false
+    for (let i = 0; i < 12; i++) {
+      if (g.peekBlock(SID, "mcp__github__list_issues", { repo: "x" })) { blocked = true; break }
+      g.observe(SID, "mcp__github__list_issues", { repo: "x" }, "no issues")
+    }
+    expect(blocked).toBe(true)
+  })
+
+  test("CONTROL: an MCP tool whose name is NOT a read verb keeps the old behaviour", () => {
+    // No classification is invented for opaque tools: an unfamiliar verb must never be blocked, or a
+    // legitimate integration that answers identically (\"ok\") on repeated writes would be broken.
+    const g = new LoopGuard()
+    g.resetTurn(SID)
+    for (let i = 0; i < 12; i++) {
+      expect(g.peekBlock(SID, "mcp__tickets__create_ticket", { t: "x" })).toBeNull()
+      g.observe(SID, "mcp__tickets__create_ticket", { t: "x" }, "ok")
+    }
+  })
+
+  test("KNOWN LIMIT, asserted rather than implied: a NON-MCP opaque tool is still unprotected", () => {
+    // Still not guessed at: a bare unknown name carries no operation to read, and blocking it would
+    // need evidence about what that costs. Pinned so the gap stays visible.
     const g = new LoopGuard()
     g.resetTurn(SID)
     for (let i = 0; i < 12; i++) {

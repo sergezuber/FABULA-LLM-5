@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.3.2"
+export const FABULA_VERSION = "0.3.3"
 
 export type ChangelogEntry = {
   version: string
@@ -11,13 +11,19 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    version: "0.3.2",
+    version: "0.3.3",
     date: "2026-07-21",
     items: [
       {
         ru: "Сжатие длинного разговора перестало тихо убивать сессию. Найден точный механизм по живым данным: модель-сводчик, получив транскрипт, полный вызовов инструментов, ПРОДОЛЖАЛА разговор вместо суммирования — печатала вызовы инструментов текстом («Продолжаю чтение глав 7-12» + разметка вызовов), обвязка расценивала это как зацикленный текст и молча завершала сессию, записав этот мусор как сводку. Закрыто с трёх сторон: (1) движок помечает сборку сводчика, и все направляющие подсказки обвязки на ней замолкают — команда «читай дальше порциями» больше не попадает сводчику; (2) детерминированная проверка распознаёт «сводку», содержащую разметку вызовов, и повторяет суммирование один раз с прямой поправкой; (3) если и повтор сорвался — сессия показывает ЯВНУЮ ошибку сжатия вместо тихого конца с мусорной сводкой. Проверка распознавания воспроизводит оба живых случая байт-в-байт.",
         en: "Compacting a long conversation no longer kills the session silently. The exact mechanism was found from live data: the summarizer model, given a transcript full of tool calls, CONTINUED the conversation instead of summarizing — it printed tool calls as text (\"continuing chapters 7-12\" plus call markup), the harness classified that as looping text and silently ended the session, recording the garbage as its summary. Closed from three sides: (1) the engine marks the summarizer build and every steering hint of the harness stands down on it — the \"keep reading in batches\" directive no longer reaches the summarizer; (2) a deterministic check recognizes a \"summary\" containing call markup and retries the summarization once with a direct correction; (3) if the retry fails too, the session shows an EXPLICIT compaction error instead of a quiet ending with a garbage summary. The recognition check reproduces both live cases byte-for-byte.",
       },
+    ],
+  },
+  {
+    version: "0.3.2",
+    date: "2026-07-21",
+    items: [
       {
         ru: "Защита от зацикливания теперь покрывает КАЖДЫЙ инструмент, а не только перечисленные. На живом прогоне инструмент, отсутствовавший во всех списках, был вызван 148 раз подряд с одинаковым ответом «No handoffs.» — по старому правилу «неизвестный = без защиты» его никто не останавливал. Правило перевёрнуто: по умолчанию защищён любой инструмент, списки объявляют только исключения (изменяющие и ожидающие). И второй слой той же починки: раньше заблокированный вызов отвечал модели одинаковым текстом ошибки, и модель залипала на нём — 55 повторов подряд; теперь подавление возвращается как завершённый результат с меняющимся счётчиком попыток, так что одинакового стимула для залипания больше не существует. Проверено сквозным прогоном: разбор шести глав дошёл до конца — все главы прочитаны и разобраны в финальном ответе.",
         en: "Loop protection now covers EVERY tool, not only the listed ones. In a live run, a tool absent from every list was called 148 times in a row against the identical reply \"No handoffs.\" — under the old \"unknown = unprotected\" rule nothing stopped it. The rule is flipped: any tool is protected by default and the lists declare only exceptions (mutating and waiting ones). And a second layer of the same repair: a blocked call used to answer the model with the identical error text, and the model latched onto it — 55 retries in a row; suppression now returns as a completed result with a changing attempt counter, so an identical stimulus to latch onto no longer exists. Verified end-to-end: a six-chapter analysis ran to completion — every chapter read and covered in the final answer.",

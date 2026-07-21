@@ -186,6 +186,7 @@ interface TurnState {
   exactFail: Map<string, number>
   sameToolFail: Map<string, number>
   noProgress: Map<string, { hash: string; count: number }>
+  blockedRetries: Map<string, number>
   searchCalls: number       // total grep/glob calls this turn (per-tool thrash budget)
   degenerateSearch: number  // empty/catch-all search patterns this turn
   webQueries: Map<string, number> // canonical web-search query key (+extras) → call count this turn
@@ -301,6 +302,18 @@ export class LoopGuard {
    * call. This is the teeth the advisory note lacks: weak local models ignore appended text and keep
    * re-reading; aborting the call physically breaks the loop and forces a different next step.
    */
+  /** Count of retries AFTER a hard block for one (session, signature) — used only to keep the
+   *  suppression notice from being byte-identical between consecutive retries (a latched model finds
+   *  the same stimulus twice otherwise). Resets with the turn like every other counter. */
+  bumpBlockedRetry(sessionID: string | undefined, tool: string, args: any): number {
+    if (!sessionID) return 1
+    const st = this.touch(sessionID)
+    const sig = toolSignature(tool, args)
+    const n = (st.blockedRetries.get(sig) ?? 0) + 1
+    st.blockedRetries.set(sig, n)
+    return n
+  }
+
   peekBlock(sessionID: string | undefined, tool: string, args: any): GuardDecision | null {
     if (!sessionID) return null
     const st = this.sessions.get(sessionID)
@@ -402,7 +415,7 @@ export class LoopGuard {
 
   // ── internals ──
   private fresh(): TurnState {
-    return { exactFail: new Map(), sameToolFail: new Map(), noProgress: new Map(), searchCalls: 0, degenerateSearch: 0, webQueries: new Map(), touched: ++this.clock }
+    return { exactFail: new Map(), sameToolFail: new Map(), noProgress: new Map(), blockedRetries: new Map(), searchCalls: 0, degenerateSearch: 0, webQueries: new Map(), touched: ++this.clock }
   }
   private touch(sessionID: string): TurnState {
     let st = this.sessions.get(sessionID)
@@ -530,7 +543,16 @@ export function isIdempotent(tool: string, args?: any): boolean {
   // suite; the oracle is exact for reads, and reads only.
   if (WAITING_TOOLS.has(tool)) return false
   if (MUTATING_TOOLS.has(tool)) return false
-  return IDEMPOTENT_TOOLS.has(tool)
+  // DEFAULT IS PROTECTED. The allow-list default ("unknown tool → no cover") was the last declared gap,
+  // and it was measured firing in production: `list_handoffs` — a plugin tool with no operation argument,
+  // absent from every list — was called 148 times in one turn against the constant reply "No handoffs.",
+  // on a binary that already carried every other loop fix. A tool nobody classified is exactly the tool
+  // a loop will find. The oracle stays exact for reads (identical args → byte-identical result = zero
+  // new information); the only calls a protected default could wrongly flag are a MUTATING tool that
+  // (a) is unlisted, (b) answers byte-identically, and (c) is legitimately repeated with byte-identical
+  // arguments five times in one turn — and every constant-reply mutator this project ships is already
+  // declared in MUTATING_TOOLS (that is what the list is FOR now: exceptions, not coverage).
+  return true
 }
 
 function failureRecoveryHint(tool: string, count: number): string {

@@ -238,10 +238,12 @@ test("a multiplexer's repeated READ is stopped through the real hooks", async ()
     // ENGINE SHAPE: input carries no args; the args live on the output object and the hook may rewrite
     // them in place. Driving it any other way tests a call that never happens.
     const beforeOut: any = { args: { ...ARGS } }
-    try {
-      await h["tool.execute.before"]({ tool: "task", sessionID: SID, callID: "c" }, beforeOut)
-    } catch {
-      aborted = true // the before-hook THROWS to physically stop the redundant call
+    await h["tool.execute.before"]({ tool: "task", sessionID: SID, callID: "c" }, beforeOut)
+    if (beforeOut.cancel === true) {
+      // the hook SUPPRESSES the call via the engine's cancel contract — a completed "Cancelled" result,
+      // not a thrown failure: measured live, 55 consecutive retries latched onto the byte-identical
+      // error text; a different result shape with a varying attempt counter is what breaks the latch
+      aborted = true
       break
     }
     await h["tool.execute.after"](
@@ -250,6 +252,26 @@ test("a multiplexer's repeated READ is stopped through the real hooks", async ()
     )
   }
   expect(aborted).toBe(true)
+})
+
+test("consecutive suppression notices are never byte-identical (the anti-latch property)", async () => {
+  const h = await hooks()
+  const SID = "ses_wiring_antilatch"
+  const ARGS = { action: "list" }
+  // drive to the hard block
+  for (let i = 0; i < 6; i++) {
+    const bo: any = { args: { ...ARGS } }
+    await h["tool.execute.before"]({ tool: "task", sessionID: SID, callID: "c" }, bo)
+    if (bo.cancel) break
+    await h["tool.execute.after"]({ tool: "task", sessionID: SID, callID: "c", args: bo.args }, { title: "task", output: "same", metadata: {} })
+  }
+  const r1: any = { args: { ...ARGS } }
+  await h["tool.execute.before"]({ tool: "task", sessionID: SID, callID: "c" }, r1)
+  const r2: any = { args: { ...ARGS } }
+  await h["tool.execute.before"]({ tool: "task", sessionID: SID, callID: "c" }, r2)
+  expect(r1.cancel).toBe(true)
+  expect(r2.cancel).toBe(true)
+  expect(r1.cancelReason).not.toBe(r2.cancelReason) // a latched model must not find the same stimulus twice
 })
 
 test("CONTROL through the real hooks: a repeated read that KEEPS PRODUCING NEW OUTPUT is never stopped", async () => {

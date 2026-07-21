@@ -69,25 +69,53 @@ describe("no-progress detection is by evidence, not by tool name", () => {
     expect(blocked).toBe(true)
   })
 
-  test("CONTROL: an MCP tool whose name is NOT a read verb keeps the old behaviour", () => {
-    // No classification is invented for opaque tools: an unfamiliar verb must never be blocked, or a
-    // legitimate integration that answers identically (\"ok\") on repeated writes would be broken.
+  test("an UNDECLARED writer with a constant reply is covered too — and that is the documented trade", () => {
+    // Under the protected default, an unlisted MCP write tool answering byte-identically to
+    // byte-identical arguments accumulates like any other no-progress repeat. Five identical creations
+    // of the same ticket in one turn is itself a malfunction; a writer whose constant reply hides real
+    // work belongs in MUTATING_TOOLS — the list now declares EXCEPTIONS, and this test is where that
+    // contract is written down. Real writers almost always answer with ids/timestamps, so their
+    // results differ and the oracle stays silent (see the differing-result CONTROL below).
     const g = new LoopGuard()
     g.resetTurn(SID)
+    let blocked = false
     for (let i = 0; i < 12; i++) {
-      expect(g.peekBlock(SID, "mcp__tickets__create_ticket", { t: "x" })).toBeNull()
+      if (g.peekBlock(SID, "mcp__tickets__create_ticket", { t: "x" })) { blocked = true; break }
       g.observe(SID, "mcp__tickets__create_ticket", { t: "x" }, "ok")
+    }
+    expect(blocked).toBe(true)
+  })
+
+  test("CONTROL: an undeclared writer whose replies DIFFER (real ids) is never touched", () => {
+    const g = new LoopGuard()
+    g.resetTurn(SID)
+    for (let i = 0; i < 30; i++) {
+      expect(g.peekBlock(SID, "mcp__tickets__create_ticket", { t: "x" })).toBeNull()
+      g.observe(SID, "mcp__tickets__create_ticket", { t: "x" }, `created ticket #${1000 + i}`)
     }
   })
 
-  test("KNOWN LIMIT, asserted rather than implied: a NON-MCP opaque tool is still unprotected", () => {
-    // Still not guessed at: a bare unknown name carries no operation to read, and blocking it would
-    // need evidence about what that costs. Pinned so the gap stays visible.
+  test("the gap is CLOSED: an opaque unlisted tool is protected by default", () => {
+    // The former "known limit" fired in production: list_handoffs — no operation argument, absent from
+    // every list — ran 148 identical calls against the constant "No handoffs." on a binary carrying
+    // every other loop fix. The default is now protected; the lists declare EXCEPTIONS (mutators,
+    // waiters), not coverage.
+    const g = new LoopGuard()
+    g.resetTurn(SID)
+    let blocked = false
+    for (let i = 0; i < 12; i++) {
+      if (g.peekBlock(SID, "list_handoffs", {})) { blocked = true; break }
+      g.observe(SID, "list_handoffs", {}, "No handoffs.")
+    }
+    expect(blocked).toBe(true)
+  })
+
+  test("CONTROL: a declared mutator stays exempt however unknown its reply pattern", () => {
     const g = new LoopGuard()
     g.resetTurn(SID)
     for (let i = 0; i < 12; i++) {
-      expect(g.peekBlock(SID, "opaque_unknown_tool", { q: "x" })).toBeNull()
-      g.observe(SID, "opaque_unknown_tool", { q: "x" }, "identical output")
+      expect(g.peekBlock(SID, "note_append", { path: "/n.md", text: "x" })).toBeNull()
+      g.observe(SID, "note_append", { path: "/n.md", text: "x" }, "Appended")
     }
   })
 

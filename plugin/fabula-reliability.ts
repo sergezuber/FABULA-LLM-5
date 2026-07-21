@@ -155,7 +155,26 @@ export const FabulaReliability: Plugin = async () => gate("reliability", ({
     const searchBlock = guard.peekSearch(sid, tool, args)
     if (searchBlock) { await emitPing(sid, "blocked", `blocked: ${tool} search-thrash`, "octagonal_sign"); throw new Error(searchBlock.guidance) }
     const block = guard.peekBlock(sid, tool, args)
-    if (block) { await emitPing(sid, "blocked", `blocked: ${tool} ${pingTarget(args)} (repeated)`, "octagonal_sign"); throw new Error(block.guidance) }
+    if (block) {
+      await emitPing(sid, "blocked", `blocked: ${tool} ${pingTarget(args)} (repeated)`, "octagonal_sign")
+      // CANCEL, not throw — and the reason VARIES. Throwing here answered every retry with the
+      // byte-identical "✗ failed: LOOP BLOCKED …", and a model that latches onto a stimulus latches onto
+      // an unchanging one hardest: measured live, 55 consecutive blocked retries of list_handoffs, each
+      // seeing the exact same error, none escaping. cancel makes the engine record a COMPLETED
+      // "Cancelled" result instead of a failure — a different shape than the errors the model is stuck
+      // replaying — and the attempt counter keeps consecutive results from being byte-identical, so the
+      // retry loop cannot find the same stimulus twice. The tool still never executes.
+      const n = guard.bumpBlockedRetry(sid, tool, args)
+      if (output && typeof output === "object") {
+        ;(output as any).cancel = true
+        ;(output as any).cancelReason =
+          `CALL SUPPRESSED (attempt ${n} after the loop was cut): ${block.guidance} ` +
+          `This exact call keeps returning the SAME data you already have. It will not be executed again ` +
+          `this turn. Take a DIFFERENT next action now — use the data already in context, or a different tool.`
+        return
+      }
+      throw new Error(block.guidance)
+    }
     if (!output) return
     // actor ONLY: reshape into a strict-VALID `{operation:{…}}`. The engine validates the model's args with the ORIGINAL
     // strict discriminatedUnion at tool.ts (AFTER this hook, inside execute), NOT the permissive schema it sent the

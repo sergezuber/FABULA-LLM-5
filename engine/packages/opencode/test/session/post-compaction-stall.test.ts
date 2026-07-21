@@ -49,6 +49,20 @@ describe("postCompactionStall", () => {
     expect(postCompactionStall([user(), work(), work(), announce()])).toBe(false)
   })
 
+  test("the REBUILD boundary is guarded exactly like the summary — the audit-found hole", () => {
+    // The checkpoint part carries no synthetic flag, so isRealUserBoundary calls the rebuild message a
+    // REAL turn start; the segment resets tool-free and a text-only announcement right after a rebuild
+    // passed the narrowed stop-layer. Same failure, different door.
+    const rebuild = () => ({ role: "user", parts: [{ type: "checkpoint" }, { type: "text" }] })
+    expect(postCompactionStall([user(), work(), rebuild(), announce()])).toBe(true)
+    // real work after the rebuild → never flagged
+    expect(postCompactionStall([user(), work(), rebuild(), work()])).toBe(false)
+    // rebuild with NO work before it (fresh session) → an announcement is a legitimate answer
+    expect(postCompactionStall([user(), announce(), rebuild(), announce()])).toBe(false)
+    // a finished assistant BETWEEN the rebuild and now → ordinary stop, not the first post-boundary turn
+    expect(postCompactionStall([user(), work(), rebuild(), work(), announce()])).toBe(false)
+  })
+
   test("degenerate inputs never throw and never fire", () => {
     expect(postCompactionStall([])).toBe(false)
     expect(postCompactionStall([user()])).toBe(false)

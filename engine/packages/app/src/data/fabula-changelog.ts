@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.3.5"
+export const FABULA_VERSION = "0.3.6"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.3.6",
+    date: "2026-07-21",
+    items: [
+      {
+        ru: "Закрыта вторая дверь той же ловушки «объявил и встал» — найдена адверсариальной проверкой собственного аудита, до того как она успела сработать у пользователя. Страж ловил пустой ход после сжатия, но после ВОССТАНОВЛЕНИЯ (вторая механика сброса контекста) граница считалась началом нового хода: сегмент обнулялся, выглядел «безинструментальным», и текстовый отчёт сразу после восстановления снова мог завершить сессию. Теперь обе двери — сводка сжатия и граница восстановления — под одним стражем: работа шла до границы, первый ход после неё без единого вызова инструмента — один принудительный ход-продолжение. Проверено мутацией: удаление новой ветки валит ровно новый тест.",
+        en: "The second door of the same announce-and-stop trap is closed — found by adversarially auditing this project's own audit, before it fired for the user. The guard caught an empty turn after a compaction, but after a REBUILD (the second context-reset mechanism) the boundary counted as a fresh turn start: the segment reset, looked tool-free, and a text-only report right after a rebuild could end the session again. Both doors — the compaction summary and the rebuild boundary — now sit under one guard: work ran up to the boundary, the first turn after it made not a single tool call — one forced continuation. Mutation-checked: removing the new branch fails exactly the new test.",
+      },
+    ],
+  },
   {
     version: "0.3.5",
     date: "2026-07-21",

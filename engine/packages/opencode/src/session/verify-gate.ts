@@ -317,11 +317,28 @@ export function postCompactionStall(messages: ReadonlyArray<PostCompactionScanMe
   const current = messages[i]
   if (current.summary === true) return false // the summary itself is not a work turn
   if (current.parts.some((p) => p.type === "tool")) return false // real work happened — no stall
-  // the nearest FINISHED assistant before it must be the compaction summary (i.e. this is the FIRST
-  // post-boundary turn — later turns are ordinary stops and none of this applies)
+  // The boundary this guards is EITHER context-recovery mechanism, because both reset the visible
+  // conversation and both were measured producing the same failure: (a) the compaction SUMMARY (an
+  // assistant message with summary===true), and (b) the checkpoint REBUILD boundary (a user message
+  // carrying a "checkpoint" part — that part has no synthetic flag, so isRealUserBoundary treats the
+  // boundary as a REAL turn start, the turn segment resets to tool-free, and a text-only announcement
+  // right after a rebuild sails through the narrowed goal stop-layer exactly like the summary case did).
+  // Walk back to the nearest of the two; anything else finishing in between makes this an ordinary stop.
   let j = i - 1
-  while (j >= 0 && !(messages[j].role === "assistant" && messages[j].finished)) j--
-  if (j < 0 || messages[j].summary !== true) return false
+  let boundary: "summary" | "rebuild" | null = null
+  while (j >= 0) {
+    const m = messages[j]
+    if (m.role === "assistant" && m.finished) {
+      boundary = m.summary === true ? "summary" : null
+      break
+    }
+    if (m.role === "user" && m.parts.some((p) => p.type === "checkpoint")) {
+      boundary = "rebuild"
+      break
+    }
+    j--
+  }
+  if (boundary === null) return false
   // and before the boundary, work was genuinely in flight
   let k = j - 1
   while (k >= 0 && messages[k].role !== "assistant") k--

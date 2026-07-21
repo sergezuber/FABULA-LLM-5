@@ -29,6 +29,10 @@ export const FabulaCtxGuard: Plugin = async () => {
   return {
     "experimental.chat.messages.transform": async (_i: any, output: any) => {
       try {
+        // NEVER steer the summarizer. The engine runs this hook for the COMPACTION build too, and a task
+        // directive planted there turns the summarizer back into a task executor — measured live: it
+        // emitted <tool_call> markup as text instead of a summary and the session ended on the spot.
+        if ((_i as any)?.compaction === true) return
         if (process.env.FABULA_CTX_GUARD === "0") return
         const messages = output?.messages
         if (!Array.isArray(messages) || !messages.length) return

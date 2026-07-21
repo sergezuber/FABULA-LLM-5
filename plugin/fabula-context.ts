@@ -172,6 +172,10 @@ export const FabulaContext: Plugin = async (input: any) => {
     // deterministically, every such turn.
     "experimental.chat.messages.transform": async (_i: any, output: any) => {
       try {
+        // NEVER steer the summarizer. The engine runs this hook for the COMPACTION build too, and a task
+        // directive planted there turns the summarizer back into a task executor — measured live: it
+        // emitted <tool_call> markup as text instead of a summary and the session ended on the spot.
+        if ((_i as any)?.compaction === true) return
         const messages = output?.messages
         if (!Array.isArray(messages) || !messages.length) return
         // the last USER message is the current ask

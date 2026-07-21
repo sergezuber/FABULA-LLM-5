@@ -21,6 +21,21 @@ import { fn } from "@/util/fn"
 
 const log = Log.create({ service: "session.compaction" })
 
+/**
+ * Did the summarizer CONTINUE THE TASK instead of summarizing? Deterministic markup check, no model.
+ *
+ * Measured live twice on the same day: a transcript that ends in chapter reads produced a "summary" of
+ * "Продолжаю чтение глав 7-12:" followed by <tool_call> blocks rendered as plain text (the summarizer
+ * has no tools), and a transcript saturated with suppressed list_plugins calls produced a bare
+ * <tool_call><function=list_plugins> block. Both were then classified as a text loop, compaction
+ * returned "stop", and the session ENDED SILENTLY mid-task with the garbage recorded as its summary.
+ * A summary containing tool-call markup is a continuation wearing a summary's flag, every time.
+ */
+export function summaryLooksHijacked(text: string): boolean {
+  if (typeof text !== "string" || !text.trim()) return false
+  return text.includes("<tool_call") || text.includes("<function=")
+}
+
 export const Event = {
   Compacted: BusEvent.define(
     "session.compacted",
@@ -308,7 +323,13 @@ export const layer: Layer.Layer<
 
       const prompt = compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")
       const msgs = structuredClone(selected.head)
-      yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
+      // The summarizer build is NOT a task turn, and the hooks must know it. Measured live: a plugin
+      // steer appended to the last user message ("read in batches, continue") turned the summarizer
+      // back into a task executor — it emitted <tool_call> markup as text instead of a summary, the
+      // processor classified that as text-repeat, compaction returned "stop", and the session ended
+      // with a garbage summary and no continuation. The input flag lets steer-hooks stand down while
+      // redaction-style transforms keep working.
+      yield* plugin.trigger("experimental.chat.messages.transform", { compaction: true }, { messages: msgs })
       const modelMessages = yield* MessageV2.toModelMessagesEffect(msgs, model, { stripMedia: true })
       const ctx = yield* InstanceState.context
       const msg: MessageV2.Assistant = {
@@ -371,7 +392,57 @@ export const layer: Layer.Layer<
         return "stop"
       }
 
-      if (result === "text-repeat") return "stop"
+      // A hijacked or looping summary must not end the run SILENTLY. Read what the summarizer actually
+      // wrote; if it continued the task (tool-call markup) — or the processor cut it as a text loop —
+      // retry ONCE with a corrective appended to the instruction (the steer channel measured to work on
+      // this project). A clean retry proceeds like any summary; a failed retry sets a VISIBLE error so
+      // the session shows red instead of a fake-done ending on a garbage summary.
+      const summaryText = () =>
+        MessageV2.page({ sessionID: input.sessionID, limit: 10 })
+          .items.filter((m) => m.info.id === processor.message.id)
+          .flatMap((m) => m.parts)
+          .filter((p): p is MessageV2.TextPart => p.type === "text")
+          .map((p) => p.text)
+          .join("\n")
+      let hijacked = result === "text-repeat" || summaryLooksHijacked(summaryText())
+      if (hijacked) {
+        log.warn("summary hijacked by task continuation — retrying once with corrective", {
+          sessionID: input.sessionID,
+        })
+        const retry = yield* processor.process({
+          user: userMessage,
+          agent,
+          sessionID: input.sessionID,
+          tools: {},
+          system: [],
+          messages: [
+            ...modelMessages,
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text:
+                    prompt +
+                    "\n\nIMPORTANT: your previous attempt CONTINUED the conversation (it emitted tool calls) " +
+                    "instead of summarizing it. Do NOT call tools, do NOT continue the task. Output ONLY the " +
+                    "summary in the requested structure, as plain prose.",
+                },
+              ],
+            },
+          ],
+          model,
+        })
+        hijacked = retry === "text-repeat" || summaryLooksHijacked(summaryText())
+        if (hijacked) {
+          processor.message.error = new MessageV2.AbortedError(
+            { message: "Compaction failed: the summarizer kept continuing the task instead of summarizing" },
+          ).toObject()
+          processor.message.finish = "error"
+          yield* session.updateMessage(processor.message)
+          return "stop"
+        }
+      }
 
       if (compactionPart && selected.tail_start_id && compactionPart.tail_start_id !== selected.tail_start_id) {
         yield* session.updatePart({

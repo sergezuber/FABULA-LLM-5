@@ -91,6 +91,9 @@ export const FabulaInterview: Plugin = async () =>
     // to that turn's user message so the agent triages before guessing (once per distinct task).
     "experimental.chat.messages.transform": async (input: any, output: any) => {
       try {
+        // never steer the summarizer: a nudge planted into the COMPACTION build turns it into a task
+        // executor (measured live on the ctxguard steer — same class)
+        if (input?.compaction === true) return
         if (process.env.FABULA_INTERVIEW_NUDGE === "0") return
         const msgs = output?.messages
         if (!Array.isArray(msgs)) return

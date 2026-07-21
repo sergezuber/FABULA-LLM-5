@@ -542,6 +542,10 @@ export const FabulaRewind: Plugin = async (input: any) => gate("rewind", ({
   // collapse the failed span (id > boundary) into ONE summary. Honest degrade: no boundary → no mutation.
   "experimental.chat.messages.transform": async (_input: any, output: any) => {
     if (disabled()) return
+    // the summarizer must see the TRUE history: collapsing a failed span inside the COMPACTION build
+    // would hide it from the summary and desync the boundary state machine (same input flag as the
+    // steer hooks — the engine marks the summarizer build)
+    if ((_input as any)?.compaction === true) return
     try {
       const messages = output?.messages
       if (!Array.isArray(messages) || !messages.length) return

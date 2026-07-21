@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.3.4"
+export const FABULA_VERSION = "0.3.5"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.3.5",
+    date: "2026-07-21",
+    items: [
+      {
+        ru: "Провал сжатия перестал быть концом задачи. Живой случай: переполнение случилось на третьей минуте — раньше, чем успел появиться первый чекпоинт; сжатие ушло к модели-сводчику, ту дважды угнал перегруженный вызовами транскрипт (включая повтор с прямой поправкой), и сессия честно встала на красной ошибке — видимо, но мертво. Теперь у обвязки есть спасение без модели: при провале сжатия ставится граница восстановления, собранная из измеренных данных — исходный запрос, журнал уже прочитанных файлов с указанием продолжать с непрочитанных, задачи. Ничего из этого не генерируется — подделать или «угнать» нечего. Ограничение одним срабатыванием заложено конструкцией и продублировано счётчиком, грань зарегистрирована в реестре циклов. Ручное сжатие при провале по-прежнему останавливается с ошибкой — спасение только для автоматического.",
+        en: "A failed compaction is no longer the end of the task. Live case: the overflow arrived in minute three — before the first checkpoint even existed; compaction fell to the summarizer model, which the call-saturated transcript hijacked twice (corrective retry included), and the session honestly stopped on the red error — visible, but dead. The harness now has a model-free rescue: on compaction failure it inserts a rebuild boundary assembled from measured data — the original ask, the ledger of files already read with an instruction to continue with unread ones, the tasks. None of it is generated, so none of it can be hijacked. The single-firing bound is built into the construction and doubled by a counter; the edge is registered in the loop registry. A failed MANUAL compaction still stops with the error — the rescue is for automatic ones only.",
+      },
+    ],
+  },
   {
     version: "0.3.4",
     date: "2026-07-21",

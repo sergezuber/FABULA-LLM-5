@@ -1948,6 +1948,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         // runLoop. Bounded by construction — either the model resumes real work (tool calls appear and
         // the detector goes quiet), or it repeats a text-only reply and that second stop stands.
         let postCompactionContinued = false
+        // Compaction-failure rescue fired this runLoop (see loopgraph edge "compaction-failure-rescue").
+        // The structural bound (the boundary consumes the compaction part) already prevents re-entry;
+        // this flag is the registry-visible belt on top, same pattern as postCompactionContinued.
+        let compactionRescued = false
         // structured-output 专用 retry：上限来自 lastUser.format.retryCount（默认 2），
         // 与 invalidContinuations（generic invalid）分离，互不污染。局部于 runLoop，
         // 新一轮用户 turn 自动归零。
@@ -3007,7 +3011,44 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               overflow: compactionPart?.overflow,
               agentID: lastUser.agentID,
             })
-            if (result === "stop") break
+            if (result === "stop") {
+              // DETERMINISTIC RESCUE. Measured live on v0.3.4: an overflow 2.5 minutes into a
+              // chapter-reading session found NO checkpoint yet (the writer had not completed), fell to
+              // model compaction, the summarizer was hijacked by the tool-saturated transcript twice
+              // (corrective retry included) and the session ended on the visible compaction error —
+              // honest, but the task still died. When the model CANNOT summarize, the harness can still
+              // reset the context without any model: a rebuild boundary at the failed compaction point.
+              // After the measured files-read ledger landed in renderRebuildContext, that boundary
+              // carries the ask (recent user messages), the ledger of executed reads, and the
+              // continue-with-unread instruction — everything needed to resume, none of it generated.
+              // Main agent + AUTO compaction only: a manual /compact failing should stay a visible stop,
+              // and subagents have their own per-actor path.
+              const rescueEligible =
+                !compactionRescued &&
+                (compactionPart?.auto ?? false) &&
+                (!lastUser.agentID || lastUser.agentID === "main")
+              if (rescueEligible) {
+                const inserted = yield* checkpoint
+                  .insertRebuildBoundary({
+                    sessionID,
+                    boundary: lastUserMsgForCompaction.info.id,
+                    lastMessageInfo: computeLastMessageInfo(allMsgs.map((m) => m.info)),
+                    agentID: lastUser.agentID,
+                    agent: lastUser.agent,
+                    model: { providerID: lastUser.model.providerID, modelID: lastUser.model.modelID },
+                    boundaryCreatedAt: lastUserMsgForCompaction.info.time.created,
+                  })
+                  .pipe(Effect.catch(() => Effect.succeed(false)))
+                if (inserted) {
+                  compactionRescued = true
+                  yield* prune.resetThresholds(sessionID)
+                  yield* slog.info("compaction failed — deterministic rebuild boundary inserted", { sessionID })
+                  skipOverflowCheck = true
+                  continue
+                }
+              }
+              break
+            }
             continue
           }
 

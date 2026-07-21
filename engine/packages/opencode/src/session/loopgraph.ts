@@ -180,6 +180,16 @@ export const RE_ENTRY_EDGES: readonly ReEntryEdge[] = [
       "the assistant repeated identical text; an inline recovery block injects a steer and re-enters. Bounded by TEXT_LOOP_MAX_RECOVERY (2)",
   },
   {
+    id: "compaction-failure-rescue",
+    fn: "(inline block — session/prompt.ts compact branch, on compaction.process → stop)",
+    counter: "compactionRescued",
+    cap: 1,
+    capSource:
+      "prompt.ts compact branch: fires only while the last user message carries a compaction part; the inserted rebuild boundary REPLACES it as the last user message, so the same failure cannot re-enter twice — and an insert failure breaks the loop",
+    description:
+      "auto-compaction failed (summarizer hijacked twice → visible error); the harness inserts a model-free rebuild boundary (measured files-read ledger + recent asks) and continues instead of ending the task on the error. Bounded by construction: the boundary consumes the compaction part that gates the branch",
+  },
+  {
     id: "post-compaction-stall",
     fn: "(inline block — session/prompt.ts finish path, postCompactionStall detector in verify-gate.ts)",
     counter: "postCompactionContinued",

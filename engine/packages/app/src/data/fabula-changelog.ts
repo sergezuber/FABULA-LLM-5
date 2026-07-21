@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.2.7"
+export const FABULA_VERSION = "0.2.8"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.2.8",
+    date: "2026-07-21",
+    items: [
+      {
+        ru: "Долгая задача больше не начинается заново после того, как часть работы уже сделана. Когда разговор упирается в предел, обвязка сохраняет состояние сессии и продолжает с него — сохранением занят отдельный фоновый агент. Оказалось, что на задаче «прочти все главы» этот агент вместо записи сводки уходил читать сам проект: сначала папку, потом файл за файлом — и на большой книге исчерпывал свой предел, так и не дойдя до записи. Сводка оставалась пустым бланком, разговор обнулялся на этой пустоте, и агент честно начинал задачу с нуля, потеряв всё сделанное. За одну сессию так отработали восемь сохранений подряд, и ни одно ничего не записало. Теперь фоновому агенту доступны только его собственные рабочие файлы: он составляет сводку по разговору, который ему передан, а не восстанавливает её, вычитывая ваш проект. Проверено сквозным прогоном на том же стенде: раньше текст глав попадал в его контекст, теперь не попадает ни разу, при этом сводка пишется. Остальных агентов правка не касается — чтение файлов у них прежнее.",
+        en: "A long task no longer starts over after part of the work is already done. When a conversation reaches its limit, the harness saves the session's state and continues from it, and a separate background agent does that saving. On a \"read all the chapters\" task that agent turned out to be reading the project instead of writing the summary: first the folder, then file after file — and on a large book it exhausted its own limit without ever reaching the write. The summary stayed an empty form, the conversation was reset onto that emptiness, and the agent honestly began the task from zero, losing everything already done. Eight saves ran in a single session and not one recorded anything. The background agent can now reach only its own working files: it writes the summary from the conversation it was handed rather than reconstructing it by reading your project. Verified end-to-end on the same rig: chapter text used to enter its context and now never does, while the summary is still written. No other agent is affected — file reading is unchanged for them.",
+      },
+    ],
+  },
   {
     version: "0.2.7",
     date: "2026-07-20",

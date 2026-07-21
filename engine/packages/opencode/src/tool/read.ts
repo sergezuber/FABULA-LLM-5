@@ -9,6 +9,8 @@ import { LSP } from "../lsp"
 import DESCRIPTION from "./read.txt"
 import { Instance } from "../project/instance"
 import { assertExternalDirectoryEffect } from "./external-directory"
+import { assertCheckpointWriterReadAllowed } from "./memory-path-guard"
+import { Global } from "@/global"
 import { SessionCwd } from "./session-cwd"
 import { Instruction } from "../session/instruction"
 import { isImageAttachment, isPdfAttachment, sniffAttachmentMime } from "@/util/media"
@@ -153,6 +155,16 @@ export const ReadTool = Tool.define(
       if (process.platform === "win32") {
         filepath = AppFileSystem.normalizePath(filepath)
       }
+      // A summarizer summarises what it was given. Measured on a "read every chapter" session: the
+      // checkpoint-writer read the project directory and then the entire corpus, exhausted its context
+      // and never reached its own write — leaving every checkpoint section "(none yet)", which the
+      // harness then reset the conversation onto, so the main agent restarted its task from zero.
+      // Its four working paths live under the memory root and stay readable; the project tree does not.
+      assertCheckpointWriterReadAllowed({
+        target: filepath,
+        agentName: ctx.agent,
+        memoryRoot: () => path.join(Global.Path.data, "memory"),
+      })
       const title = path.relative(Instance.worktree, filepath)
 
       const stat = yield* fs.stat(filepath).pipe(

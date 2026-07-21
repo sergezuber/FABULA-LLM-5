@@ -160,3 +160,52 @@ export function assertMemoryWriteAllowed(input: {
     )
   }
 }
+
+/**
+ * READ counterpart to assertMemoryWriteAllowed, for the checkpoint-writer only.
+ *
+ * Why this exists — measured, not theorised. The checkpoint-writer is a child agent whose whole job is
+ * to write a state summary of the parent session from the transcript it is handed. Its runtime tool
+ * whitelist grants unrestricted `read` over the project, and on a session whose task is "read every
+ * chapter / all files" the writer was observed doing exactly that: it read the project DIRECTORY, then
+ * every corpus file, before touching its own checkpoint. On a small corpus it survived and wrote a
+ * partial checkpoint; on a real one (18 chapters of a novel) it exhausted its context and never reached
+ * the write at all, leaving every section of checkpoint.md as "(none yet)". The harness then reset the
+ * conversation onto that empty checkpoint and the main agent restarted its task from zero — losing all
+ * completed work and looping. Eight writers ran for that session and not one produced state.
+ *
+ * Reproduced twice end-to-end with unique markers planted in the corpus, which were then found in the
+ * writer's own session — so this is what the writer read, not an inference about what it might read.
+ *
+ * The rule: a summarizer summarises what it was GIVEN. Its four working paths (checkpoint / memory /
+ * notes / tasks) live under the memory root and stay readable; the project tree does not. This removes
+ * no capability its contract has — reconstructing session state by re-reading the project is precisely
+ * the behaviour that destroys the checkpoint — and it is scoped to this one agent, so every other agent
+ * is untouched.
+ *
+ * KNOWN LIMIT, stated rather than buried: `glob` and `grep` remain unguarded. They were not the measured
+ * vector (they return paths and matching lines, not whole files, so they do not drown a context the way
+ * 18 file reads do), but a writer could still reach project content through them.
+ */
+export function assertCheckpointWriterReadAllowed(input: {
+  target: string
+  agentName: string
+  /** LAZY on purpose: resolving the memory root touches Global, and an eagerly-evaluated argument runs
+   *  for EVERY read by EVERY agent. A first version passed the resolved string, so one bad Global import
+   *  threw on every read in the product — including the writer's own files — and the resulting `[error]`
+   *  status was indistinguishable, at a glance, from the guard correctly refusing a project file. Only
+   *  the error TEXT gave it away. Keeping it a thunk means non-writers never evaluate it at all. */
+  memoryRoot: () => string
+}): void {
+  if (input.agentName !== "checkpoint-writer") return
+  const memoryRoot = input.memoryRoot()
+  const normalizedRoot = memoryRoot.endsWith(path.sep) ? memoryRoot : memoryRoot + path.sep
+  if (input.target === memoryRoot || input.target.startsWith(normalizedRoot)) return
+  throw new Error(
+    `checkpoint-writer may not read project files — it summarises the transcript it was given.\n` +
+      `Readable: everything under ${memoryRoot}\n` +
+      `You attempted: ${input.target}\n` +
+      `Write the checkpoint from the conversation you were handed. If it contains nothing to record, ` +
+      `write the sections you can and leave the rest as-is rather than exploring the project.`,
+  )
+}

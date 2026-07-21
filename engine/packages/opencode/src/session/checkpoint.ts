@@ -37,6 +37,7 @@ import type { LastMessageInfo } from "./last-message-info"
 import { CHECKPOINT_TEMPLATE, MEMORY_TEMPLATE, NOTES_TEMPLATE, CHECKPOINT_SECTION_BUDGETS } from "./checkpoint-templates"
 import { adjustBoundaryForApiInvariants } from "./boundary"
 import { alignToNonToolResultUser } from "./checkpoint-align"
+import { trace } from "./trace"
 import { loadPriorDiscoveredTitles } from "./checkpoint-retry"
 import * as CheckpointContext from "./checkpoint-context"
 import { buildProgressDiff } from "./checkpoint-progress-reconcile"
@@ -927,7 +928,14 @@ export const layer: Layer.Layer<
                 .run(),
             ),
           )
+          trace("writer.settle", { sid: input.sessionID, status: outcome.status, touched: true, advanced: true })
         } else {
+          trace("writer.settle", {
+            sid: input.sessionID,
+            status: outcome.status,
+            touched: checkpointTouched,
+            advanced: false,
+          })
           log.warn("writer settled without touching the checkpoint — watermark NOT advanced", {
             sessionID: input.sessionID,
             status: outcome.status,

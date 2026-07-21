@@ -8,6 +8,7 @@ import { Config } from "@/config"
 import { NotFoundError } from "@/storage"
 import { Effect, Layer, Context } from "effect"
 import { pressureLevel, usable } from "./overflow"
+import { trace } from "./trace"
 import { SessionCheckpoint } from "./checkpoint"
 import { ActorRegistry } from "@/actor/registry"
 import type { ActorPromptOps } from "@/tool/actor"
@@ -341,6 +342,7 @@ export const layer: Layer.Layer<
       const baseline = seenBaseline === undefined ? currentTokens : Math.min(seenBaseline, currentTokens)
       promptBaseline.set(input.sessionID, baseline)
       const thresholds = rescaleAboveBaseline(resolved, windowSize, baseline)
+      trace("ckpt.thresholds", { sid: input.sessionID, tokens: currentTokens, baseline, first: thresholds[0], last: thresholds[thresholds.length - 1] })
 
       const already = crossed.get(input.sessionID) ?? new Set<number>()
       const maxThreshold = thresholds[thresholds.length - 1]

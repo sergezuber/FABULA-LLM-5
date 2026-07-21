@@ -18,6 +18,7 @@ import { InstanceState } from "@/effect"
 import { isOverflow as overflow, usable } from "./overflow"
 import { makeRuntime } from "@/effect/run-service"
 import { fn } from "@/util/fn"
+import { trace } from "./trace"
 
 const log = Log.create({ service: "session.compaction" })
 
@@ -405,6 +406,7 @@ export const layer: Layer.Layer<
           .map((p) => p.text)
           .join("\n")
       let hijacked = result === "text-repeat" || summaryLooksHijacked(summaryText())
+      trace("compaction.summary", { sid: input.sessionID, result, hijacked, auto: input.auto === true })
       if (hijacked) {
         log.warn("summary hijacked by task continuation — retrying once with corrective", {
           sessionID: input.sessionID,
@@ -434,6 +436,7 @@ export const layer: Layer.Layer<
           model,
         })
         hijacked = retry === "text-repeat" || summaryLooksHijacked(summaryText())
+        trace("compaction.retry", { sid: input.sessionID, hijacked })
         if (hijacked) {
           processor.message.error = new MessageV2.AbortedError(
             { message: "Compaction failed: the summarizer kept continuing the task instead of summarizing" },

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.3.7"
+export const FABULA_VERSION = "0.3.8"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.3.8",
+    date: "2026-07-21",
+    items: [
+      {
+        ru: "У обвязки появился бортовой самописец решений — служебный журнал для диагностики, невидимый в интерфейсе. Каждый выбор — какой страж продолжил ход, почему ход завершился, куда ушло переполнение, судьба сохранений и сводок — пишется строкой в отдельный файл. Включается и выключается на работающем приложении, без перезапуска (маркер-файл trace.on в данных приложения); выключенный — не стоит ничего. Нужен, чтобы причины редких остановок находились чтением журнала, а не раскопками.",
+        en: "The harness gained a decision flight recorder — a service journal for diagnostics, invisible in the UI. Every choice — which guard continued a turn, why a turn ended, where an overflow was routed, the fate of saves and summaries — is written as a line to a separate file. It toggles on a RUNNING app, no restart (a trace.on marker file in the app data); when off it costs nothing. It exists so the causes of rare stops are found by reading a journal, not by excavation.",
+      },
+    ],
+  },
   {
     version: "0.3.7",
     date: "2026-07-21",

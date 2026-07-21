@@ -21,6 +21,7 @@ import { SessionPrune } from "./prune"
 import { SessionCheckpoint } from "./checkpoint"
 import { SessionCompaction } from "./compaction"
 import { computeLastMessageInfo } from "./last-message-info"
+import { trace } from "./trace"
 import { pressureLevel, isOverflow as overflowCheck } from "./overflow"
 import { Config } from "@/config"
 import { Global } from "@/global"
@@ -2275,6 +2276,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             // Only an AUTO-armed goal short-circuits here; an explicit /goal is the
             // user opting into the loop and must always reach the judge (bounded by
             // MAX_GOAL_REACT) — see goalStopLayerFires.
+            trace("goal.eval", {
+              sid: sessionID,
+              auto: active.auto === true,
+              stopLayer: goalStopLayerFires({ auto: active.auto === true, messages: scan }),
+            })
             if (goalStopLayerFires({ auto: active.auto === true, messages: scan })) {
               yield* slog.info("goal stop-layer: AUTO goal + no verifiable artifact; answer is terminal; honoring stop", {
                 sessionID,
@@ -2865,9 +2871,16 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               yield* slog.info("exiting loop", { classification: classification.type })
               break
             }
+            trace("step", {
+              sid: sessionID,
+              cls: classification.type,
+              finish: lastAssistant.finish,
+              step,
+            })
             if (classification.type === "failed") {
               yield* writeModelError({ assistant: lastAssistant, reason: classification.reason })
               yield* slog.info("exiting loop", { classification: classification.type, reason: classification.reason })
+              trace("turn.end", { sid: sessionID, via: "model-error", reason: classification.reason })
               break
             }
             if (classification.type === "text-tool-call") {
@@ -2884,8 +2897,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             if (classification.type === "final" && classification.degraded)
               yield* slog.warn("degraded final on abnormal finish", { finish: lastAssistant.finish })
             if (classification.type !== "continue") {
-              if (yield* taskGate(lastUser)) continue
-              if (yield* autoContinueUnverified({ lastUser, assistant: lastAssistant })) continue
+              if (yield* taskGate(lastUser)) {
+                trace("gate", { sid: sessionID, g: "task", fired: 1 })
+                continue
+              }
+              if (yield* autoContinueUnverified({ lastUser, assistant: lastAssistant })) {
+                trace("gate", { sid: sessionID, g: "force-verify", fired: 1 })
+                continue
+              }
               // Post-compaction stall: work was in flight before the boundary, and the FIRST turn after
               // it produced a text-only announcement with zero tool calls. In a project with no verify
               // command the auto-goal gate is deliberately never armed, so nothing else catches this and
@@ -2932,9 +2951,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   ].join("\n"),
                 })
                 yield* slog.info("post-compaction stall — continuing", { sessionID })
+                trace("gate", { sid: sessionID, g: "post-compaction-stall", fired: 1 })
                 continue
               }
-              if (yield* goalGate(lastUser)) continue
+              if (yield* goalGate(lastUser)) {
+                trace("gate", { sid: sessionID, g: "goal", fired: 1 })
+                continue
+              }
+              trace("turn.end", { sid: sessionID, via: "no-gate-continued", cls: classification.type })
               yield* slog.info("exiting loop", { classification: classification.type })
               break
             }
@@ -3011,6 +3035,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               overflow: compactionPart?.overflow,
               agentID: lastUser.agentID,
             })
+            trace("compaction.branch", { sid: sessionID, result, auto: compactionPart?.auto ?? false })
             if (result === "stop") {
               // DETERMINISTIC RESCUE. Measured live on v0.3.4: an overflow 2.5 minutes into a
               // chapter-reading session found NO checkpoint yet (the writer had not completed), fell to
@@ -3039,6 +3064,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                     boundaryCreatedAt: lastUserMsgForCompaction.info.time.created,
                   })
                   .pipe(Effect.catch(() => Effect.succeed(false)))
+                trace("rescue", { sid: sessionID, inserted })
                 if (inserted) {
                   compactionRescued = true
                   yield* prune.resetThresholds(sessionID)
@@ -3208,6 +3234,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             // freshest checkpoint. Fall back to compaction only when no boundary
             // can be produced.
             const hasCP = yield* checkpoint.hasCheckpoint(sessionID).pipe(Effect.catch(() => Effect.succeed(false)))
+            trace("overflow", { sid: sessionID, hasCP, tokens: lastFinished?.tokens?.input ?? 0 })
             if (hasCP) {
               // Wait for any running writer so the freshest checkpoint is available
               yield* checkpoint.waitForWriter(sessionID).pipe(Effect.ignore)
@@ -3260,6 +3287,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   })
                   .pipe(Effect.catch(() => Effect.succeed(false)))
               : false
+            trace("overflow.route", { sid: sessionID, route: insertedNoCp ? "rebuild-no-cp" : "compaction-fallback" })
             if (insertedNoCp) {
               yield* prune.resetThresholds(sessionID)
               yield* slog.info("overflow with no checkpoint — deterministic rebuild boundary inserted", { sessionID })

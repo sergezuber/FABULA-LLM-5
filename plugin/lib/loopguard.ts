@@ -273,7 +273,8 @@ export class LoopGuard {
     // success path
     st.exactFail.delete(sig)
     st.sameToolFail.delete(tool)
-    if (!isIdempotent(tool)) {
+    // args matter: a multiplexer's READ operation is idempotent even when the tool as a whole mutates.
+    if (!isIdempotent(tool, args)) {
       st.noProgress.delete(sig)
       return mk("allow", "allow", 0, "")
     }
@@ -418,7 +419,97 @@ export class LoopGuard {
   }
 }
 
-export function isIdempotent(tool: string): boolean {
+/**
+ * Whether a tool participates in no-progress (identical-result-repeated) detection.
+ *
+ * This used to answer on the strength of the tool's NAME: a deny-list of "mutating" tools was exempt, and
+ * of the rest only an explicit allow-list was covered. Both halves were holes, and one of them cost a
+ * measured 97% of a machine.
+ *
+ * `task` sat in the mutating deny-list, so it was exempt outright — but `task` is a MULTIPLEXER: `list`
+ * reads, `done` mutates. Its read operations inherited the write exemption, and one checkpoint-writer
+ * issued the byte-identical call `task {"action":"list"}` 456 times in a single session, unchecked,
+ * consuming 62.6M input tokens against the main agent's 2.1M. The same shape applies to `actor`, `todo`
+ * and any MCP tool that selects its operation by argument. The allow-list was the second hole: a tool
+ * absent from it — every future tool, every MCP tool — had no protection at all, so the DEFAULT was
+ * "unprotected".
+ *
+ * The fix is not a longer list, nor a repeat-count threshold. The literature is explicit that counting is
+ * the wrong signal ("frequent edge traversals alone are not reliable indicators of cycles",
+ * arXiv:2511.10650) and that the criterion is PROGRESS — a bad cycle "yields no additional insights or
+ * progress" — while their own semantic detectors reach only F1 0.72 / precision 0.62, far too noisy to
+ * gate real work on. We do not need that general problem: the guard already holds an EXACT oracle for the
+ * provable subset. Byte-identical arguments producing a byte-identical result is a proof, not an estimate,
+ * that the call yielded no new information — whatever the tool is called, whether or not it can mutate,
+ * and however many tools are added later. So detection is the DEFAULT and the name decides nothing.
+ *
+ * A mutating tool is no exception: writing the same bytes to the same path a second time, or re-running a
+ * command that prints exactly what it printed before, is equally uninformative. Where a repeat really does
+ * new work, the RESULT differs and the oracle stays silent by construction — which is what the CONTROL
+ * cases in the test file assert.
+ *
+ * The one principled exemption is a tool whose PURPOSE is to wait: for a sleep/poll an unchanged result is
+ * precisely the intended outcome, so repetition is progress-neutral by design and blocking it would break
+ * every legitimate wait loop.
+ */
+export const WAITING_TOOLS = new Set<string>(["sleep", "wait"])
+
+/**
+ * Operation verbs that SELECT A READ on a multiplexer tool. An OPEN vocabulary, and it fails SAFE by
+ * construction: a verb missing here does not break anything and cannot cause a wrong block — the call
+ * simply falls back to the tool-name classification below, exactly as before. There is no tuned number
+ * here and no value that stops working once exceeded.
+ */
+const READ_OPERATION_VERBS = new Set<string>([
+  "list", "get", "read", "show", "view", "search", "find", "status", "describe", "query", "peek", "count",
+])
+
+/**
+ * The operation a multiplexer call selects, if its arguments name one.
+ *
+ * Looks one level INTO a nested payload as well as at the top, because both shapes reach here: the model
+ * commonly emits the flat `{action:"list"}`, while the engine's own schema for `task`/`actor` is
+ * `{operation:{action:"list"}}` — and arg-repair now wraps the former into the latter before the tool
+ * runs, so by the time the after-hook records the call the verb usually sits one level down. Reading only
+ * the top level would have made this whole classification dead on the shape that actually arrives.
+ */
+function selectedOperation(args: any): string | null {
+  if (!args || typeof args !== "object") return null
+  const OP_KEYS = ["action", "operation", "op", "cmd", "command", "mode"]
+  for (const key of OP_KEYS) {
+    const v = (args as any)[key]
+    if (typeof v === "string" && v) return v.toLowerCase()
+  }
+  for (const key of OP_KEYS) {
+    const nested = (args as any)[key]
+    if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+      for (const inner of OP_KEYS) {
+        const v = (nested as any)[inner]
+        if (typeof v === "string" && v) return v.toLowerCase()
+      }
+    }
+  }
+  return null
+}
+
+export function isIdempotent(tool: string, args?: any): boolean {
+  // A MULTIPLEXER decides by its ARGUMENT, not its name. `task` is one: `list` reads, `done` mutates —
+  // and because the whole tool sat in the mutating deny-list, its READ operations inherited the write
+  // exemption. Measured cost of that inheritance: one checkpoint-writer issued the byte-identical call
+  // `task {"action":"list"}` 456 times in a single session, unchecked, burning 62.6M input tokens against
+  // the main agent's 2.1M — ~97% of the machine — so the actual work crawled. The same shape applies to
+  // `actor`, `todo`, and any MCP tool that selects its operation by argument, including ones not written
+  // yet, which is why this asks the ARGUMENT rather than growing a list of tool names.
+  const op = selectedOperation(args)
+  if (op && READ_OPERATION_VERBS.has(op)) return true
+
+  // Everything else keeps the previous classification EXACTLY. In particular a mutating call stays exempt,
+  // and that is not an oversight: an identical RESULT proves the agent learned nothing new, but it does
+  // NOT prove the world stood still. `note_append` answers a constant "Appended" while the file it writes
+  // grows on every call — real progress behind an unchanging reply. A first version of this change treated
+  // the result hash as a universal progress oracle and was refuted by exactly that case in this repo's own
+  // suite; the oracle is exact for reads, and reads only.
+  if (WAITING_TOOLS.has(tool)) return false
   if (MUTATING_TOOLS.has(tool)) return false
   return IDEMPOTENT_TOOLS.has(tool)
 }

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.2.8"
+export const FABULA_VERSION = "0.2.9"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.2.9",
+    date: "2026-07-21",
+    items: [
+      {
+        ru: "Работа больше не ползёт из-за фонового агента, который крутится вхолостую. Замер на живой сессии: один сохраняющий агент сделал 476 ходов, повторив один и тот же вызов 456 раз, и забрал 62,6 млн входных токенов против 2,1 млн у агента, который реально делал вашу задачу — то есть около 97% машины. Отсюда и «семь глав за два часа». Причин было три, и все закрыты. Во-первых, обвязка уничтожала аргументы вызова: модель присылает их в плоском виде, а обвязка вырезала их как посторонние, и до инструмента доходила пустота с ответом «неверные аргументы» — повторять было бессмысленно, но и добиться успеха невозможно; теперь плоская форма приводится к правильной, и вызов срабатывает с первого раза. Во-вторых, защита от зацикливания судила по ИМЕНИ инструмента: инструмент задач считался «изменяющим» целиком, хотя его операция «перечислить» только читает, — и его повторы не проверялись вовсе; теперь решает сама операция, поэтому под защиту попадают и инструменты, которых ещё не существует. В-третьих, проверка до вызова и запись после вызова считали одну и ту же операцию разными вызовами, так что повтор никогда не накапливался. Порогов и подкрученных чисел не добавлено: признак остаётся строгим — одинаковые аргументы дали побайтово одинаковый ответ, значит новых сведений ноль. Повтор, который приносит новый результат, не ограничивается никогда, а ожидание остаётся ожиданием.",
+        en: "Work no longer crawls because a background agent is spinning on nothing. Measured on a live session: one saving agent took 476 turns, repeating a single identical call 456 times, and consumed 62.6M input tokens against 2.1M for the agent actually doing your task — about 97% of the machine. That is where \"seven chapters in two hours\" came from. There were three causes and all are closed. First, the harness was destroying the call's arguments: the model sends them flat, the harness stripped them as foreign, and the tool received nothing and answered \"invalid arguments\" — retrying was pointless, yet succeeding was impossible; the flat form is now reshaped into the valid one and the call works first time. Second, loop protection judged by the tool's NAME: the task tool counted as \"mutating\" as a whole even though its \"list\" operation only reads, so its repeats were never checked at all; the operation itself now decides, which also covers tools that do not exist yet. Third, the check before a call and the record after it treated one operation as two different calls, so a repeat never accumulated. No thresholds or tuned numbers were added: the criterion stays strict — identical arguments produced a byte-identical answer, so there is nothing new. A repeat that produces a new result is never restricted, and waiting stays waiting.",
+      },
+    ],
+  },
   {
     version: "0.2.8",
     date: "2026-07-21",

@@ -55,6 +55,27 @@ export function repairArgs(tool: string, args: any): RepairResult {
   const stripped: string[] = []
   let work = args
   const whitelist = STRICT_TOOL_KEYS[tool]
+  // WRAP BEFORE STRIPPING. `task`/`actor` accept a single key `operation` holding the real payload
+  // (`{operation:{action:"list"}}`), and the engine's own tool has a recover that wraps a flat payload
+  // for exactly this reason. But the strip below ran FIRST: a model sending the flat `{action:"list"}`
+  // had `action` removed as an unknown key, so `{}` reached the tool, the recover had nothing to wrap,
+  // and the call failed with "expected object, received string → at operation". The model cannot succeed
+  // at that — its arguments are destroyed before they are ever seen — so it retries the identical call
+  // forever. Measured live: one checkpoint-writer repeated `task {"action":"list"}` 456 times against
+  // that wall, 476 turns in a single session, consuming 62.6M input tokens against the main agent's 2.1M
+  // — ~97% of the machine — while the user's actual task crawled. Wrapping first turns a destroyed call
+  // into a valid one and removes the reason to retry at all.
+  // Wrap ONLY a payload carrying the schema's own discriminator (`action`). That is what makes this a
+  // provably un-nested operation rather than a guess: the tool's argument type is a discriminatedUnion on
+  // `action`, so `{action:"list"}` is an operation missing its wrapper, while `{foo:1}` is not an
+  // operation at all and must keep being stripped as before.
+  if (
+    whitelist && whitelist.length === 1 && whitelist[0] === "operation" &&
+    work && typeof work === "object" && !Array.isArray(work) &&
+    !("operation" in work) && typeof (work as any).action === "string"
+  ) {
+    work = { operation: work }
+  }
   if (whitelist && work && typeof work === "object" && !Array.isArray(work)) {
     const allow = new Set(whitelist)
     const next: Record<string, any> = {}

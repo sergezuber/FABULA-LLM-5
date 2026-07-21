@@ -219,3 +219,51 @@ test("session.deleted drops in-memory state (no crash)", async () => {
   await h["tool.execute.after"]({ tool: "view", sessionID: "d", callID: "c", args: { p: "/a" } }, o)
   expect(o.output).toBe("R")
 })
+
+// The wedged checkpoint-writer, driven through the REAL plugin hooks rather than the guard class.
+//
+// Live measurement (2026-07-21): one checkpoint-writer issued the byte-identical call
+// `task {"action":"list"}` 456 times in a single session and was never stopped, consuming 62.6M input
+// tokens against the main agent's 2.1M — ~97% of the machine. The pure core is unit-tested elsewhere;
+// what this asserts is that the wiring actually reaches it, because the reason the loop survived was a
+// classification in the core, not a missing hook: the engine triggers tool.execute.before in ONE tool
+// path with no agent filter, so a system agent is covered exactly like the main one.
+test("a multiplexer's repeated READ is stopped through the real hooks", async () => {
+  const h = await hooks()
+  const SID = "ses_wiring_mux"
+  const ARGS = { action: "list" }
+  const SAME = "T1 open\nT2 open"
+  let aborted = false
+  for (let i = 0; i < 12; i++) {
+    // ENGINE SHAPE: input carries no args; the args live on the output object and the hook may rewrite
+    // them in place. Driving it any other way tests a call that never happens.
+    const beforeOut: any = { args: { ...ARGS } }
+    try {
+      await h["tool.execute.before"]({ tool: "task", sessionID: SID, callID: "c" }, beforeOut)
+    } catch {
+      aborted = true // the before-hook THROWS to physically stop the redundant call
+      break
+    }
+    await h["tool.execute.after"](
+      { tool: "task", sessionID: SID, callID: "c", args: beforeOut.args },
+      { title: "task", output: SAME, metadata: {} },
+    )
+  }
+  expect(aborted).toBe(true)
+})
+
+test("CONTROL through the real hooks: a repeated read that KEEPS PRODUCING NEW OUTPUT is never stopped", async () => {
+  const h = await hooks()
+  const SID = "ses_wiring_progress"
+  const ARGS = { action: "list" }
+  for (let i = 0; i < 40; i++) {
+    const bo: any = { args: { ...ARGS } }
+    await h["tool.execute.before"]({ tool: "task", sessionID: SID, callID: "c" }, bo)
+    await h["tool.execute.after"](
+      { tool: "task", sessionID: SID, callID: "c", args: bo.args },
+      { title: "task", output: `T${i} open`, metadata: {} },
+    )
+  }
+  // reaching here without a throw IS the assertion: progress is never punished
+  expect(true).toBe(true)
+})

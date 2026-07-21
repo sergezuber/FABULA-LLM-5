@@ -4,9 +4,31 @@
 // canonicalArgs produces canonical tool args (equivalent to json.dumps sort_keys=True):
 // recursively sort object keys so {a:1,b:2} and {b:2,a:1} produce the SAME string.
 // Arrays keep order (order is semantically meaningful). Cycles/uns­erializable → fallback.
+/**
+ * Strip a lone `operation` wrapper so the SAME call has the SAME signature whichever shape it is in.
+ *
+ * `{action:"list"}` and `{operation:{action:"list"}}` are one call: the engine's schema for `task`/`actor`
+ * nests the payload, models routinely emit it flat, and arg-repair wraps the flat form on its way to the
+ * tool. That rewrite happens BETWEEN the two hooks that use this signature — the pre-execution check sees
+ * the flat shape, the post-execution recorder sees the wrapped one — so without this the guard files a
+ * call under one key and then looks for it under another, and every repeat looks brand new. Found by a
+ * wiring test that drove the hooks in the engine's real calling shape; the pure core had been green
+ * throughout, because it never saw the two shapes meet.
+ */
+function unwrapOperation(o: any): any {
+  if (o && typeof o === "object" && !Array.isArray(o)) {
+    const keys = Object.keys(o)
+    if (keys.length === 1 && keys[0] === "operation") {
+      const inner = (o as any).operation
+      if (inner && typeof inner === "object" && !Array.isArray(inner)) return inner
+    }
+  }
+  return o
+}
+
 export function canonicalArgs(args: any): string {
   try {
-    const s = JSON.stringify(sortDeep(args))
+    const s = JSON.stringify(sortDeep(unwrapOperation(args)))
     return s === undefined ? "" : s   // JSON.stringify(undefined) === undefined
   } catch {
     try { const s = JSON.stringify(args); return s === undefined ? "" : s } catch { return String(args) }

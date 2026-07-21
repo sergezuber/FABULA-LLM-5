@@ -375,6 +375,11 @@ class Handler(BaseHTTPRequestHandler):
                         _key = str(j.get("model") or "?")
                         _sp = stable_prefix(j)
                         _prev_sp, _cb = compare_and_store(_PREFIX_STATE, _PREFIX_LOCK, _key, _sp)
+                        # A turn whose prefix survived streams from cache; one whose prefix broke waits
+                        # behind a full re-prefill. Those are different physics and must not share an
+                        # idle-budget bucket — `_cb` is compare_and_store's own break signal, so the
+                        # definition of "the prefix did not survive" stays single.
+                        self._idle_warm = not _cb
                         if _cb and not CACHE_BREAK_CLASSIFY:
                             sys.stderr.write(
                                 "[fabula-adapter] CACHE-BREAK model=%s: shared prefix %d/%d (%.0f%%) — "
@@ -481,7 +486,8 @@ class Handler(BaseHTTPRequestHandler):
         # W5: the idle budget for THIS key, measured. Cold start returns exactly the flat constant.
         _idle_key = str((j or {}).get("model") or "?") if isinstance(j, dict) else "?"
         _idle_size = len(body) if body else 0
-        _idle_budget = _IDLE.budget(_idle_key, _idle_size)
+        _idle_warm = getattr(self, "_idle_warm", True)
+        _idle_budget = _IDLE.budget(_idle_key, _idle_size, _idle_warm)
 
         def _open_upstream(timeout):
             r = urllib.request.Request(UPSTREAM + self.path,
@@ -640,7 +646,7 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     _now = time.time()
                     if forwarded and _gap_prev is not None:
-                        _IDLE.observe(_idle_key, _idle_size, _now - _gap_prev)
+                        _IDLE.observe(_idle_key, _idle_size, _now - _gap_prev, _idle_warm)
                     _gap_prev = _now
                 except Exception:
                     pass

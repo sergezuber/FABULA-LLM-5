@@ -548,10 +548,19 @@ class IdleBaseline:
             n = 0
         return 0 if n <= 0 else int(math.floor(math.log2(max(1, n))))
 
-    def key(self, model, size):
-        return (str(model or ""), self.bucket(size))
+    def key(self, model, size, warm=True):
+        # WARM is part of the key, not a detail. Buckets already separate prompt SIZE because "a 1KB
+        # prompt and a 250KB prompt are different physics" — and a COLD turn and a WARM turn of the SAME
+        # size are different physics for exactly the same reason: with the prefix reused the server
+        # streams from cache, without it every token waits behind a full re-prefill. Mixing them let a
+        # bucket fill with fast warm gaps, so `observed_max * margin` fell under the floor and the first
+        # cold turn was cut by it. Measured on the live adapter: 48 of 96 terminated streams fired at
+        # exactly the 30.0s floor — half of all cuts were healthy streams killed by evidence gathered
+        # from turns of a different kind. Warmth is taken from compare_and_store's OWN break signal, so
+        # there is one definition of "the prefix did not survive", not two.
+        return (str(model or ""), self.bucket(size), bool(warm))
 
-    def observe(self, model, size, gap):
+    def observe(self, model, size, gap, warm=True):
         """Record one observed gap. Non-finite or non-positive values are not evidence."""
         try:
             g = float(gap)
@@ -560,7 +569,7 @@ class IdleBaseline:
         if not math.isfinite(g) or g <= 0:
             return self
         with self._lock:
-            k = self.key(model, size)
+            k = self.key(model, size, warm)
             if k not in self._samples and len(self._samples) >= self.max_keys:
                 self._samples.pop(next(iter(self._samples)), None)   # bounded: never grows unbounded
             buf = self._samples.setdefault(k, [])
@@ -573,13 +582,13 @@ class IdleBaseline:
     record = observe
     add = observe
 
-    def budget(self, model, size=0):
+    def budget(self, model, size=0, warm=True):
         """The idle budget for this key. Querying NEVER mutates state. Cold start (and the kill-switch)
         return exactly today's flat constant — the honest answer when nothing has been measured."""
         if not self.enabled:
             return self.flat
         with self._lock:
-            buf = list(self._samples.get(self.key(model, size), ()))
+            buf = list(self._samples.get(self.key(model, size, warm), ()))
         if len(buf) < self.min_samples:
             return self.flat
         observed_max = max(buf)

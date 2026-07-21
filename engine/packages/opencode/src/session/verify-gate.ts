@@ -259,3 +259,47 @@ export function renderFeatureBlock(f: TrajectoryFeatures): string {
     `${f.edits} source edit(s), ${f.rewinds} auto-rewind(s), ${f.notDone} terminal not-done` +
     (f.unverifiedEdits ? "; UNVERIFIED source edits present" : "")
 }
+
+// ── Post-compaction stall ────────────────────────────────────────────────────────────────────────
+//
+// Measured failure (live session, 2026-07-21): mid-task, the context boundary fired and the session was
+// compacted; the very next turn the model produced a TEXT-ONLY reply announcing what it would do next
+// ("now I'll move on to the chapters, starting with the first five") and the turn ended. Nothing forced a
+// continuation: the project was a book folder with no verify command, so the auto-goal gate was never
+// armed (its arming deliberately keys on hasVerifyCommand), and every other continuation contract keys on
+// edits or malformed output — none of which a pure announcement has. Work in flight silently became a
+// stop, and the user found a session that "finished" without doing the job.
+//
+// The rule is STRUCTURAL, no language matching and no tuned numbers: work was in flight before the
+// boundary (the last real assistant step before the compaction summary made tool calls), the first turn
+// after the boundary made NONE. Announcing is not doing; a model that had genuinely finished would have
+// nothing left to announce. One bounded re-entry converges: either the model resumes real work (tool
+// calls appear), or it repeats a text-only reply and the second stop stands.
+export interface PostCompactionScanMessage {
+  role: "user" | "assistant" | string
+  /** the assistant message that carries the compaction summary */
+  summary?: boolean
+  /** message finished (has a finish reason) — mirrors info.finish presence */
+  finished?: boolean
+  parts: ReadonlyArray<{ type: string }>
+}
+
+export function postCompactionStall(messages: ReadonlyArray<PostCompactionScanMessage>): boolean {
+  // walk from the end: the CURRENT assistant reply
+  let i = messages.length - 1
+  while (i >= 0 && messages[i].role !== "assistant") i--
+  if (i < 0) return false
+  const current = messages[i]
+  if (current.summary === true) return false // the summary itself is not a work turn
+  if (current.parts.some((p) => p.type === "tool")) return false // real work happened — no stall
+  // the nearest FINISHED assistant before it must be the compaction summary (i.e. this is the FIRST
+  // post-boundary turn — later turns are ordinary stops and none of this applies)
+  let j = i - 1
+  while (j >= 0 && !(messages[j].role === "assistant" && messages[j].finished)) j--
+  if (j < 0 || messages[j].summary !== true) return false
+  // and before the boundary, work was genuinely in flight
+  let k = j - 1
+  while (k >= 0 && messages[k].role !== "assistant") k--
+  if (k < 0) return false
+  return messages[k].parts.some((p) => p.type === "tool")
+}

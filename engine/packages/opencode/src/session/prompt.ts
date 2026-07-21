@@ -4,7 +4,7 @@ import z from "zod"
 import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
 import { classifyAssistantStep } from "./classify"
-import { needsForcedVerify, hasVerifyCommand, goalStopLayerFires, trajectoryFeatures, badDynamicsSignature, FORCE_VERIFY_REMINDER, FORCE_VERIFY_NOT_DONE, type ScanMessage } from "./verify-gate"
+import { needsForcedVerify, hasVerifyCommand, goalStopLayerFires, trajectoryFeatures, badDynamicsSignature, postCompactionStall, FORCE_VERIFY_REMINDER, FORCE_VERIFY_NOT_DONE, type ScanMessage } from "./verify-gate"
 import { auditEntry, mcpSourceFor, schemaTokenBreakdown, renderBreakdown, type ToolAuditEntry } from "./tool-audit"
 import { beltFor, beltMasks, beltVisible, stashShadow, NEVER_MASK, type ShadowTool } from "./belt"
 import { readdir } from "node:fs/promises"
@@ -1944,6 +1944,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         // Ensures the visible "NOT DONE — unverified" marker is stamped at most once per task when the
         // force-verify cap is exhausted with source edits still unverified.
         let unverifiedCapMarked = false
+        // Post-compaction stall re-entry (see verify-gate.ts postCompactionStall): at most ONE per
+        // runLoop. Bounded by construction — either the model resumes real work (tool calls appear and
+        // the detector goes quiet), or it repeats a text-only reply and that second stop stands.
+        let postCompactionContinued = false
         // structured-output 专用 retry：上限来自 lastUser.format.retryCount（默认 2），
         // 与 invalidContinuations（generic invalid）分离，互不污染。局部于 runLoop，
         // 新一轮用户 turn 自动归零。
@@ -2878,6 +2882,54 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             if (classification.type !== "continue") {
               if (yield* taskGate(lastUser)) continue
               if (yield* autoContinueUnverified({ lastUser, assistant: lastAssistant })) continue
+              // Post-compaction stall: work was in flight before the boundary, and the FIRST turn after
+              // it produced a text-only announcement with zero tool calls. In a project with no verify
+              // command the auto-goal gate is deliberately never armed, so nothing else catches this and
+              // "I'll now do X" stands as a finished session (measured live: a book-analysis task ended
+              // exactly there). Structural detection, one bounded re-entry, kill-switch
+              // FABULA_POST_COMPACTION_CONTINUE=0.
+              if (
+                !postCompactionContinued &&
+                process.env.FABULA_POST_COMPACTION_CONTINUE !== "0" &&
+                postCompactionStall(
+                  msgs.map((m) => ({
+                    role: m.info.role,
+                    summary: (m.info as { summary?: boolean }).summary,
+                    finished: m.info.role === "assistant" ? !!(m.info as MessageV2.Assistant).finish : undefined,
+                    parts: m.parts,
+                  })),
+                )
+              ) {
+                postCompactionContinued = true
+                const cont = yield* sessions.updateMessage({
+                  id: MessageID.ascending(),
+                  role: "user" as const,
+                  sessionID: lastUser.sessionID,
+                  agentID: lastUser.agentID,
+                  agent: lastUser.agent,
+                  model: lastUser.model,
+                  tools: lastUser.tools,
+                  format: lastUser.format,
+                  time: { created: Date.now() },
+                })
+                yield* sessions.updatePart({
+                  id: PartID.ascending(),
+                  messageID: cont.id,
+                  sessionID: lastUser.sessionID,
+                  type: "text",
+                  synthetic: true,
+                  text: [
+                    "<system-reminder>",
+                    "The context was compacted mid-task and your last reply only ANNOUNCED next steps",
+                    "without executing any of them. Announcing is not doing. Continue the task NOW using",
+                    "tools, picking up exactly where the summary left off. If the task is genuinely",
+                    "complete, state the final result itself — not what you are about to do.",
+                    "</system-reminder>",
+                  ].join("\n"),
+                })
+                yield* slog.info("post-compaction stall — continuing", { sessionID })
+                continue
+              }
               if (yield* goalGate(lastUser)) continue
               yield* slog.info("exiting loop", { classification: classification.type })
               break

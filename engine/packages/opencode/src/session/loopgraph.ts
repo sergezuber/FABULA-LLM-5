@@ -179,6 +179,15 @@ export const RE_ENTRY_EDGES: readonly ReEntryEdge[] = [
     description:
       "the assistant repeated identical text; an inline recovery block injects a steer and re-enters. Bounded by TEXT_LOOP_MAX_RECOVERY (2)",
   },
+  {
+    id: "post-compaction-stall",
+    fn: "(inline block — session/prompt.ts finish path, postCompactionStall detector in verify-gate.ts)",
+    counter: "postCompactionContinued",
+    cap: 1,
+    capSource: "prompt.ts postCompactionContinued boolean — structurally at most one per runLoop",
+    description:
+      "work was in flight before a compaction boundary and the first post-boundary turn produced a text-only announcement with zero tool calls; one bounded re-entry steers the model to resume. The counter is a boolean, so the cap is 1 by construction; FABULA_POST_COMPACTION_CONTINUE=0 disables the edge entirely (kill-switch, not a cap parser)",
+  },
 ]
 
 export const REENTRY_BUDGET_ENV = "FABULA_REENTRY_BUDGET"

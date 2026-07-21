@@ -181,6 +181,19 @@ describe("answerIsTerminal (Change 1 — goalGate short-circuit on a verifiable 
   test("AUTO goal + unverified edit → does NOT fire (real work to prove → judge runs)", () => {
     expect(goalStopLayerFires({ auto: true, messages: turn([editPart()]) })).toBe(false)
   })
+  test("AUTO goal + a turn full of READ tools then a text stop → does NOT fire (a task, not a chat)", () => {
+    // THE measured failure (2026-07-21, three sessions running): a book-analysis turn made dozens of
+    // read calls, produced no edits (reading verifies nothing), then stopped at "chapters 2-4 read,
+    // continuing in batches" — and the old artifact-only condition honored that as a finished answer.
+    // A turn that was actively calling tools is not a conversation; its stop must reach the judge.
+    expect(
+      goalStopLayerFires({ auto: true, messages: turn([{ type: "tool", tool: "read" }, { type: "text" }]) }),
+    ).toBe(false)
+  })
+  test("AUTO goal + tool-free answer stays the short-circuit (conversations never loop)", () => {
+    // The protection the stop-layer exists for is untouched: knowledge answers carry no tool calls.
+    expect(goalStopLayerFires({ auto: true, messages: turn([{ type: "text" }, { type: "text" }]) })).toBe(true)
+  })
   test("EXPLICIT /goal + terminal answer → does NOT fire (user opted in; judge must run)", () => {
     expect(goalStopLayerFires({ auto: false, messages: turn([{ type: "text" }]) })).toBe(false)
   })

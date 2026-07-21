@@ -142,8 +142,33 @@ export function answerIsTerminal(messages: readonly ScanMessage[]): boolean {
  * So the short-circuit requires BOTH `auto` AND a terminal (no verifiable
  * artifact) answer. Kept pure here so the auto-vs-explicit invariant is unit-tested.
  */
+/**
+ * Did the CURRENT turn (after the last real user boundary) make any tool call at all?
+ * The structural line between a CONVERSATION and a TASK. A conversational answer is produced from
+ * knowledge — its turn is tool-free; a turn that was reading files, searching, running commands is a
+ * task in progress, whatever its final message looks like. No language analysis, no thresholds.
+ */
+export function turnMadeToolCalls(messages: readonly ScanMessage[]): boolean {
+  let start = 0
+  for (let i = 0; i < messages.length; i++) if (isRealUserBoundary(messages[i])) start = i + 1
+  for (let i = start; i < messages.length; i++) {
+    const m = messages[i]
+    if (m.role !== "assistant") continue
+    if (m.parts.some((p) => p.type === "tool")) return true
+  }
+  return false
+}
+
 export function goalStopLayerFires(input: { auto: boolean; messages: readonly ScanMessage[] }): boolean {
-  return input.auto === true && answerIsTerminal(input.messages)
+  // The short-circuit exists for CONVERSATIONAL turns — the "answers, then loops and cannot stop"
+  // failure it was built against was a chat question judged by a same-model judge on a 200k context.
+  // It used to fire on ANY turn without unverified edits, which covered every READING task too: a
+  // book-analysis session that stopped mid-task at "chapters 2-4 read, continuing in batches" was
+  // honored as a finished answer, because reading produces no edits (measured live, three sessions in a
+  // row, 2026-07-21). A turn that was actively CALLING TOOLS is not a conversation — it is a task, and
+  // a task's stop must reach the judge (which is bounded by MAX_GOAL_REACT and the hard-veto, and whose
+  // comparative framing already knows an informational request is satisfied by a direct answer).
+  return input.auto === true && answerIsTerminal(input.messages) && !turnMadeToolCalls(input.messages)
 }
 
 /**

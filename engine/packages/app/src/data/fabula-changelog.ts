@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.3.1"
+export const FABULA_VERSION = "0.3.2"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.3.2",
+    date: "2026-07-21",
+    items: [
+      {
+        ru: "Длинная задача больше не может «закончиться», отчитавшись о прогрессе. Три сессии подряд разбор книги останавливался на «главы 2-4 прочитаны, продолжаю батчами» — и это считалось финишем. Причина найдена в страже «не заканчивать, пока не сделано»: два его предохранителя от старой петли на разговорных сессиях в сумме выключали его именно там, где живут длинные задачи. Во-первых, страж вообще не взводился в папке без тестов — а книга, исследование, архив документов как раз такие. Во-вторых, даже взведённый, он пропускал любой текстовый стоп без проверки судьёй, потому что чтение не оставляет правок кода. Теперь различие проведено структурно: ход, который вызывал инструменты, — это задача, и её стоп обязан пройти судью («достаточен ли уже ответ?», с жёсткими лимитами повторов); ход без единого вызова — разговор, и он завершается сразу, как и раньше. Никаких разборов формулировок и подкрученных чисел: только факт «были вызовы инструментов или нет».",
+        en: "A long task can no longer \"finish\" by reporting progress. Three sessions in a row, a book analysis stopped at \"chapters 2-4 read, continuing in batches\" — and that counted as done. The cause was found in the finish-the-job gate: two of its safeguards against an old loop on conversational sessions jointly disabled it exactly where long tasks live. First, the gate never armed at all in a folder without tests — and a book, a research corpus, an archive of documents are exactly that. Second, even armed, it honored any text stop without consulting the judge, because reading leaves no code edits. The distinction is now structural: a turn that was calling tools is a task, and its stop must pass the judge (\"is the answer already sufficient?\", hard-capped on repeats); a turn without a single call is a conversation and still ends immediately. No wording analysis and no tuned numbers: only the fact of tool calls.",
+      },
+    ],
+  },
   {
     version: "0.3.1",
     date: "2026-07-21",

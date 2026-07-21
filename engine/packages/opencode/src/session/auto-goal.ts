@@ -134,6 +134,18 @@ export function shouldAutoArm(input: {
  * `hasVerifyCmd` is the same signal the prompt() wiring computes from the
  * project tree (readdir + hasVerifyCommand), kept pure here for unit testing.
  */
-export function shouldArmForProject(input: { hasVerifyCmd: boolean }): boolean {
-  return input.hasVerifyCmd
+export function shouldArmForProject(_input: { hasVerifyCmd: boolean }): boolean {
+  // Arming is UNCONDITIONAL now, and the parameter is deliberately kept so this stays the one named
+  // decision point (and so the history is visible in its tests rather than deleted).
+  //
+  // The verify-command restriction dated from before the stop-layer and the comparative judge framing:
+  // back then, arming a docs project meant a rigid "is it verified?" judge looping a chat answer. Today
+  // the loop protections live elsewhere and are layered: the stop-layer honors a stop on any TOOL-FREE
+  // turn (a conversation) without calling the judge at all; the judge itself is comparative ("is the
+  // answer already sufficient?"), capped by MAX_GOAL_REACT, and hard-vetoed on bad dynamics. What the
+  // restriction actually did in production was disarm the finish-the-job gate on every corpus that has
+  // no test suite — a book, a research folder, a pile of documents — which is precisely where long
+  // tasks die quietly: measured live, a "read all chapters" session ended three times at a text-only
+  // "continuing in batches" announcement because nothing was armed to ask "is the job done?".
+  return true
 }

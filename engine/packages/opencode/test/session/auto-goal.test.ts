@@ -130,11 +130,16 @@ describe("shouldAutoArm", () => {
 // (verify-gate.ts hasVerifyCommand). SOTA: Agentic Abstention — ANSWER is a
 // terminal action; arming a verify-condition where verification is impossible
 // turns a terminal answer into an unbounded loop.
-describe("shouldArmForProject (Change 2 — non-verifiable projects never arm)", () => {
+describe("shouldArmForProject (arming is unconditional — the loop protections moved)", () => {
   test("arms when the project HAS a verify command", () => {
     expect(shouldArmForProject({ hasVerifyCmd: true })).toBe(true)
   })
-  test("NEVER arms when the project has nothing to verify (docs/prompts/Q&A repo)", () => {
-    expect(shouldArmForProject({ hasVerifyCmd: false })).toBe(false)
+  test("arms EVEN WITHOUT a verify command — a book/docs corpus is where long tasks die quietly", () => {
+    // The old restriction disarmed the finish-the-job gate on every corpus with no test suite.
+    // Measured live (2026-07-21): a "read all chapters" session ended three times at a text-only
+    // "continuing in batches" announcement — nothing was armed to ask "is the job done?". The
+    // conversational-loop protection this restriction once provided lives in the stop-layer now,
+    // which honors a stop on any TOOL-FREE turn without calling the judge (see verify-gate tests).
+    expect(shouldArmForProject({ hasVerifyCmd: false })).toBe(true)
   })
 })

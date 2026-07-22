@@ -1,36 +1,66 @@
 import { test, expect } from "bun:test"
 import { buildDecomposePrompt, parseDecompose } from "./decompose"
 
-test("parseDecompose: splits claim @@ attribution, drops preamble/empties, caps at 40", () => {
-  const aux = [
-    "Here are the claims:", // preamble → dropped
-    "The cup was warm on its own. @@ глава_01",
-    "Correlation reaches 0.9999. @@ глава_11",
-    "- 9 analysts over 47 years @@ NONE", // bullet + NONE attribution
-    "hi", // too short → dropped
-  ].join("\n")
+test("parseDecompose: JSON array (the primary path)", () => {
+  const aux = JSON.stringify([
+    { text: "The cup was warm on its own.", src: "ch01" },
+    { text: "9 analysts over 47 years", src: null },
+    { text: "correlation reached 0.9999", src: "ch11" },
+  ])
   const out = parseDecompose(aux)
   expect(out.length).toBe(3)
-  expect(out[0]).toEqual({ text: "The cup was warm on its own.", attribution: "глава_01" })
-  expect(out[2].attribution).toBeUndefined() // NONE → no attribution
-  expect(out[2].text).toBe("9 analysts over 47 years") // leading bullet stripped
+  expect(out[0]).toEqual({ text: "The cup was warm on its own.", attribution: "ch01" })
+  expect(out[1].attribution).toBeUndefined() // null src → no attribution
+  expect(out[2].attribution).toBe("ch11")
 })
 
-test("parseDecompose: a line with no @@ keeps the whole text, no attribution", () => {
-  const out = parseDecompose("The building is described as alive.")
-  expect(out.length).toBe(1)
-  expect(out[0].text).toBe("The building is described as alive.")
-  expect(out[0].attribution).toBeUndefined()
+test("parseDecompose: JSON buried in a reasoning-model trace → lifts the LAST array, ignores the ramble (live 2026-07-22)", () => {
+  const polluted =
+    "Here's a thinking process:\n**Analyze User Input:** extract claims...\n" +
+    'Draft: [{"text":"wrong early draft","src":null}]\n' +
+    "Wait, let me refine. Line 1: The text says...\nSelf-Correction: keep exact wording.\n" +
+    'Final answer:\n[{"text":"The cup was warm on its own.","src":"ch01"},{"text":"correlation reached 0.9999","src":"ch01"},{"text":"the corridor is 14 steps","src":"ch01"}]'
+  const out = parseDecompose(polluted)
+  const texts = out.map((c) => c.text)
+  expect(out.length).toBe(3) // the FINAL array, not the early draft, not the reasoning lines
+  expect(texts).toContain("The cup was warm on its own.")
+  expect(texts.some((t) => /0\.9999/.test(t))).toBe(true)
+  expect(texts.some((t) => /wrong early draft|thinking process|Self-Correction/i.test(t))).toBe(false)
 })
 
-test("parseDecompose: empty/garbage input → no claims", () => {
+test("parseDecompose: dedupes repeated claims in the JSON", () => {
+  const aux = JSON.stringify([
+    { text: "The cup was warm on its own." },
+    { text: "The cup was warm on its own." },
+    { text: "correlation reached 0.9999" },
+  ])
+  expect(parseDecompose(aux).length).toBe(2)
+})
+
+test("parseDecompose: line fallback (no JSON) — strips reasoning + dedupes", () => {
+  const lines = [
+    "Here's a thinking process:",
+    "**Task:** extract claims",
+    'The text says «The cup was warm on its own.» @@ ch01',
+    "correlation reached 0.9999 @@ ch01",
+    'Claim 2: The text says «The cup was warm on its own.» @@ ch01', // dup
+    "Check against constraints:",
+  ].join("\n")
+  const out = parseDecompose(lines)
+  expect(out.filter((c) => /cup was warm/i.test(c.text)).length).toBe(1)
+  expect(out.some((c) => /0\.9999/.test(c.text))).toBe(true)
+  expect(out.some((c) => /thinking process|Task|Check against/i.test(c.text))).toBe(false)
+})
+
+test("parseDecompose: empty / pure-meta reasoning → no claims", () => {
   expect(parseDecompose("")).toEqual([])
-  expect(parseDecompose("...\n\n").length).toBe(0)
+  // lines that are all reasoning scaffolding (META) or too short carry no claim
+  expect(parseDecompose("Here's my plan:\n**Task:** do it\nLet's go.\nokay")).toEqual([])
 })
 
-test("buildDecomposePrompt: embeds the deliverable + the claim-line format + a cap", () => {
+test("buildDecomposePrompt: asks for a JSON array + embeds the deliverable", () => {
   const p = buildDecomposePrompt("A written analysis with «a quote» and 0.9999.")
-  expect(p).toContain("@@")
-  expect(p).toContain("Max 40")
+  expect(p).toContain("JSON array")
+  expect(p).toContain('"text"')
   expect(p).toContain("a quote")
 })

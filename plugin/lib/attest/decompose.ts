@@ -1,6 +1,9 @@
 // fabula-attest — decomposition prompt/parse (design B/G, pure part; the callAux lives in the plugin).
-// Splits a deliverable into atomic claims, each carrying the source it attributes itself to (for the
-// scoped-grep mis-attribution check). Deliberately conservative parse. Pure, unit-tested.
+// A reasoning model pours its whole chain-of-thought into the response (measured live 2026-07-22: the
+// adapter moves reasoning_content→content, so a line parser scoops up 40 lines of "Let's…/Claim N:/Wait…"
+// noise). RULE #9: don't chase the rambling with a denylist — make extraction DETERMINISTIC. We ask for a
+// JSON array and lift the LAST valid array out of the text (reasoning-first: the answer is at the end),
+// ignoring everything else. A line-based heuristic remains as a fallback for models that don't emit JSON.
 
 function clip(s: string, n: number): string {
   const t = String(s ?? "")
@@ -12,30 +15,89 @@ export function buildDecomposePrompt(deliverable: string): string {
     "Extract the atomic factual CLAIMS from the TEXT below. A claim is a single assertion that could be",
     "checked: a quote, a number/total, a stated behavior, a claim about what was read/done, or a factual",
     "statement. Skip pure opinion unless it is stated as fact.",
-    "Output ONE claim per line, in this exact form:",
-    "  <the claim sentence> @@ <the source/file/section it attributes to, or NONE>",
-    "Max 40 lines. No preamble, no numbering.",
+    'Respond with ONLY a JSON array (no prose before or after), each item {"text": "<the claim>", "src":',
+    '"<the file/section it attributes to, or null>"}. Max 40 items.',
     "",
     "TEXT:",
     clip(deliverable, 8000),
   ].join("\n")
 }
 
-/** Parse decomposition lines into {text, attribution}. Drops preamble/empties; caps at 40. */
+/** Lift the LAST bracket-balanced JSON array out of a possibly reasoning-laden response. */
+function lastJsonArray(text: string): any[] | null {
+  for (let start = text.lastIndexOf("["); start >= 0; start = text.lastIndexOf("[", start - 1)) {
+    let depth = 0
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i]
+      if (ch === "[") depth++
+      else if (ch === "]") {
+        depth--
+        if (depth === 0) {
+          try {
+            const v = JSON.parse(text.slice(start, i + 1))
+            if (Array.isArray(v) && v.length) return v
+          } catch {}
+          break
+        }
+      }
+    }
+  }
+  return null
+}
+
+const META =
+  /^(here'?s|let'?s|okay|wait|first,|next,|now,|line\s*\d|analyze|deconstruct|identify|filter|refine|refined|self-correction|constraint|definition|output\s*format|input\s*text|check\b|atomic|factual|format:|the\s+following|verify|since\b|i'?ll\b|i\s+will|one\s+(minor|consideration)|thinking|task:|deliverable|the\s+prompt|the\s+quotes?\s+are|all\s+(good|match))/i
+
+function stripMarkers(line: string): string {
+  return line
+    .replace(/^\**\s*(?:claim|line)\s*\d+\s*[:.)-]\s*/i, "")
+    .replace(/^\s*(?:[-*•]\s+|\d+[.)]\s+)/, "")
+    .replace(/^\*\*(.+?)\*\*:?\s*$/, "$1")
+    .replace(/^\**\s*/, "")
+    .trim()
+}
+
+/** Fallback line parser (non-JSON models): strip reasoning scaffolding, keep claim-shaped lines, dedupe. */
+function parseLines(text: string): Array<{ text: string; attribution?: string }> {
+  const seen = new Set<string>()
+  const out: Array<{ text: string; attribution?: string }> = []
+  for (const rawLine of text.replace(/<think>[\s\S]*?<\/think>/gi, " ").split("\n")) {
+    const line = stripMarkers(rawLine.trim())
+    if (line.length < 10 || META.test(line)) continue
+    const looksClaim = /[«"“„]/.test(line) || /\d/.test(line) || (line.length > 24 && /[a-zа-яё]/i.test(line))
+    if (!looksClaim) continue
+    const idx = line.indexOf("@@")
+    const t = (idx >= 0 ? line.slice(0, idx) : line).trim()
+    if (t.length <= 6) continue
+    const key = t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim()
+    if (seen.has(key)) continue
+    seen.add(key)
+    const attr = idx >= 0 ? line.slice(idx + 2).trim() : ""
+    out.push({ text: t, attribution: attr && !/^none$/i.test(attr) ? attr : undefined })
+    if (out.length >= 40) break
+  }
+  return out
+}
+
+/** Parse the decomposition. JSON array first (robust to reasoning models); line heuristic as fallback. */
 export function parseDecompose(auxText: string): Array<{ text: string; attribution?: string }> {
-  return String(auxText ?? "")
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 8 && !/^(text:|claims?:|here (are|is)|the following)/i.test(l))
-    .map((l) => {
-      const idx = l.indexOf("@@")
-      // strip only a list marker (- * • or "1." / "2)"), NOT a bare leading number that is part of the
-      // claim (e.g. "9 analysts …") — the latter would corrupt a measurement claim.
-      const rawText = (idx >= 0 ? l.slice(0, idx) : l).replace(/^\s*(?:[-*•]\s+|\d+[.)]\s+)/, "").trim()
-      const rawAttr = idx >= 0 ? l.slice(idx + 2).trim() : ""
-      const attribution = rawAttr && !/^none$/i.test(rawAttr) ? rawAttr : undefined
-      return { text: rawText, attribution }
-    })
-    .filter((c) => c.text.length > 6)
-    .slice(0, 40)
+  const text = String(auxText ?? "")
+  const arr = lastJsonArray(text)
+  if (arr) {
+    const seen = new Set<string>()
+    const out: Array<{ text: string; attribution?: string }> = []
+    for (const o of arr) {
+      const t = String((o && (o.text ?? o.claim ?? o.c)) ?? "").trim()
+      if (t.length <= 6) continue
+      const key = t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim()
+      if (seen.has(key)) continue
+      seen.add(key)
+      const src = o && (o.src ?? o.source ?? o.attribution)
+      const attribution = src && typeof src === "string" && !/^(none|null)$/i.test(src.trim()) ? src.trim() : undefined
+      out.push({ text: t, attribution })
+      if (out.length >= 40) break
+    }
+    if (out.length) return out
+  }
+  return parseLines(text)
 }

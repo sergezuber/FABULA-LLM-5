@@ -13,14 +13,8 @@ import type { Plugin } from "@mimo-ai/plugin"
 import { gate } from "./lib/manage"
 import { callAux } from "./lib/auxLLM"
 import { taskIsVerifiable } from "./lib/attest/arming"
-import { buildDecomposePrompt, parseDecompose } from "./lib/attest/decompose"
-import { typeClaim, bindLoadBearing } from "./lib/attest/claims"
-import { checkCitation, checkMeasurement, checkProcess } from "./lib/attest/executors"
-import { quarantine } from "./lib/attest/quarantine"
-import { buildEntailPrompt, parseEntail } from "./lib/attest/entailment"
-import { claimVerdict, computeVerdict } from "./lib/attest/verdict"
-import { buildReentrySteer } from "./lib/attest/remediation"
-import type { Claim, ClaimResult, Contract, SourceDoc, LedgerView } from "./lib/attest/types"
+import { runAttestGate } from "./lib/attest/gate"
+import type { Contract, SourceDoc, LedgerView } from "./lib/attest/types"
 
 const READ_TOOLS = new Set(["read", "view"])
 const WRITE_TOOLS = new Set(["create_file"]) // MVP: the deliverable is a file the model wrote (the book case)
@@ -52,63 +46,14 @@ function baseLabel(p: string): string {
   return p.split(/[\\/]/).pop() || p
 }
 
-/** Run the gate over a written deliverable. Best-effort, never throws, bounded LLM calls. Returns a
- *  re-entry steer string (empty when the deliverable's load-bearing claims are all grounded). */
+/** Run the gate over a written deliverable via the shared orchestrator (same code path the bench runs).
+ *  Best-effort, never throws, bounded aux calls. Returns a re-entry steer ("" when all load-bearing
+ *  claims are grounded). */
 async function runGate(state: SessState, deliverable: string): Promise<string> {
-  if (!deliverable || deliverable.length < 40) return ""
   const sources: SourceDoc[] = [...state.sources.entries()].map(([label, text]) => ({ label, text }))
   const ledger: LedgerView = { readLabels: state.reads.slice(), partial: true } // our tracking is best-effort
-
-  // Ход 2 — decompose (one aux call) → type by form (C) → bind load-bearing (F).
-  let raw: Array<{ text: string; attribution?: string }>
-  try {
-    const r = await callAux(buildDecomposePrompt(deliverable), { maxTokens: 1800, timeoutMs: 120000 })
-    raw = parseDecompose(r.text)
-  } catch {
-    return "" // aux unreachable → degrade to silence, never crash the turn
-  }
-  if (!raw.length) return ""
-  let claims: Claim[] = raw.map((c, i) => ({ id: `a${i}`, text: c.text, type: typeClaim(c.text), attribution: c.attribution, loadBearing: false }))
-  claims = bindLoadBearing(claims, state.contract)
-
-  // Проход 1 — free deterministic checks over ALL claims; entailment only on the SIGNAL residue.
-  const results: ClaimResult[] = []
-  let budget = CALL_BUDGET
-  for (const claim of claims) {
-    let pass1: "PASS" | "SIGNAL" | "NA" = "NA"
-    let span: string | undefined
-    if (claim.type === "citation") { const r = checkCitation(claim, sources); pass1 = r.outcome; span = r.span }
-    else if (claim.type === "measurement") pass1 = checkMeasurement(claim, sources).outcome
-    else if (claim.type === "process") pass1 = checkProcess(claim, ledger).outcome
-    // execution/world-state have no MVP executor → NA (honest unverifiable-here); soft types → NA
-
-    let entailFaithful: boolean | undefined
-    let failure: ClaimResult["failure"]
-    let confidence: number | undefined
-    let budgetExhausted = false
-    if (pass1 === "SIGNAL") {
-      if (budget > 0 && sources.length) {
-        budget--
-        try {
-          const scoped = claim.attribution
-            ? sources.filter((s) => s.label.toLowerCase().includes(String(claim.attribution).toLowerCase()))
-            : sources
-          const evidence = quarantine((scoped.length ? scoped : sources).map((s) => `[${s.label}] ${s.text}`).join("\n\n"), "local-source")
-          const e = parseEntail((await callAux(buildEntailPrompt(claim, evidence), { maxTokens: 400, timeoutMs: 90000 })).text)
-          confidence = e.confidence
-          if (e.faithful === true) { entailFaithful = true } // grounded (paraphrase ok) → confirmed
-          else if (e.faithful === false) { entailFaithful = false; failure = claim.type === "measurement" ? "broken-measurement" : "fabrication" }
-          // faithful === null → leave undecided (unchecked)
-        } catch { budgetExhausted = true }
-      } else budgetExhausted = true
-    }
-    const verdict = claimVerdict({ type: claim.type, pass1, entailFaithful, budgetExhausted })
-    results.push({ claim, pass1, verdict, evidenceSpan: span, failure, confidence })
-  }
-
-  const gv = computeVerdict(results)
-  if (gv.done) return ""
-  return buildReentrySteer(gv.residue)
+  const out = await runAttestGate({ deliverable, sources, ledger, contract: state.contract, callAux, budget: CALL_BUDGET })
+  return out.steer
 }
 
 export const FabulaAttest: Plugin = async () =>

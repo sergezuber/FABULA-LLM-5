@@ -191,7 +191,7 @@ export const MANIFEST: PluginMeta[] = [
   },
   {
     id: "attest", file: "fabula-attest.ts", name: "Universal verification gate", defaultEnabled: false,
-    description: "Verifies the deliverable of ANY task, not just code: decomposes a written analysis/plan/summary into typed atomic claims and independently re-derives each — a quote must grep-match its cited source (scoped, so mis-attribution is caught), a number must appear in the source, a 'read all N files' claim is checked against the run ledger; only the residue reaches a quarantined entailment oracle that separates a faithful paraphrase from a fabrication. Refuted load-bearing claims return a typed repair. Silent on chat/opinion turns; lives entirely in a plugin hook, never the engine stop-path. EXPERIMENTAL — default-off until benchmarked. Kill-switch: FABULA_ATTEST=0.",
+    description: "Verifies the deliverable of ANY task, not just code: decomposes a written analysis/plan/summary into typed atomic claims and independently re-derives each — a quote must grep-match its cited source (scoped, so mis-attribution is caught), a number must appear in the source, a 'read all N files' claim is checked against the run ledger; only the residue reaches a quarantined entailment oracle that separates a faithful paraphrase from a fabrication. Refuted load-bearing claims return a typed repair. Silent on chat/opinion turns; lives entirely in a plugin hook, never the engine stop-path. Validated on a planted-defect bench (100% catch / 0% false-positive) and a live run; OPT-IN (default-off) because it costs a few aux-calls per deliverable. Kill-switch: FABULA_ATTEST=0.",
     tools: [], deps: [...NPM_BUNDLED],
   },
   {

@@ -4,6 +4,7 @@ import z from "zod"
 import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
 import { classifyAssistantStep } from "./classify"
+import * as InvalidOutput from "./invalid-output"
 import { needsForcedVerify, hasVerifyCommand, goalStopLayerFires, sessionShowsTaskEvidence, trajectoryFeatures, badDynamicsSignature, postCompactionStall, FORCE_VERIFY_REMINDER, FORCE_VERIFY_NOT_DONE, type ScanMessage } from "./verify-gate"
 import { auditEntry, mcpSourceFor, schemaTokenBreakdown, renderBreakdown, type ToolAuditEntry } from "./tool-audit"
 import { beltFor, beltMasks, beltVisible, stashShadow, NEVER_MASK, type ShadowTool } from "./belt"
@@ -214,6 +215,7 @@ const PREDICT_NUDGE = `Based on the conversation above, write the user's most li
 
 const OUTPUT_LENGTH_CONTINUATION_LIMIT = Flag.MIMOCODE_OUTPUT_LENGTH_CONTINUATION_LIMIT
 const INVALID_OUTPUT_CONTINUATION_LIMIT = Flag.MIMOCODE_INVALID_OUTPUT_CONTINUATION_LIMIT
+const INVALID_OUTPUT_HARD_LIMIT = Flag.MIMOCODE_INVALID_OUTPUT_HARD_LIMIT
 const TEXT_TOOL_CALL_RETRY_LIMIT = Flag.MIMOCODE_TEXT_TOOL_CALL_RETRY_LIMIT
 
 const log = Log.create({ service: "session.prompt" })
@@ -1939,6 +1941,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         // counter — do not add a second one. Local to runLoop so a fresh user
         // turn resets it (no cross-message pollution), same as outputLengthContinuations.
         let invalidContinuations = 0
+        // Progress-aware companion to invalidContinuations (see session/invalid-output.ts). `invalidStalls`
+        // counts CONSECUTIVE non-progressing think-only turns (identical reasoning = a real stall);
+        // `lastInvalidReasoning` is the previous think-only turn's reasoning signature. A productive turn
+        // (tool call / final with text) resets all three, so two think-only turns separated by real work
+        // no longer accumulate toward the terminal error (measured live 2026-07-21).
+        let invalidStalls = 0
+        let lastInvalidReasoning: string | undefined
         // Force-verify re-entries this runLoop (see autoContinueUnverified). Local so a fresh user turn
         // resets it, same as the counters above — a new task starts with a clean verify budget.
         let unverifiedContinuations = 0
@@ -2520,10 +2529,24 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         const autoContinueInvalidOutput = Effect.fn("SessionPrompt.autoContinueInvalidOutput")(function* (input: {
           lastUser: MessageV2.User
           assistant: MessageV2.Assistant
+          parts: readonly { type: string; text?: string; synthetic?: boolean }[]
           reason: string
         }) {
           if (input.assistant.error || input.assistant.summary || input.assistant.structured !== undefined) return false
-          if (invalidContinuations >= INVALID_OUTPUT_CONTINUATION_LIMIT) {
+          // Progress-aware bound (session/invalid-output.ts): a think-only turn whose reasoning changed
+          // is the model working toward an action and does not spend the stall budget; a repeated
+          // reasoning is a genuine stall. The hard ceiling terminates a reason-forever-never-act model.
+          const sig = InvalidOutput.reasoningSignature(input.parts)
+          const decision = InvalidOutput.decideInvalidContinuation({
+            stalls: invalidStalls,
+            total: invalidContinuations,
+            progressed: sig.length > 0 && sig !== lastInvalidReasoning,
+            softLimit: INVALID_OUTPUT_CONTINUATION_LIMIT,
+            hardLimit: INVALID_OUTPUT_HARD_LIMIT,
+          })
+          invalidStalls = decision.stalls
+          lastInvalidReasoning = sig
+          if (!decision.proceed) {
             input.assistant.error = new MessageV2.InvalidOutputError({ message: input.reason }).toObject()
             yield* sessions.updateMessage(input.assistant)
             yield* bus.publish(Session.Event.Error, {
@@ -2534,7 +2557,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           }
 
           invalidContinuations++
-          yield* slog.info("auto-continuing invalid output", { attempt: invalidContinuations, reason: input.reason })
+          yield* slog.info("auto-continuing invalid output", {
+            attempt: invalidContinuations,
+            stalls: invalidStalls,
+            reason: input.reason,
+          })
           const msg = yield* sessions.updateMessage({
             id: MessageID.ascending(),
             role: "user" as const,
@@ -2555,7 +2582,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             text: [
               "<system-reminder>",
               "Your previous response contained no usable answer (it had only reasoning, or was empty).",
-              "Provide a final answer to the user now, or call a valid tool to make progress on the task.",
+              "If your reasoning already decided on an action (e.g. writing a file, editing code, running a command),",
+              "CALL that tool NOW — do not restate the plan. Otherwise provide the final answer to the user.",
               "Do not respond with only reasoning/thinking.",
               "</system-reminder>",
             ].join("\n"),
@@ -2891,9 +2919,26 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             }
             if (classification.type === "think-only" || classification.type === "invalid") {
               const reason = classification.type === "invalid" ? classification.reason : "think-only"
-              if (yield* autoContinueInvalidOutput({ lastUser, assistant: lastAssistant, reason })) continue
+              if (
+                yield* autoContinueInvalidOutput({
+                  lastUser,
+                  assistant: lastAssistant,
+                  parts: lastAssistantMsg?.parts ?? [],
+                  reason,
+                })
+              )
+                continue
               yield* slog.info("exiting loop", { classification: classification.type })
               break
+            }
+            // Productive step (a tool call, or a final that carried text) means the model is no longer
+            // stuck — reset the think-only budget so two think-only turns separated by real work do not
+            // accumulate toward the terminal error (measured live 2026-07-21). Keyed on PARTS, not on
+            // classification.type: a stale-assistant "continue" is not progress and must not reset.
+            if (InvalidOutput.isProductiveStep(lastAssistantMsg?.parts ?? [])) {
+              invalidContinuations = 0
+              invalidStalls = 0
+              lastInvalidReasoning = undefined
             }
             if (classification.type === "final" && classification.degraded)
               yield* slog.warn("degraded final on abnormal finish", { finish: lastAssistant.finish })
@@ -3585,11 +3630,25 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               ) {
                 const reason =
                   forkClassification.type === "invalid" ? forkClassification.reason : "think-only"
-                if (yield* autoContinueInvalidOutput({ lastUser, assistant: handle.message, reason }))
+                if (
+                  yield* autoContinueInvalidOutput({
+                    lastUser,
+                    assistant: handle.message,
+                    parts: MessageV2.parts(handle.message.id),
+                    reason,
+                  })
+                )
                   return "continue" as const
                 return "break" as const
               }
 
+              // Productive step resets the think-only budget here too, so the "separated by real work"
+              // property holds in fork/subagent turns as well (parity with the two non-fork sites).
+              if (InvalidOutput.isProductiveStep(MessageV2.parts(handle.message.id))) {
+                invalidContinuations = 0
+                invalidStalls = 0
+                lastInvalidReasoning = undefined
+              }
               if (forkClassification.type === "final" && forkClassification.degraded)
                 yield* slog.warn("degraded final on abnormal finish", { finish: handle.message.finish })
               if (result === "stop") return "break" as const
@@ -3801,11 +3860,24 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               format.type !== "json_schema"
             ) {
               const reason = classification.type === "invalid" ? classification.reason : "think-only"
-              if (yield* autoContinueInvalidOutput({ lastUser, assistant: handle.message, reason }))
+              if (
+                yield* autoContinueInvalidOutput({
+                  lastUser,
+                  assistant: handle.message,
+                  parts: MessageV2.parts(handle.message.id),
+                  reason,
+                })
+              )
                 return "continue" as const
               return "break" as const
             }
 
+            // Productive step resets the think-only budget (see the existing-assistant path above).
+            if (InvalidOutput.isProductiveStep(MessageV2.parts(handle.message.id))) {
+              invalidContinuations = 0
+              invalidStalls = 0
+              lastInvalidReasoning = undefined
+            }
             if (classification.type === "final" && classification.degraded)
               yield* slog.warn("degraded final on abnormal finish", { finish: handle.message.finish })
             if (result === "stop") return "break" as const

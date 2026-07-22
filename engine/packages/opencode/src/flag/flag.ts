@@ -67,6 +67,12 @@ export const Flag = {
   MIMOCODE_DISABLE_MOUSE: truthy("MIMOCODE_DISABLE_MOUSE"),
   MIMOCODE_OUTPUT_LENGTH_CONTINUATION_LIMIT: number("MIMOCODE_OUTPUT_LENGTH_CONTINUATION_LIMIT") ?? 3,
   MIMOCODE_INVALID_OUTPUT_CONTINUATION_LIMIT: number("MIMOCODE_INVALID_OUTPUT_CONTINUATION_LIMIT") ?? 2,
+  // Absolute ceiling on think-only/invalid auto-continues that ARE making progress (reasoning keeps
+  // changing) — the soft limit above bounds a STALL (repeated identical reasoning). A reasoning model
+  // reasons across intermediate turns before acting, so the soft limit alone killed real work; this
+  // guarantees the edge still terminates. Order-of-magnitude with the other re-entry caps, not a
+  // per-case tune (see session/invalid-output.ts + loopgraph.ts).
+  MIMOCODE_INVALID_OUTPUT_HARD_LIMIT: number("MIMOCODE_INVALID_OUTPUT_HARD_LIMIT") ?? 12,
   MIMOCODE_TEXT_TOOL_CALL_RETRY_LIMIT: number("MIMOCODE_TEXT_TOOL_CALL_RETRY_LIMIT") ?? 2,
 
   // Sliding-window n-gram repetition detection for streamed reasoning + text.

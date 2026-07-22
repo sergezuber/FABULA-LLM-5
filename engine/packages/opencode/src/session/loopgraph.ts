@@ -102,11 +102,19 @@ export const RE_ENTRY_EDGES: readonly ReEntryEdge[] = [
     id: "invalid-structured-output",
     fn: "autoContinueInvalidOutput",
     counter: "invalidContinuations",
-    boundEnv: "MIMOCODE_INVALID_OUTPUT_CONTINUATION_LIMIT",
+    // Progress-aware since 2026-07-22 (session/invalid-output.ts): the SOFT limit bounds a STALL (repeated
+    // identical reasoning); a think-only turn making progress is bounded by the hard ceiling instead.
+    // HONEST BOUND (W4): `cap` is the worst case for a single UNBROKEN streak. A PRODUCTIVE step (real
+    // tool call / non-empty text) resets the counter mid-turn, so the edge can re-enter more than `cap`
+    // times per turn (cap per streak × streaks) — the re-armable-counter shape W4 flags. That is NOT an
+    // unbounded loop: every reset REQUIRES a genuine productive step, which is real model work bounded by
+    // the OTHER edges (loop-guard byte-identical no-progress detection, goal gate, context overflow). So
+    // this edge alone bounds a stall streak; whole-turn termination is a composition, not this one number.
+    boundEnv: "MIMOCODE_INVALID_OUTPUT_HARD_LIMIT",
     capEnvParse: "flagIntegerPositive",
-    cap: 2,
-    capSource: "flag.ts MIMOCODE_INVALID_OUTPUT_CONTINUATION_LIMIT ?? 2",
-    description: "structured output did not satisfy the schema; re-enter asking for a valid object",
+    cap: 12,
+    capSource: "flag.ts MIMOCODE_INVALID_OUTPUT_HARD_LIMIT ?? 12 per streak (soft stall MIMOCODE_INVALID_OUTPUT_CONTINUATION_LIMIT ?? 2; productive step re-arms)",
+    description: "reasoning-only/invalid step; re-enter asking for a real answer or tool call, bounded by progress",
   },
   {
     id: "output-length-continuation",

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.3.9"
+export const FABULA_VERSION = "0.4.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.4.0",
+    date: "2026-07-22",
+    items: [
+      {
+        ru: "Длинная задача с рассуждающей моделью больше не обрывается на промежуточном «think-only» шаге. Такая модель нередко заканчивает ход одними рассуждениями, без ответа и без вызова инструмента — это нормальная фаза, а не сбой. Раньше два таких шага за всю задачу (даже разделённых реальной работой — чтением файлов) исчерпывали жёсткий лимит и роняли прогон с ошибкой. Теперь граница осведомлена о прогрессе: залипание (одни и те же рассуждения повторяются) режется как прежде, а движущийся вперёд ход продолжается до высокого потолка; продуктивный шаг (вызов инструмента или ответ с текстом) сбрасывает счётчик. Напоминание тоже конкретнее — «вызови инструмент сейчас», а не «дай ответ».",
+        en: "A long task with a reasoning model no longer dies on an intermediate think-only step. Such a model often ends a turn with reasoning alone — no answer, no tool call — which is a normal phase, not a failure. Two such steps across a whole task (even separated by real work like reading files) used to exhaust a hard cap and kill the run. The bound is now progress-aware: a stall (the same reasoning repeated) is cut as before, while a turn that keeps moving continues up to a high ceiling; a productive step (a tool call or an answer with text) resets the counter. The nudge is more concrete too — 'call the tool now' rather than 'give an answer'.",
+      },
+    ],
+  },
   {
     version: "0.3.9",
     date: "2026-07-21",

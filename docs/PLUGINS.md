@@ -5,7 +5,7 @@ Every capability is a plugin: a single file (`plugin/fabula-*.ts`) with a declar
 timeline **are** the plugins — same names everywhere: in `list_plugins`, in **Settings ▸ Plugins**, and below.
 
 <p align="center">
-  <img src="assets/plugins.svg" alt="All 33 FABULA plugins grouped by role — UNDERSTAND & PLAN, ACT ON THE WORLD, REMEMBER, PERCEIVE, GUARD EVERY CALL, VERIFY & SHIP, WHEN THE MODEL FAILS (rewind, escalate), GROW, OWN THE STACK, and the PROOF ECONOMY disrupt layer (registry, witness, daemon, relay, coordinator, buddy — off by default); ⚡ marks the pure hooks that fire themselves" width="880">
+  <img src="assets/plugins.svg" alt="All 34 FABULA plugins grouped by role — UNDERSTAND & PLAN, ACT ON THE WORLD, REMEMBER, PERCEIVE, GUARD EVERY CALL, VERIFY & SHIP, WHEN THE MODEL FAILS (rewind, escalate), GROW, OWN THE STACK, and the PROOF ECONOMY disrupt layer (registry, witness, daemon, relay, coordinator, buddy — off by default); ⚡ marks the pure hooks that fire themselves" width="880">
 </p>
 
 ## What the system does
@@ -29,7 +29,7 @@ Deleting a chat purges all of its artifacts; web caches are wiped on quit; no te
 
 | Tag | What it does |
 |---|---|
-| `verify` | **The heart of the harness.** `reproduce-gate` validates the reproduction test against the pre-patch tree — a test that passes with *and* without the change is fake, and a fix that breaks a sibling is a regression; either keeps the build *not done*. `change_quiz` grades the agent against its own diff before "done" stands. Both fire themselves. *(`fabula-reproduce-gate`, `fabula-change-quiz`)* |
+| `verify` | **The heart of the harness.** `reproduce-gate` validates the reproduction test against the pre-patch tree — a test that passes with *and* without the change is fake, and a fix that breaks a sibling is a regression; either keeps the build *not done*. `change_quiz` grades the agent against its own diff before "done" stands. Both fire themselves. An experimental `attest` gate carries the same idea to **non-code** deliverables (an analysis, a plan, a research summary): it decomposes the written result into typed claims and grounds each against its cited source — a quote must grep-match the *right* source, a number must appear in it — flagging fabrications with a typed fix, silent on chat turns. Off by default until benchmarked. *(`fabula-reproduce-gate`, `fabula-change-quiz`, `fabula-attest`)* |
 | `receipt` | Mints the Proof-of-Done receipt on a fully-gated green verify — model, gates, diff, verification, replay command, and the run's full context identity ([open spec draft](spec/verified-autonomy-receipt-v0.2.md)): prompt-prefix fingerprint, hash of the user's request text, the serving model's descriptor (honestly labeled *not a weights hash*), and — with `FABULA_WEIGHTS_DIGEST=1` — a real digest of the weight files on disk. *(`fabula-receipt`)* |
 | `graph` | **Plans and parallelizes.** `workflow_graph` breaks a request into up to 5 isolated sub-steps — each small enough for any model to hold — and runs independent ones in parallel. Opt-in router (`FABULA_ROUTER=1`) can escalate one heavy step to a cloud model: one step, never your codebase. *(`fabula-graph`)* |
 | `unknowns` | **Closes the prompt↔codebase gap before coding.** `reference_hunt` reads working code as the spec; `surface_unknowns` lists what your ask doesn't say; `interview_me` asks the one decision only you can make; `brainstorm_prototypes` gives divergent options. *(`fabula-unknowns`, `fabula-interview`, `fabula-brainstorm`)* |

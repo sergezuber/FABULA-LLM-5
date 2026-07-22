@@ -123,6 +123,12 @@ export const PLUGIN_I18N: Record<string, PluginI18n> = {
     descEn: "Before a change is called done, makes the agent pass a 3-question quiz about its own diff, graded against the actual diff — so a change that only looks right but isn't understood doesn't slip through.",
     descRu: "Перед тем как изменение объявят готовым, заставляет агента пройти квиз из 3 вопросов о собственном дифе, оцениваемый по реальному дифу — чтобы изменение, которое лишь выглядит верным, но не понято, не проскочило.",
   },
+  "attest": {
+    tags: ["reliability"],
+    nameRu: "Универсальный гейт проверки",
+    descEn: "Verifies the deliverable of ANY task, not just code. It breaks a written analysis, plan or summary into typed atomic claims and independently re-derives each: a quote must match its cited source verbatim (checked in the RIGHT source, so mis-attribution is caught), a number must appear in the source, a 'read all N files' claim is checked against the run ledger. Only the claims that fail the free deterministic check reach a quarantined language model that separates a faithful paraphrase from a fabrication. Load-bearing claims that don't hold come back with a specific fix. It stays silent on chat and opinion turns, and lives entirely in a plugin hook — never the stop logic. Experimental, off by default until benchmarked.",
+    descRu: "Проверяет результат ЛЮБОЙ задачи, не только кода. Разбирает написанный анализ, план или свод на типизированные атомарные утверждения и независимо пере-выводит каждое: цитата обязана дословно совпасть с указанным источником (сверяется в ПРАВИЛЬНОМ источнике — ловится мис-атрибуция), число обязано быть в источнике, заявление «прочитаны все N файлов» сверяется с журналом прогона. До дорогой модели доходит только остаток, не прошедший бесплатную детерминированную проверку — она отделяет верный перефраз от фабрикации, читая источник в карантине. Несущие утверждения, что не устояли, возвращаются с конкретной правкой. Молчит на разговорных и оценочных ходах, живёт целиком в плагинном хуке — не в стоп-логике. Экспериментальный, по умолчанию выключен до бенча.",
+  },
   "reproduce-gate": {
     tags: ["reliability", "code"],
     nameRu: "Гейт «сначала репродукция»",

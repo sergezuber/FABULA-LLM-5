@@ -27,6 +27,7 @@ that fire *themselves*:
 - **Verify gate** — after source edits, the run is pressed back into a verification pass (bounded re-entries; a run that stops past the cap is explicitly *unverified*).
 - **Reproduce gate** — "the build is green but no test exercises the change" downgrades to *not done*.
 - **Comprehension gate** — the agent is graded against its own diff (not its self-assessment) before "done" stands.
+- **Grounding gate** — for a **non-code** deliverable (an analysis, a plan, a research summary), each written claim is re-derived against its cited source: a quote must appear verbatim in the source it names (a real line pinned to the wrong section is caught as mis-attribution), a number must be present, a "read all N" claim is checked against the run's read-log. Only the claims that fail the free deterministic check reach a quarantined model that separates a faithful paraphrase from a fabrication. It carries *done is a proof* from code to any deliverable — silent on chat turns, fail-open (never falsely rejects grounded work).
 - **Loop guard** — repeated no-progress action is hard-stopped, forcing a new hypothesis instead of wheel-spinning.
 - **Stop judge** *(v0.1)* — ending the turn is not the model's decision: before any stop is honored, an independent judge reads the transcript (the real tool calls, not the model's summary) and refuses the stop until the request is fulfilled — done, not planned, described, or promised. Bounded re-entries; fail-open on judge error so a broken judge can never trap the user.
 

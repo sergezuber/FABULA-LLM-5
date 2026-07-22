@@ -522,12 +522,21 @@ class AdmissionGate:
 # The budget is a FLOOR over the observed window, not a smoothed quantile: killing a legitimately slow
 # prefill is a worse failure than a slow abort, so the largest gap actually seen is a lower bound.
 class IdleBaseline:
-    def __init__(self, flat=None, min_samples=50, window=200, floor=30.0, ceiling=None, margin=4.0,
+    def __init__(self, flat=None, min_samples=50, window=200, floor=None, ceiling=None, margin=4.0,
                  enabled=None):
         self.flat = float(os.environ.get("FABULA_STREAM_IDLE_TIMEOUT", "120")) if flat is None else float(flat)
         self.min_samples = int(min_samples)
         self.window = int(window)
-        self.floor = float(floor)
+        # The idle budget's LOWER bound. It is the pause the watchdog will always tolerate between
+        # tokens even once the measured evidence says the model is usually fast. It matters most for a
+        # REASONING model: it emits a reasoning block, then goes SILENT for many seconds while it plans
+        # the next step (or the first answer token) — a legitimate pause the byte-level watchdog cannot
+        # tell from a hang. With the floor too low that pause is cut mid-turn (finish=other, a truncated
+        # reasoning-only step that then looks like a think-only stall), AND the pause is never recorded,
+        # so `observed_max` can never grow to cover it — self-reinforcing. A floor at/near `flat` lets
+        # the first real pause survive and be measured, after which the budget adapts upward on its own.
+        # Env-tunable per install (heavy-context reasoning models want it high); default keeps history.
+        self.floor = float(os.environ.get("FABULA_IDLE_FLOOR", "30")) if floor is None else float(floor)
         self.ceiling = float(ceiling) if ceiling is not None else float(
             os.environ.get("FABULA_IDLE_CEILING", str(max(600.0, self.flat * 5))))
         self.margin = float(margin)

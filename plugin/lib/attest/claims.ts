@@ -17,8 +17,11 @@ const RX = {
     /\b(read|checked|reviewed|went\s+through|processed|opened)\s+(all|every|each|the\s+(whole|entire|full))\b|\ball\s+\d+\s+(files?|chapters?|records?|pages?)\b/i,
   processRu:
     /(прочит(ал|ан[ыо])|проверил|просмотрел|обработал)\s+(все|кажд|весь|всю|полност)|все\s+\d+\s+(файл|глав|запис|страниц)/i,
+  // a number that is a QUANTITY: currency, percent, decimal, a number+unit (incl. money "per night" /
+  // ms / km), OR a bare number sitting next to a quantity word (budget/total/cost/mean/rate/p95…). A bare
+  // integer with NO quantity context (e.g. "Office 519", "chapter 9") is NOT a measurement (identifier).
   measurement:
-    /(?:\$|€|£)\s?\d|\d+(?:\.\d+)?\s?%|\d+\.\d+|\b\d[\d.,]*\s+(?:files?|chapters?|records?|analysts?|years?|steps?|tests?|words?|lines?|лет|глав|файл(?:ов)?|запис|аналитик|шаг|строк|слов|тыс|млн|gb|mb|kb|ms|мс|сек)/i,
+    /(?:\$|€|£)\s?\d|\d+(?:\.\d+)?\s?%|\d+\.\d+|\b\d[\d.,]*\s+(?:files?|chapters?|records?|analysts?|years?|steps?|tests?|words?|lines?|per\s+\w+|dollars?|euros?|pounds?|nights?|days?|hours?|minutes?|seconds?|percent|лет|глав|файл(?:ов)?|запис|аналитик|шаг|строк|слов|ноч(?:ь|ей)|тыс|млн|gb|mb|kb|ms|мс|сек|км|кг)|(?:budget|total|cost|price|sum|amount|mean|median|average|rate|latency|p\d{2}|бюджет|итог|цена|стоимост|средн)[\s\S]{0,25}?\d/i,
   worldstate:
     /\b(exists?|is\s+(live|reachable|deployed|running|up|online)|was\s+(deployed|created|pushed|published)|is\s+located)\b/i,
   analogy: /\b(like|as\s+in|reminiscent\s+of|recalls|echoes|à\s+la|in\s+the\s+vein\s+of)\s+[A-ZА-Я]/,

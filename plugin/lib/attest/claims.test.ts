@@ -31,6 +31,15 @@ test("typeClaim STICKY (BUG-3 fix): a quote framed as an inference stays citatio
 
 test("typeClaim: a bare identifier number is NOT a measurement (routes to soft, avoids false hard-confirm)", () => {
   expect(typeClaim("Office 519 on the fifth floor")).not.toBe("measurement")
+  expect(typeClaim("chapter 9 opens the second act")).not.toBe("measurement")
+})
+
+test("typeClaim: money / quantity-context numbers ARE measurements (wild-class fix: trip/data)", () => {
+  expect(typeClaim("Hotel Aurora at 120 per night")).toBe("measurement") // money "per night"
+  expect(typeClaim("the total budget is 400")).toBe("measurement") // quantity word + number
+  expect(typeClaim("the p99 latency reached 5000 ms")).toBe("measurement")
+  expect(typeClaim("the mean latency is 240 across 1000 rows")).toBe("measurement")
+  expect(typeClaim("итоговый бюджет 400 на поездку")).toBe("measurement")
 })
 
 test("bindLoadBearing: with conclusions, lexical support decides", () => {

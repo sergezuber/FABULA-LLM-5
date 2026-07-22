@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.4.0"
+export const FABULA_VERSION = "0.4.1"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.4.1",
+    date: "2026-07-22",
+    items: [
+      {
+        ru: "Появился универсальный гейт проверки для НЕ-кодовых задач (опционально, по умолчанию выключен). До сих пор обвязка проверяла только код — «готово» там значит «тесты зелёные». Для анализа, плана или свода такой проверки не было, и качество целиком зависело от модели. Новый гейт распространяет тот же принцип на любой письменный результат: он разбирает его на типизированные утверждения и независимо пере-выводит каждое — цитата обязана дословно совпасть с указанным источником (сверяется в ПРАВИЛЬНОМ разделе, поэтому ловится и приписывание не тому источнику), число обязано быть в источнике, а «прочитаны все N файлов» сверяется с журналом прогона. До дорогой модели доходит только то, что не прошло бесплатную проверку. Молчит на разговорных и оценочных ходах. Включается в менеджере плагинов; стоит несколько вызовов вспомогательной модели на задачу, поэтому по умолчанию выключен.",
+        en: "A universal verification gate for NON-code tasks arrived (opt-in, off by default). Until now the harness only verified code — there 'done' means the tests are green. For an analysis, a plan or a summary there was no such check, and quality was entirely up to the model. The new gate carries the same principle to any written result: it breaks it into typed claims and independently re-derives each — a quote must match its cited source verbatim (checked in the RIGHT section, so mis-attribution is caught too), a number must appear in the source, and a 'read all N files' claim is checked against the run ledger. Only what fails the free check reaches the costly model. It stays silent on conversational and opinion turns. Enable it in the plugin manager; it spends a few auxiliary-model calls per task, so it is off by default.",
+      },
+    ],
+  },
   {
     version: "0.4.0",
     date: "2026-07-22",

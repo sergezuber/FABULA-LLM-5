@@ -333,7 +333,7 @@ export const layer: Layer.Layer<
       yield* plugin.trigger("experimental.chat.messages.transform", { compaction: true }, { messages: msgs })
       const modelMessages = yield* MessageV2.toModelMessagesEffect(msgs, model, { stripMedia: true })
       const ctx = yield* InstanceState.context
-      const msg: MessageV2.Assistant = {
+      const createSummaryMessage = (): MessageV2.Assistant => ({
         id: MessageID.ascending(),
         role: "assistant",
         parentID: input.parentID,
@@ -359,37 +359,47 @@ export const layer: Layer.Layer<
         time: {
           created: Date.now(),
         },
-      }
+      })
+      const processSummary = (message: MessageV2.Assistant, instruction: string) =>
+        Effect.gen(function* () {
+          const processor = yield* processors.create({
+            assistantMessage: message,
+            sessionID: input.sessionID,
+            model,
+          })
+          const result = yield* processor.process({
+            user: userMessage,
+            agent,
+            sessionID: input.sessionID,
+            tools: {},
+            system: [],
+            messages: [
+              ...modelMessages,
+              {
+                role: "user",
+                content: [{ type: "text", text: instruction }],
+              },
+            ],
+            model,
+          })
+          return { processor, result }
+        })
+      const abortOverflow = (processor: SessionProcessor.Handle) =>
+        Effect.gen(function* () {
+          processor.message.error = new MessageV2.ContextOverflowError({
+            message: replay
+              ? "Conversation history too large to compact - exceeds model context limit"
+              : "Session too large to compact - context exceeds model limit even after stripping media",
+          }).toObject()
+          processor.message.finish = "error"
+          yield* session.updateMessage(processor.message)
+        })
+      let msg = createSummaryMessage()
       yield* session.updateMessage(msg)
-      const processor = yield* processors.create({
-        assistantMessage: msg,
-        sessionID: input.sessionID,
-        model,
-      })
-      const result = yield* processor.process({
-        user: userMessage,
-        agent,
-        sessionID: input.sessionID,
-        tools: {},
-        system: [],
-        messages: [
-          ...modelMessages,
-          {
-            role: "user",
-            content: [{ type: "text", text: prompt }],
-          },
-        ],
-        model,
-      })
+      let attempt = yield* processSummary(msg, prompt)
 
-      if (result === "overflow") {
-        processor.message.error = new MessageV2.ContextOverflowError({
-          message: replay
-            ? "Conversation history too large to compact - exceeds model context limit"
-            : "Session too large to compact - context exceeds model limit even after stripping media",
-        }).toObject()
-        processor.message.finish = "error"
-        yield* session.updateMessage(processor.message)
+      if (attempt.result === "overflow") {
+        yield* abortOverflow(attempt.processor)
         return "stop"
       }
 
@@ -398,51 +408,46 @@ export const layer: Layer.Layer<
       // retry ONCE with a corrective appended to the instruction (the steer channel measured to work on
       // this project). A clean retry proceeds like any summary; a failed retry sets a VISIBLE error so
       // the session shows red instead of a fake-done ending on a garbage summary.
-      const summaryText = () =>
+      const summaryText = (messageID: MessageID) =>
         MessageV2.page({ sessionID: input.sessionID, limit: 10 })
-          .items.filter((m) => m.info.id === processor.message.id)
+          .items.filter((m) => m.info.id === messageID)
           .flatMap((m) => m.parts)
           .filter((p): p is MessageV2.TextPart => p.type === "text")
           .map((p) => p.text)
           .join("\n")
-      let hijacked = result === "text-repeat" || summaryLooksHijacked(summaryText())
-      trace("compaction.summary", { sid: input.sessionID, result, hijacked, auto: input.auto === true })
+      let hijacked = attempt.result === "text-repeat" || summaryLooksHijacked(summaryText(msg.id))
+      trace("compaction.summary", {
+        sid: input.sessionID,
+        result: attempt.result,
+        hijacked,
+        auto: input.auto === true,
+      })
       if (hijacked) {
         log.warn("summary hijacked by task continuation — retrying once with corrective", {
           sessionID: input.sessionID,
         })
-        const retry = yield* processor.process({
-          user: userMessage,
-          agent,
-          sessionID: input.sessionID,
-          tools: {},
-          system: [],
-          messages: [
-            ...modelMessages,
-            {
-              role: "user",
-              content: [
-                {
-                  type: "text",
-                  text:
-                    prompt +
-                    "\n\nIMPORTANT: your previous attempt CONTINUED the conversation (it emitted tool calls) " +
-                    "instead of summarizing it. Do NOT call tools, do NOT continue the task. Output ONLY the " +
-                    "summary in the requested structure, as plain prose.",
-                },
-              ],
-            },
-          ],
-          model,
-        })
-        hijacked = retry === "text-repeat" || summaryLooksHijacked(summaryText())
+        yield* session.removeMessage({ sessionID: input.sessionID, messageID: msg.id })
+        msg = createSummaryMessage()
+        yield* session.updateMessage(msg)
+        attempt = yield* processSummary(
+          msg,
+          prompt +
+            "\n\nIMPORTANT: your previous attempt CONTINUED the conversation (it emitted tool calls) " +
+            "instead of summarizing it. Do NOT call tools, do NOT continue the task. Output ONLY the " +
+            "summary in the requested structure, as plain prose.",
+        )
+        if (attempt.result === "overflow") {
+          yield* abortOverflow(attempt.processor)
+          return "stop"
+        }
+        hijacked = attempt.result === "text-repeat" || summaryLooksHijacked(summaryText(msg.id))
         trace("compaction.retry", { sid: input.sessionID, hijacked })
         if (hijacked) {
-          processor.message.error = new MessageV2.AbortedError(
+          attempt.processor.message.error = new MessageV2.AbortedError(
             { message: "Compaction failed: the summarizer kept continuing the task instead of summarizing" },
           ).toObject()
-          processor.message.finish = "error"
-          yield* session.updateMessage(processor.message)
+          attempt.processor.message.finish = "error"
+          yield* session.updateMessage(attempt.processor.message)
           return "stop"
         }
       }
@@ -454,7 +459,7 @@ export const layer: Layer.Layer<
         })
       }
 
-      if (result === "continue" && input.auto) {
+      if (attempt.result === "continue" && input.auto) {
         if (replay) {
           const original = replay.info
           const replayMsg = yield* session.updateMessage({
@@ -538,9 +543,10 @@ export const layer: Layer.Layer<
         }
       }
 
-      if (processor.message.error) return "stop"
-      if (result === "continue") yield* bus.publish(Event.Compacted, { sessionID: input.sessionID })
-      return result
+      if (attempt.processor.message.error) return "stop"
+      if (attempt.result !== "continue") return "stop"
+      yield* bus.publish(Event.Compacted, { sessionID: input.sessionID })
+      return "continue"
     })
 
     const create = Effect.fn("SessionCompaction.create")(function* (input: {

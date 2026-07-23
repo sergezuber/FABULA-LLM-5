@@ -29,9 +29,74 @@ export function detectRepeatedNgram(tokens: readonly string[], n: number, thresh
   return false
 }
 
+const CHAR_SHINGLE_LENGTH = 8
+const CHAR_SHINGLE_THRESHOLD = 8
+const CHAR_SHINGLE_WINDOW = 1024
+const CHAR_RUN_MIN_LENGTH = 256
+const TEXT_BUFFER_MAX_CHARACTERS = 65536
+const CHAR_RUN_CHARACTER = /[\p{L}\p{N}_]/u
+
+class CharShingleMonitor {
+  private run = ""
+  private runLength = 0
+  private shingles: string[] = []
+  private oldest = 0
+  private counts = new Map<string, number>()
+
+  append(text: string): boolean {
+    for (const char of text) {
+      if (!CHAR_RUN_CHARACTER.test(char)) {
+        this.resetRun()
+        continue
+      }
+      this.runLength += 1
+      this.run = (this.run + char).slice(-CHAR_SHINGLE_LENGTH)
+      if (this.run.length < CHAR_SHINGLE_LENGTH) continue
+      if (this.record(this.run) && this.runLength >= CHAR_RUN_MIN_LENGTH) return true
+    }
+    return false
+  }
+
+  reset() {
+    this.resetRun()
+  }
+
+  private record(shingle: string): boolean {
+    const next = (this.counts.get(shingle) ?? 0) + 1
+    this.counts.set(shingle, next)
+    this.shingles.push(shingle)
+    if (this.shingles.length - this.oldest > CHAR_SHINGLE_WINDOW) this.removeOldest()
+    return next >= CHAR_SHINGLE_THRESHOLD
+  }
+
+  private removeOldest() {
+    const shingle = this.shingles[this.oldest]
+    const count = this.counts.get(shingle)
+    if (count === 1) this.counts.delete(shingle)
+    if (count && count > 1) this.counts.set(shingle, count - 1)
+    this.oldest += 1
+    if (this.oldest < CHAR_SHINGLE_WINDOW) return
+    this.shingles = this.shingles.slice(this.oldest)
+    this.oldest = 0
+  }
+
+  private resetRun() {
+    this.run = ""
+    this.runLength = 0
+    this.shingles = []
+    this.oldest = 0
+    this.counts.clear()
+  }
+}
+
+export function detectRepeatedCharShingle(text: string): boolean {
+  return new CharShingleMonitor().append(text)
+}
+
 export class TextNgramMonitor {
   private buffer = ""
   private tokens: string[] = []
+  private charShingles = new CharShingleMonitor()
 
   constructor(
     private readonly n: number,
@@ -41,16 +106,17 @@ export class TextNgramMonitor {
 
   append(text: string): boolean {
     if (!text) return false
-    this.buffer += text
+    this.buffer = (this.buffer + text).slice(-TEXT_BUFFER_MAX_CHARACTERS)
     const all = tokenizeForNgram(this.buffer)
     this.tokens = all.length > this.windowTokens ? all.slice(-this.windowTokens) : all
     if (all.length > this.windowTokens * 2) this.buffer = this.tokens.join(" ")
-    return detectRepeatedNgram(this.tokens, this.n, this.threshold)
+    return detectRepeatedNgram(this.tokens, this.n, this.threshold) || this.charShingles.append(text)
   }
 
   reset() {
     this.buffer = ""
     this.tokens = []
+    this.charShingles.reset()
   }
 }
 

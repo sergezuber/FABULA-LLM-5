@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   TextNgramMonitor,
   detectRepeatedNgram,
+  detectRepeatedCharShingle,
   tokenizeForNgram,
 } from "../../src/session/prompt/text-ngram-detection"
 
@@ -26,6 +27,36 @@ describe("detectRepeatedNgram", () => {
     const gram = ["one", "two", "three", "four", "five", "six"]
     const tokens = [...gram, ...gram]
     expect(detectRepeatedNgram(tokens, 6, 3)).toBe(false)
+  })
+})
+
+describe("detectRepeatedCharShingle", () => {
+  test("detects a fused repetitive list", () => {
+    const runaway = Array.from({ length: 80 }, (_, i) => `глава_10${i.toString(36)}`).join("")
+    expect(detectRepeatedCharShingle(runaway)).toBe(true)
+  })
+
+  test("detects a fused run with a varying suffix", () => {
+    const runaway = Array.from({ length: 80 }, (_, i) => `item_10${i}`).join("")
+    expect(detectRepeatedCharShingle(runaway)).toBe(true)
+  })
+
+  test("does not fire on normal prose", () => {
+    const prose =
+      "The analysis covers thirty chapters of the novel, examining narrative structure, character " +
+      "development, and recurring motifs across the three acts. Chapter ten introduces the central " +
+      "conflict; chapter twenty resolves it. The author uses repeated imagery of water and glass."
+    expect(detectRepeatedCharShingle(prose)).toBe(false)
+  })
+
+  test("does not fire on a delimited enumerated list", () => {
+    const list = Array.from({ length: 80 }, (_, i) => `item_10${i}`).join(", ")
+    expect(detectRepeatedCharShingle(list)).toBe(false)
+  })
+
+  test("does not fire on a short string or one with <threshold repeats", () => {
+    expect(detectRepeatedCharShingle("глава_10aглава_10bглава_10c")).toBe(false)
+    expect(detectRepeatedCharShingle("short")).toBe(false)
   })
 })
 
@@ -58,6 +89,22 @@ describe("TextNgramMonitor", () => {
     expect(monitor.append(repeated)).toBe(false)
     expect(monitor.append(repeated)).toBe(false)
     expect(monitor.append(repeated)).toBe(true)
+  })
+
+  test("catches a fused runaway streamed in chunks", () => {
+    const monitor = new TextNgramMonitor(6, 3, 500)
+    let fired = false
+    for (let i = 0; i < 80 && !fired; i++) {
+      fired = monitor.append(`глава_10${i.toString(36)}`)
+    }
+    expect(fired).toBe(true)
+  })
+
+  test("keeps a delimited enumeration below the char-shingle guard", () => {
+    const monitor = new TextNgramMonitor(6, 3, 500)
+    for (let i = 0; i < 80; i++) {
+      expect(monitor.append(`item_10${i}, `)).toBe(false)
+    }
   })
 })
 

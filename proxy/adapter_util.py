@@ -7,6 +7,7 @@
 #     (MiMo truncates the prompt to fit -> stop='length', 0 output; z.ai accepts overflow silently).
 import json
 import re
+from collections import deque
 
 
 def stable_prefix(body: dict) -> str:
@@ -142,6 +143,79 @@ def clamp_max_tokens(requested, context_window, prompt_tokens, safety=4096, floo
     if not isinstance(requested, int) or requested <= 0:
         return room
     return min(requested, room)
+
+
+CHAR_SHINGLE_LENGTH = 8
+CHAR_SHINGLE_THRESHOLD = 8
+CHAR_SHINGLE_WINDOW = 1024
+CHAR_RUN_MIN_LENGTH = 256
+
+
+def _char_run_character(char):
+    return char == "_" or char.isalnum()
+
+
+class DegenerationDetector:
+    def __init__(self, threshold=CHAR_SHINGLE_THRESHOLD):
+        self.threshold = threshold
+        self.run = ""
+        self.run_length = 0
+        self.shingles = deque()
+        self.counts = {}
+
+    def append(self, text):
+        if not isinstance(text, str):
+            return False
+        for char in text:
+            if not _char_run_character(char):
+                self.reset()
+                continue
+            self.run_length += 1
+            self.run = (self.run + char)[-CHAR_SHINGLE_LENGTH:]
+            if len(self.run) < CHAR_SHINGLE_LENGTH:
+                continue
+            if self._record(self.run) and self.run_length >= CHAR_RUN_MIN_LENGTH:
+                return True
+        return False
+
+    def reset(self):
+        self.run = ""
+        self.run_length = 0
+        self.shingles.clear()
+        self.counts.clear()
+
+    def _record(self, shingle):
+        count = self.counts.get(shingle, 0) + 1
+        self.counts[shingle] = count
+        self.shingles.append(shingle)
+        if len(self.shingles) > CHAR_SHINGLE_WINDOW:
+            oldest = self.shingles.popleft()
+            oldest_count = self.counts[oldest]
+            if oldest_count == 1:
+                del self.counts[oldest]
+            else:
+                self.counts[oldest] = oldest_count - 1
+        return count >= self.threshold
+
+
+def detect_degeneration(text, threshold=CHAR_SHINGLE_THRESHOLD):
+    return DegenerationDetector(threshold).append(text)
+
+
+def sse_delta_content(frame):
+    payload = b"\n".join(
+        line[5:].lstrip()
+        for line in frame.splitlines()
+        if line.startswith(b"data:")
+    )
+    if not payload or payload == b"[DONE]":
+        return ""
+    try:
+        delta = json.loads(payload)["choices"][0]["delta"]
+    except (IndexError, KeyError, TypeError, ValueError):
+        return ""
+    content = delta.get("content")
+    return content if isinstance(content, str) else ""
 
 
 def dump_last_request(obj, path):

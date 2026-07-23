@@ -36,6 +36,7 @@ cleanly through this adapter.
 """
 import json
 import os
+import select
 import socket
 import sys
 import threading
@@ -76,6 +77,7 @@ from adapter_util import (
     stable_prefix, shared_prefix_len, classify_overflow, clamp_max_tokens, drain_with_idle_split,
     update_prefix_and_check, compare_and_store, dump_last_request,
     classify_break, injection_order_report, AdmissionGate, IdleBaseline,
+    DegenerationDetector, sse_delta_content,
 )
 
 # Optional context window for the dynamic max_tokens clamp (0 = off). When set, every request's
@@ -557,6 +559,11 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_header("Transfer-Encoding", "chunked")
                 self.end_headers()
 
+            detector = DegenerationDetector()
+
+            class _DegenerationDetected(Exception):
+                pass
+
             def _write_chunk(b):
                 self.wfile.write(b"%X\r\n" % len(b))
                 self.wfile.write(b)
@@ -566,10 +573,6 @@ class Handler(BaseHTTPRequestHandler):
             SSE_BOUNDARY = b"\n\n"
 
             def _flush_complete(buf):
-                """Forward every COMPLETE SSE event in `buf` (terminated by \\n\\n); return the
-                dangling tail past the last boundary (or the whole buffer if none). A watchdog
-                cut or a clean EOF must never relay a half-event — only whole events go out, so
-                the trailing `[DONE]` can never fuse with a dangling partial into one bad line."""
                 tail = b""
                 while True:
                     i = buf.find(SSE_BOUNDARY)
@@ -578,21 +581,20 @@ class Handler(BaseHTTPRequestHandler):
                         break
                     frame = buf[:i + len(SSE_BOUNDARY)]
                     buf = buf[i + len(SSE_BOUNDARY):]
+                    if detector.append(sse_delta_content(frame)):
+                        raise _DegenerationDetected
                     _write_chunk(frame)
                 return tail
 
-            def _terminate(buf, idle, dropped):
-                # Forward any complete events held in `buf` BEFORE the terminus — the stall happens
-                # AFTER a token was buffered (resp.read can return complete+partial in one go); those
-                # real tokens must reach the SDK, only the dangling tail is dropped.
+            def _terminate(buf, idle, dropped, reason):
                 if buf and SSE_BOUNDARY in buf:
                     try:
                         _flush_complete(buf)
                     except Exception:
                         pass
                 sys.stderr.write(
-                    "[fabula-adapter] stream idle-timeout after %ss (dropped=%d trailing bytes) — "
-                    "terminating stream\n" % (idle, dropped))
+                    "[fabula-adapter] stream %s after %ss (dropped=%d trailing bytes) — "
+                    "terminating stream\n" % (reason, idle, dropped))
                 try:
                     _write_chunk(b"data: [DONE]\n\n")
                     self.wfile.write(b"0\r\n\r\n")
@@ -600,7 +602,7 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception:
                     pass
 
-            pending = b""           # bytes past the last complete event — relayed once closed
+            pending = b""
             forwarded = False
             retries = STREAM_RETRIES
             while True:
@@ -621,7 +623,8 @@ class Handler(BaseHTTPRequestHandler):
                     _terminate(pending,
                                _idle_budget if forwarded else FIRST_TOKEN_TIMEOUT,
                                len(pending) - (pending.rfind(SSE_BOUNDARY) + len(SSE_BOUNDARY)
-                                               if SSE_BOUNDARY in pending else 0))
+                                               if SSE_BOUNDARY in pending else 0),
+                               "idle-timeout")
                     break
                 except Exception:
                     break
@@ -656,7 +659,24 @@ class Handler(BaseHTTPRequestHandler):
                     _gap_prev = _now
                 except Exception:
                     pass
-                pending = _flush_complete(pending + chunk)
+                try:
+                    pending = _flush_complete(pending + chunk)
+                except _DegenerationDetected:
+                    sys.stderr.write("[fabula-adapter] degeneration detected — cutting stream\n")
+                    try:
+                        resp.close()
+                    except Exception:
+                        pass
+                    _terminate(b"", 0, 0, "degeneration")
+                    break
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                    sys.stderr.write("[fabula-adapter] stream client disconnected mid-stream — "
+                                     "closing upstream to abort generation\n")
+                    try:
+                        resp.close()
+                    except Exception:
+                        pass
+                    break
             return
 
         # non-streaming: buffer with the SAME idle-watchdog + first-token/inter-token split as the
@@ -664,11 +684,35 @@ class Handler(BaseHTTPRequestHandler):
         # STREAM_IDLE_TIMEOUT). A stalled upstream mid-body no longer wedges the turn for the full
         # UPSTREAM_TIMEOUT — it aborts after the (small) idle budget with a 504, and the agent's own
         # loop/reliability guards handle the failed turn.
+        _ns_dead = {"v": False}
+        def _probe_client(buf):
+            if _ns_dead["v"]:
+                raise ConnectionResetError("client gone")
+            sock = self.request
+            try:
+                r, _, _ = select.select([sock], [], [], 0)
+                closed = r and not sock.recv(1, socket.MSG_PEEK)
+            except (BlockingIOError, InterruptedError):
+                closed = False
+            except (OSError, ValueError):
+                closed = True
+            if closed:
+                _ns_dead["v"] = True
+                raise ConnectionResetError("client disconnected")
+            _buf.append(buf)
         _buf = []
         try:
             drain_with_idle_split(lambda: resp.read(65536),
                                   lambda t: set_read_timeout(resp, t),
-                                  _idle_budget, _buf.append)
+                                  _idle_budget, _probe_client)
+        except ConnectionResetError:
+            sys.stderr.write("[fabula-adapter] non-stream client disconnected mid-buffer — "
+                             "closing upstream to abort generation\n")
+            try:
+                resp.close()
+            except Exception:
+                pass
+            return
         except (socket.timeout, TimeoutError):
             sys.stderr.write("[fabula-adapter] non-stream idle-timeout (first_token=%ss idle=%ss) — "
                              "aborting\n" % (FIRST_TOKEN_TIMEOUT, _idle_budget))

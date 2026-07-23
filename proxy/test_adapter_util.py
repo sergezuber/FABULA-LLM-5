@@ -2,7 +2,7 @@ import sys, os, socket, threading
 sys.path.insert(0, os.path.dirname(__file__))
 from adapter_util import (
     stable_prefix, shared_prefix_len, classify_overflow, clamp_max_tokens, drain_with_idle_split,
-    update_prefix_and_check,
+    update_prefix_and_check, DegenerationDetector, detect_degeneration, sse_delta_content,
 )
 
 
@@ -155,6 +155,52 @@ def test_prefix_check_thread_safe_no_corruption():
     for t in threads: t.join()
     assert not errors, f"concurrency errors: {errors[:3]}"
     assert state["hot"] in written  # final value is a real write, not corrupted
+
+
+def test_degeneration_detects_fused_runaway():
+    runaway = "".join("глава_10" + format(i, "x") for i in range(80))
+    assert detect_degeneration(runaway) is True
+
+
+def test_degeneration_keeps_delimited_enumeration():
+    enumeration = ", ".join("item_10" + str(i) for i in range(80))
+    assert detect_degeneration(enumeration) is False
+
+
+def test_degeneration_inert_on_normal_prose():
+    prose = ("The analysis covers thirty chapters of the novel, examining narrative structure, "
+             "character development, and recurring motifs across the three acts. Chapter ten "
+             "introduces the central conflict; chapter twenty resolves it. The author uses "
+             "repeated imagery of water and glass throughout the work.")
+    assert detect_degeneration(prose) is False
+
+
+def test_degeneration_inert_on_legitimate_bounded_repetition():
+    legit = ". ".join("%s went home" % n for n in
+                      ["Alice", "Bob", "Carol", "Dave", "Eve", "Frank", "Grace"]) + "."
+    assert detect_degeneration(legit) is False
+
+
+def test_degeneration_inert_on_short_text():
+    assert detect_degeneration("короткий текст") is False
+    assert detect_degeneration(None) is False
+    assert detect_degeneration("") is False
+
+
+def test_degeneration_accumulates_fused_runaway_across_chunks():
+    detector = DegenerationDetector()
+    for i in range(80):
+        if detector.append("глава_10" + format(i, "x")):
+            return
+    assert False
+
+
+def test_sse_delta_content_decodes_a_reassembled_event():
+    frame = b"".join([
+        b'data: {"choices":[{"delta":{"cont',
+        b'ent":"line one\\nline two"}}]}\n\n',
+    ])
+    assert sse_delta_content(frame) == "line one\nline two"
 
 
 if __name__ == "__main__":

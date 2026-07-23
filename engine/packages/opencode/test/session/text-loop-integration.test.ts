@@ -18,6 +18,7 @@ import { Plugin } from "../../src/plugin"
 import { Provider as ProviderSvc } from "../../src/provider"
 import { Env } from "../../src/env"
 import { ModelID, ProviderID } from "../../src/provider/schema"
+import { MessageID, PartID } from "../../src/session/schema"
 import { Question } from "../../src/question"
 import { Todo } from "../../src/session/todo"
 import { Session } from "../../src/session"
@@ -118,9 +119,9 @@ const status = SessionStatus.layer.pipe(Layer.provideMerge(Bus.layer))
 const run = SessionRunState.layer.pipe(Layer.provide(status))
 const infra = Layer.mergeAll(NodeFileSystem.layer, CrossSpawnSpawner.defaultLayer)
 
-function makeLayers() {
+function makeLayers(llm = mockLLM) {
   const taskRegistry = ActorRegistry.defaultLayer
-  const llmLayer = mockLLM.layer()
+  const llmLayer = llm.layer()
   const deps = Layer.mergeAll(
     Session.defaultLayer,
     Snapshot.defaultLayer,
@@ -182,25 +183,28 @@ function makeLayers() {
     Layer.provideMerge(deps),
   )
   const trunc = Truncate.layer.pipe(Layer.provideMerge(deps))
-  return SessionPrompt.layer.pipe(
-    Layer.provide(Goal.defaultLayer),
-    Layer.provide(TaskGateState.defaultLayer),
-    Layer.provide(TaskRegistry.defaultLayer),
-    Layer.provide(SessionRevert.defaultLayer),
-    Layer.provide(summary),
-    Layer.provide(checkpoint),
-    Layer.provide(team),
-    Layer.provide(taskRegistry),
-    Layer.provideMerge(run),
-    Layer.provideMerge(prune),
-    Layer.provideMerge(compaction),
-    Layer.provideMerge(proc),
-    Layer.provideMerge(registry),
-    Layer.provideMerge(trunc),
-    Layer.provide(Instruction.defaultLayer),
-    Layer.provide(SystemPrompt.defaultLayer),
-    Layer.provide(Inbox.defaultLayer),
-    Layer.provideMerge(deps),
+  return Layer.mergeAll(
+    compaction,
+    SessionPrompt.layer.pipe(
+      Layer.provide(Goal.defaultLayer),
+      Layer.provide(TaskGateState.defaultLayer),
+      Layer.provide(TaskRegistry.defaultLayer),
+      Layer.provide(SessionRevert.defaultLayer),
+      Layer.provide(summary),
+      Layer.provide(checkpoint),
+      Layer.provide(team),
+      Layer.provide(taskRegistry),
+      Layer.provideMerge(run),
+      Layer.provideMerge(prune),
+      Layer.provideMerge(compaction),
+      Layer.provideMerge(proc),
+      Layer.provideMerge(registry),
+      Layer.provideMerge(trunc),
+      Layer.provide(Instruction.defaultLayer),
+      Layer.provide(SystemPrompt.defaultLayer),
+      Layer.provide(Inbox.defaultLayer),
+      Layer.provideMerge(deps),
+    ),
   )
 }
 
@@ -240,8 +244,65 @@ const ref = {
 }
 
 const it = testEffect(makeLayers())
+const compactionMock = new MockLLM()
+const compactionIt = testEffect(makeLayers(compactionMock))
 
 describe("text loop detection (integration, MockLLM)", () => {
+  compactionIt.live("keeps only the clean retry after a hijacked compaction summary", () =>
+    provideTmpdirInstance(
+      () =>
+        Effect.gen(function* () {
+          const compaction = yield* SessionCompaction.Service
+          const sessions = yield* Session.Service
+          const session = yield* sessions.create({ title: "Compaction retry" })
+          const source = yield* sessions.updateMessage({
+            id: MessageID.ascending(),
+            role: "user",
+            sessionID: session.id,
+            agent: "build",
+            model: ref,
+            time: { created: Date.now() },
+          })
+          yield* sessions.updatePart({
+            id: PartID.ascending(),
+            messageID: source.id,
+            sessionID: session.id,
+            type: "text",
+            text: "Summarize the completed work.",
+          })
+          yield* compaction.create({ sessionID: session.id, agent: "build", model: ref, auto: false })
+
+          compactionMock.enqueue(
+            textReply("<tool_call>\n<function=read>\n</function>\n</tool_call>"),
+            textReply("## Goal\nSummarize the completed work.\n\n## Accomplished\nThe summary is complete."),
+          )
+
+          const messages = yield* sessions.messages({ sessionID: session.id })
+          const parentID = messages.at(-1)!.info.id
+          const result = yield* compaction.process({
+            parentID,
+            messages,
+            sessionID: session.id,
+            auto: false,
+          })
+          const summaries = (yield* sessions.messages({ sessionID: session.id })).filter(
+            (message) => message.info.role === "assistant" && message.info.summary,
+          )
+          const text = summaries.flatMap((message) => message.parts)
+            .filter((part) => part.type === "text")
+            .map((part) => part.text)
+            .join("\n")
+
+          expect(result).toBe("continue")
+          expect(compactionMock.calls).toBe(2)
+          expect(summaries).toHaveLength(1)
+          expect(text).toContain("## Goal")
+          expect(text).not.toContain("<tool_call")
+        }),
+      { git: true, config: cfg },
+    ),
+  )
+
   it.live("detects 3 identical texts and injects recovery prompt", () =>
     provideTmpdirInstance(
       () =>

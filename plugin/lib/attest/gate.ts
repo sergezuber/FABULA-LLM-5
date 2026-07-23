@@ -6,9 +6,9 @@
 
 import { buildDecomposePrompt, parseDecomposeFull } from "./decompose"
 import { typeClaim, bindLoadBearing, reconcileDecompositions } from "./claims"
-import { checkCitation, checkMeasurement, checkProcess } from "./executors"
+import { checkCitation, checkMeasurement, checkProcess, checkConsistency } from "./executors"
 import { quarantine } from "./quarantine"
-import { buildEntailPrompt, parseEntail } from "./entailment"
+import { buildEntailPrompt, parseEntail, buildContradictionPrompt, parseContradiction } from "./entailment"
 import { claimVerdict, computeVerdict } from "./verdict"
 import { buildReentrySteer } from "./remediation"
 import type { Claim, ClaimResult, Contract, SourceDoc, LedgerView, GateVerdict, CheckOutcome } from "./types"
@@ -99,7 +99,30 @@ export async function runAttestGate(inp: GateInput): Promise<GateOutput> {
         } catch { budgetExhausted = true }
       } else budgetExhausted = true // budget spent OR wall-clock exceeded → honest unchecked
     }
+    // NB `execution` and `world-state` have no cheap executor here (honest stubs, design §5/§22): pass1
+    // stays NA → claimVerdict marks a HARD claim `unverifiable-here` (disclosed, never a false confirm).
     results.push({ claim, pass1, verdict: claimVerdict({ type: claim.type, pass1, entailFaithful, budgetExhausted }), evidenceSpan: span, failure, confidence })
+  }
+
+  // Cross-claim consistency (design §2 self-contradiction) — a pass over ALL claims that the per-claim
+  // executors structurally cannot see. checkConsistency's numeric-mismatch heuristic is DELIBERATELY loose
+  // (a shared token ≠ same subject), so a flagged pair is a SIGNAL, not a verdict: the oracle adjudicates
+  // whether it is a REAL contradiction before it blocks done. A false-positive flag, an undecided reply, or
+  // an exhausted budget/deadline leaves both claims untouched — fail-open, never a false contradiction block.
+  for (const pair of checkConsistency(claims)) {
+    const ra = results.find((r) => r.claim.text === pair.a)
+    const rb = results.find((r) => r.claim.text === pair.b)
+    if (!ra || !rb || ra.verdict === "refuted" || rb.verdict === "refuted") continue
+    if (budget <= 0 || overtime()) continue
+    budget--
+    try {
+      auxCalls++
+      const adj = parseContradiction((await inp.callAux(buildContradictionPrompt(pair.a, pair.b), { maxTokens: 120, timeoutMs: 60000 })).text)
+      if (adj.contradiction === true) {
+        ra.verdict = "refuted"; ra.failure = "contradiction"
+        rb.verdict = "refuted"; rb.failure = "contradiction"
+      }
+    } catch { /* oracle unreachable → leave both as-is (fail-open) */ }
   }
 
   const verdict = computeVerdict(results)

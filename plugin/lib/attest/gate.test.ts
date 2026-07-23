@@ -96,3 +96,32 @@ test("full pipeline: budget cap forces unchecked-budget on a SIGNAL hard claim �
   expect(out.results[0].verdict).toBe("unchecked-budget")
   expect(out.verdict.done).toBe(false) // a load-bearing hard claim left unchecked blocks done
 })
+
+// checkConsistency wired via the oracle (design §2 self-contradiction). Source carries BOTH figures, so
+// each claim PASSes pass-1 on its own — only the CROSS-claim contradiction can block, and only once the
+// oracle confirms the loose numeric-mismatch heuristic is a REAL contradiction.
+const NUM_CORPUS: SourceDoc[] = [{ label: "ch01", text: "The review used 9 analysts. Then the review used 7 analysts." }]
+// The mined conclusion is UNRELATED to the two claims, so bindLoadBearing marks BOTH non-load-bearing.
+// That isolates the contradiction blocker: with no load-bearing claim, `anyRefuted`/`unresolvedHard` are
+// both false, so ONLY the anyContradiction path can flip done → the test is non-vacuous for that line.
+const contraAux = (verdict: "CONTRADICTION" | "CONSISTENT"): AuxFn => async (prompt: string) => {
+  if (/genuinely CONTRADICT/i.test(prompt)) return { text: `VERDICT: ${verdict}\nCONFIDENCE: 0.9` }
+  if (/grounding checker/i.test(prompt)) return { text: "VERDICT: FAITHFUL\nSPAN: NONE\nCONFIDENCE: 0.9" }
+  return { text: JSON.stringify({ conclusions: ["the deployment pipeline latency"], claims: [{ text: "The review used 9 analysts.", src: "ch01" }, { text: "The review used 7 analysts.", src: "ch01" }] }) }
+}
+test("cross-claim contradiction: oracle CONFIRMS → both non-load-bearing claims refuted, done blocked purely by the contradiction (checkConsistency now wired)", async () => {
+  const out = await runAttestGate({ deliverable: "x".repeat(60), sources: NUM_CORPUS, ledger, contract, callAux: contraAux("CONTRADICTION"), budget: 6 })
+  expect(out.results.every((r) => !r.claim.loadBearing)).toBe(true) // neither claim is load-bearing…
+  expect(out.verdict.done).toBe(false) // …so done is blocked SOLELY by anyContradiction
+  expect(out.results.filter((r) => r.failure === "contradiction").length).toBe(2)
+  expect(out.auxCalls).toBe(2) // 1 decompose + 1 contradiction adjudication (both claims PASS pass-1 → no entail)
+})
+test("cross-claim contradiction: oracle says CONSISTENT → the loose heuristic flag is filtered, done NOT blocked (fail-open)", async () => {
+  const out = await runAttestGate({ deliverable: "x".repeat(60), sources: NUM_CORPUS, ledger, contract, callAux: contraAux("CONSISTENT"), budget: 6 })
+  expect(out.verdict.done).toBe(true) // a false-positive numeric-mismatch never blocks a grounded deliverable
+  expect(out.results.some((r) => r.failure === "contradiction")).toBe(false)
+})
+test("cross-claim contradiction: no budget for adjudication → not blocked (fail-open, never a raw-heuristic block)", async () => {
+  const out = await runAttestGate({ deliverable: "x".repeat(60), sources: NUM_CORPUS, ledger, contract, callAux: contraAux("CONTRADICTION"), budget: 0 })
+  expect(out.verdict.done).toBe(true) // budget 0 → the flagged pair is left unadjudicated, never hard-blocked
+})

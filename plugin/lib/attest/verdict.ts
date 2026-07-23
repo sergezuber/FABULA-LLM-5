@@ -25,7 +25,10 @@ export function computeVerdict(results: ClaimResult[]): GateVerdict {
   const unresolvedHard = lb.some(
     (r) => HARD.has(r.claim.type) && r.verdict !== "confirmed" && r.verdict !== "unverifiable-here",
   )
-  const done = !anyRefuted && !unresolvedHard
+  // An oracle-confirmed cross-claim contradiction blocks done independent of load-bearing — a deliverable
+  // that contradicts ITSELF is defective whichever figure is load-bearing (design §2 self-contradiction).
+  const anyContradiction = (results || []).some((r) => r.failure === "contradiction")
+  const done = !anyRefuted && !unresolvedHard && !anyContradiction
 
   const residue = (results || []).filter((r) => r.verdict !== "confirmed" && r.verdict !== "judgment-marked")
   return { done, tally, residue, strippedIds: [] }

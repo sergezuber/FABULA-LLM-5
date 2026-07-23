@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test"
-import { resolveProviders, chatBody, extractText, synthesisPrompt, pickAggregator } from "./moa"
+import { resolveProviders, chatBody, extractText, synthesisPrompt, pickAggregator, cloudEndpointsAllowed } from "./moa"
 
 test("resolveProviders: local always present; NVIDIA added with key", () => {
   const p = resolveProviders({ NVIDIA_API_KEY: "nv-x" })
@@ -19,6 +19,23 @@ test("resolveProviders: no cloud key → only local", () => {
   const p = resolveProviders({})
   expect(p.length).toBe(1)
   expect(p[0].name).toBe("local-qwen")
+})
+// RULE #18: a cloud key present under a test runner must NOT produce a cloud endpoint (bun test
+// auto-loads .env → the key is there; the choke-point guard drops it). Local stays as the test target.
+test("resolveProviders: cloud key under a test runner → local only (no cloud emitted)", () => {
+  const p = resolveProviders({ BUN_TEST: "1", NVIDIA_API_KEY: "nv", ZHIPU_API_KEY: "z" })
+  expect(p.map((x) => x.name)).toEqual(["local-qwen"])
+  expect(p.some((x) => x.cloud)).toBe(false)
+})
+test("resolveProviders: explicit FABULA_TEST_ALLOW_CLOUD re-enables cloud under a test runner", () => {
+  const p = resolveProviders({ BUN_TEST: "1", FABULA_TEST_ALLOW_CLOUD: "1", ZHIPU_API_KEY: "z" })
+  expect(p.find((x) => x.name === "zai-glm")?.cloud).toBe(true)
+})
+test("cloudEndpointsAllowed: off under a test runner, on when opted in or outside tests", () => {
+  expect(cloudEndpointsAllowed({ BUN_TEST: "1" })).toBe(false)
+  expect(cloudEndpointsAllowed({ NODE_ENV: "test" })).toBe(false)
+  expect(cloudEndpointsAllowed({ BUN_TEST: "1", FABULA_TEST_ALLOW_CLOUD: "1" })).toBe(true)
+  expect(cloudEndpointsAllowed({})).toBe(true)
 })
 test("resolveProviders: FABULA_MOA_ENDPOINTS override", () => {
   const p = resolveProviders({ FABULA_MOA_ENDPOINTS: JSON.stringify([{ name: "x", url: "http://h/v1/chat/completions", model: "m", key: "k", cloud: true }]) })

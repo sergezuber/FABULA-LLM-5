@@ -2,7 +2,7 @@
 // LOCAL model first (LM Studio Qwen), falling back to a cheap CLOUD model. Cost lever.
 // Pure chain resolver (testable) + async callAux with fallback.
 
-import { chatBody, extractText } from "./moa"
+import { chatBody, extractText, cloudEndpointsAllowed } from "./moa"
 
 export interface AuxEndpoint { name: string; url: string; model: string; headers: Record<string, string> }
 
@@ -28,7 +28,10 @@ export function auxChain(env: Record<string, string | undefined>): AuxEndpoint[]
     const lm = explicitLm || "http://localhost:1234/v1"
     chain.push({ name: "local-qwen", url: `${lm}/chat/completions`, model: "", headers: {} })
   }
-  if (env.NVIDIA_API_KEY) chain.push({
+  // Cloud fallback — same test-runner discipline as the local default (RULE #18). A bare key must not
+  // point a test at a paid endpoint; cloudEndpointsAllowed refuses it under a test runner unless the run
+  // explicitly opts in. (Shared with moa.ts — one definition so the two paths can't diverge.)
+  if (env.NVIDIA_API_KEY && cloudEndpointsAllowed(env)) chain.push({
     name: "nvidia-flash", url: "https://integrate.api.nvidia.com/v1/chat/completions",
     model: "deepseek-ai/deepseek-v4-flash", headers: { Authorization: `Bearer ${env.NVIDIA_API_KEY}` },
   })

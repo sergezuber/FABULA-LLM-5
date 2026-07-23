@@ -46,6 +46,23 @@ process.env.FABULA_OPS_DIR = join(data, "ops")
 // different cases failing across three runs. Tests were paying real money and reporting it as a flake.
 // A mechanism that reaches the network must be OFF under a test runner; a test that wants it sets it back.
 process.env.FABULA_ESCALATE_AUTO = process.env.FABULA_ESCALATE_AUTO ?? "0"
+
+// RULE #18: tests run against the LOCAL model only. `bun test` auto-loads the repo `.env`, so cloud
+// provider credentials land in process.env — where any cloud-calling path could consume them (a real
+// outbound call to a paid endpoint, and the key value visible in test output; this is exactly what a
+// verifier reported: aux/aggregator calls timing out against a cloud provider under the plugin suite).
+// The choke-point guard in auxLLM/moa (cloudEndpointsAllowed) already refuses to EMIT a cloud endpoint
+// under a test runner; stripping the credentials too closes any path we did NOT audit and keeps the key
+// value out of a test's environment entirely. A deliberate cloud test sets FABULA_TEST_ALLOW_CLOUD=1
+// (the same opt-in the choke-point guard honors). NB this is an allow-list — same weakness as the store
+// list above: a NEW cloud credential must be added here, but the choke-point guard is keyed on the test
+// runner (not the key name), so it still blocks a forgotten key from being emitted as an endpoint.
+if (!process.env.FABULA_TEST_ALLOW_CLOUD) {
+  for (const k of [
+    "NVIDIA_API_KEY", "ZHIPU_API_KEY", "IAMHC_API_KEY", "OPENAI_API_KEY",
+    "FABULA_AUX_URL", "FABULA_AUX_KEY", "FABULA_MOA_ENDPOINTS",
+  ]) delete process.env[k]
+}
 // NB this list is an ALLOW-LIST of stores we happen to know about, and that is its weakness: a NEW
 // store added later inherits none of this and silently writes to the developer's home instead. That is
 // not hypothetical — the W7 memory store did exactly that, accumulating 71 junk records in the real

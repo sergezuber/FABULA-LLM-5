@@ -16,6 +16,20 @@ test("auxChain: custom endpoint takes priority", () => {
 test("auxChain: no cloud key → just local", () => {
   expect(auxChain({}).map((x) => x.name)).toEqual(["local-qwen"])
 })
+// RULE #18: under a test runner the default local endpoint AND the cloud fallback are both off unless
+// explicitly opted in — so `bun test` auto-loading a cloud key can never send a hermetic wiring test to
+// a paid endpoint (the reported 3-red-timeout class). An explicitly named LOCAL endpoint still works.
+test("auxChain: cloud key under a test runner → hermetic (empty chain)", () => {
+  expect(auxChain({ BUN_TEST: "1", NVIDIA_API_KEY: "k" })).toEqual([])
+})
+test("auxChain: FABULA_TEST_ALLOW_CLOUD re-enables the cloud fallback under a test runner", () => {
+  const c = auxChain({ BUN_TEST: "1", FABULA_TEST_ALLOW_CLOUD: "1", NVIDIA_API_KEY: "k" })
+  expect(c.some((x) => x.name === "nvidia-flash")).toBe(true)
+})
+test("auxChain: explicit LMSTUDIO_URL keeps local under a test runner (no cloud)", () => {
+  const c = auxChain({ BUN_TEST: "1", LMSTUDIO_URL: "http://localhost:1235/v1", NVIDIA_API_KEY: "k" })
+  expect(c.map((x) => x.name)).toEqual(["local-qwen"])
+})
 
 // Live: LM Studio is typically down here → exercises the REAL fallback to NVIDIA flash.
 const hasCloud = !!process.env.NVIDIA_API_KEY

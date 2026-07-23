@@ -10,6 +10,17 @@ export interface MoaProvider {
   cloud: boolean                    // cloud = candidate aggregator
 }
 
+/** RULE #18: tests run against the LOCAL model only. A KEY-triggered CLOUD endpoint must never be emitted
+ *  from a test runner unless a run explicitly opts in (FABULA_TEST_ALLOW_CLOUD) — otherwise `bun test`
+ *  auto-loading .env silently points a cheap-aux/aggregator call at a paid cloud provider (real outbound
+ *  call + the key in test output). Local endpoints (:1235) stay the test target; an explicitly NAMED
+ *  endpoint (LMSTUDIO_URL / FABULA_AUX_URL) is a deliberate decision and is honored by its own call site —
+ *  a bare key is not an endpoint decision. Single definition, imported by auxLLM.ts so the rule can't drift. */
+export function cloudEndpointsAllowed(env: Record<string, string | undefined>): boolean {
+  const underTest = env.NODE_ENV === "test" || !!env.BUN_TEST || !!env.FABULA_TEST
+  return !underTest || !!env.FABULA_TEST_ALLOW_CLOUD
+}
+
 /** Build the provider fan from env. FABULA_MOA_ENDPOINTS (JSON array) overrides the defaults. */
 export function resolveProviders(env: Record<string, string | undefined>): MoaProvider[] {
   if (env.FABULA_MOA_ENDPOINTS) {
@@ -24,15 +35,17 @@ export function resolveProviders(env: Record<string, string | undefined>): MoaPr
   const out: MoaProvider[] = []
   const lmUrl = env.LMSTUDIO_URL || "http://localhost:1234/v1"
   out.push({ name: "local-qwen", url: `${lmUrl}/chat/completions`, model: "", headers: {}, cloud: false })
-  if (env.NVIDIA_API_KEY) {
-    const h = { Authorization: `Bearer ${env.NVIDIA_API_KEY}` }
-    out.push({ name: "nvidia-glm", url: "https://integrate.api.nvidia.com/v1/chat/completions", model: "z-ai/glm-5.1", headers: h, cloud: true })
-    out.push({ name: "nvidia-deepseek", url: "https://integrate.api.nvidia.com/v1/chat/completions", model: "deepseek-ai/deepseek-v4-flash", headers: h, cloud: true })
+  if (cloudEndpointsAllowed(env)) {
+    if (env.NVIDIA_API_KEY) {
+      const h = { Authorization: `Bearer ${env.NVIDIA_API_KEY}` }
+      out.push({ name: "nvidia-glm", url: "https://integrate.api.nvidia.com/v1/chat/completions", model: "z-ai/glm-5.1", headers: h, cloud: true })
+      out.push({ name: "nvidia-deepseek", url: "https://integrate.api.nvidia.com/v1/chat/completions", model: "deepseek-ai/deepseek-v4-flash", headers: h, cloud: true })
+    }
+    if (env.ZHIPU_API_KEY) out.push({
+      name: "zai-glm", url: "https://api.z.ai/api/coding/paas/v4/chat/completions",
+      model: env.ZAI_MOA_MODEL || "glm-4.7", headers: { Authorization: `Bearer ${env.ZHIPU_API_KEY}` }, cloud: true,
+    })
   }
-  if (env.ZHIPU_API_KEY) out.push({
-    name: "zai-glm", url: "https://api.z.ai/api/coding/paas/v4/chat/completions",
-    model: env.ZAI_MOA_MODEL || "glm-4.7", headers: { Authorization: `Bearer ${env.ZHIPU_API_KEY}` }, cloud: true,
-  })
   return out
 }
 

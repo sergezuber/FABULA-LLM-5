@@ -1,5 +1,6 @@
 import { test, expect } from "bun:test"
 import { runAttestGate, type AuxFn } from "./gate"
+import { detectStripped } from "./remediation"
 import type { SourceDoc, Contract, LedgerView } from "./types"
 
 const CORPUS: SourceDoc[] = [{ label: "ch01", text: "The cup was warm on its own. Correlation reached 0.9999." }]
@@ -43,6 +44,50 @@ test("full pipeline: aux unreachable → degrade to silence, never throw (fail-o
   const out = await runAttestGate({ deliverable: "x".repeat(60), sources: CORPUS, ledger, contract, callAux: boom, budget: 6 })
   expect(out.verdict.done).toBe(true)
   expect(out.steer).toBe("")
+})
+
+test("round-over-round: detectStripped flags a load-bearing claim deleted between gate runs (the plugin's Goodhart guard, #3 wired)", async () => {
+  const auxWith = (json: string): AuxFn => async (p: string) => (/grounding checker/i.test(p) ? { text: "VERDICT: FABRICATION" } : { text: json })
+  // round 1: two load-bearing citation claims (quotes → hard type → load-bearing)
+  const r1 = await runAttestGate({ deliverable: "x".repeat(60), sources: CORPUS, ledger, contract, callAux: auxWith(JSON.stringify([{ text: "«claim A not in corpus»" }, { text: "«claim B not in corpus»" }])), budget: 6 })
+  // round 2: claim A deleted, only B remains — exactly the pattern the plugin passes to detectStripped
+  const r2 = await runAttestGate({ deliverable: "y".repeat(60), sources: CORPUS, ledger, contract, callAux: auxWith(JSON.stringify([{ text: "«claim B not in corpus»" }])), budget: 6 })
+  expect(r1.claims.length).toBe(2)
+  expect(detectStripped(r1.claims, r2.claims).length).toBe(1) // claim A vanished between rounds → flagged
+})
+
+test("gate mines the task's conclusions and returns them (contract wiring, #1)", async () => {
+  const aux: AuxFn = async (prompt: string) => {
+    if (/grounding checker/i.test(prompt)) return { text: "VERDICT: FAITHFUL\nSPAN: NONE\nCONFIDENCE: 0.9" }
+    return { text: JSON.stringify({ conclusions: ["cover every chapter"], claims: [{ text: "«The cup was warm on its own.»", src: "ch01" }] }) }
+  }
+  const out = await runAttestGate({ deliverable: "x".repeat(60), sources: CORPUS, ledger, contract, callAux: aux, budget: 6, taskText: "analyze the book" })
+  expect(out.conclusions).toEqual(["cover every chapter"])
+})
+
+test("selfConsistency: a 2nd decomposition is run and merged by union — reconcile is LIVE (#2)", async () => {
+  let decomposeCalls = 0
+  const aux: AuxFn = async (prompt: string) => {
+    if (/grounding checker/i.test(prompt)) return { text: "VERDICT: FABRICATION\nSPAN: NONE\nCONFIDENCE: 0.9" }
+    decomposeCalls++
+    return decomposeCalls === 1
+      ? { text: JSON.stringify([{ text: "«The cup was warm on its own.»", src: "ch01" }]) }
+      : { text: JSON.stringify([{ text: "«The cup was warm on its own.»", src: "ch01" }, { text: "«a fabricated moon line»", src: "ch01" }]) }
+  }
+  const out = await runAttestGate({ deliverable: "x".repeat(60), sources: CORPUS, ledger, contract, callAux: aux, budget: 6, selfConsistency: true })
+  expect(decomposeCalls).toBe(2)
+  expect(out.claims.length).toBe(2)
+})
+
+test("wallclock ceiling: an exceeded deadline skips entailment → unchecked-budget, never a false confirm", async () => {
+  const aux: AuxFn = async (prompt: string) => {
+    if (/grounding checker/i.test(prompt)) return { text: "VERDICT: FABRICATION" }
+    // decompose takes long enough that the 5ms wall-clock is already spent before entailment is considered
+    await new Promise((r) => setTimeout(r, 15))
+    return { text: JSON.stringify([{ text: "«a fabricated moon line that is not in the corpus at all»", src: "ch01" }]) }
+  }
+  const out = await runAttestGate({ deliverable: "x".repeat(60), sources: CORPUS, ledger, contract, callAux: aux, budget: 6, wallclockMs: 5 })
+  expect(out.results[0].verdict).toBe("unchecked-budget")
 })
 
 test("full pipeline: budget cap forces unchecked-budget on a SIGNAL hard claim → blocks done (flood channel closed)", async () => {

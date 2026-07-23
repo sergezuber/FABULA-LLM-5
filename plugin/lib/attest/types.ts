@@ -46,6 +46,8 @@ export interface Claim {
   attribution?: string
   /** true iff the claim supports a contract-required conclusion (design F, bound post-hoc) */
   loadBearing: boolean
+  /** char span of the claim in the deliverable, when known (spec §3 Claim.span) */
+  span?: [number, number]
 }
 
 /** Mined from the task+env BEFORE the deliverable exists (design A/F). Arms the gate. */

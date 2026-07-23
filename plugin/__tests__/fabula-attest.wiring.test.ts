@@ -62,3 +62,29 @@ test("armed deliverable turn: reads are tracked, the gate runs and degrades grac
   // no crash, and with no aux the deliverable is not falsely flagged
   expect(typeof del.output).toBe("string")
 })
+
+test("str_replace is gated too: the deliverable is read from disk, the gate path runs without throwing (#5)", async () => {
+  const h = await hooks()
+  const sid = "task-2"
+  const f = join(tmpdir(), `attest-deliverable-${process.pid}.md`)
+  writeFileSync(f, "The analysis states «Кружка тёплая сама по себе.» and correlation 0.9999 across the run. ".repeat(2))
+  await h["chat.message"]({ sessionID: sid, message: { text: "analyze the source and write the review" } })
+  const out = writeResult("edited")
+  // str_replace carries only a path (+ old/new string); the plugin reads the resulting FILE as the deliverable
+  await expect(
+    h["tool.execute.after"]({ sessionID: sid, tool: "str_replace", args: { path: f }, directory: tmpdir() }, out),
+  ).resolves.toBeUndefined()
+})
+
+test("bounded re-entry: the write hook fires the gate at most FABULA_ATTEST_MAX rounds (no unbounded loop)", async () => {
+  const h = await hooks()
+  const sid = "task-3"
+  await h["chat.message"]({ sessionID: sid, message: { text: "analyze and write a summary" } })
+  // drive create_file 5 times; with the default cap of 2 the extra writes must not throw and stay silent
+  for (let i = 0; i < 5; i++) {
+    const o = writeResult("A written deliverable long enough to be substantive. ".repeat(3))
+    await expect(
+      h["tool.execute.after"]({ sessionID: sid, tool: "create_file", args: { path: `a${i}.md`, content: o.output } }, o),
+    ).resolves.toBeUndefined()
+  }
+})

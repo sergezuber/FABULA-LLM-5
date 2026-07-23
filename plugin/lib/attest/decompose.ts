@@ -10,17 +10,85 @@ function clip(s: string, n: number): string {
   return t.length > n ? t.slice(0, n) + "…" : t
 }
 
-export function buildDecomposePrompt(deliverable: string): string {
+export function buildDecomposePrompt(deliverable: string, taskText?: string): string {
+  const claimsSpec =
+    'each item {"text": "<the claim>", "src": "<the file/section it attributes to, or null>"}. Max 40 items.'
+  if (taskText && taskText.trim()) {
+    // fold contract-mining (the TASK's required conclusions) into the SAME call — no extra LLM round-trip.
+    return [
+      "Below are a TASK and the DELIVERABLE written for it.",
+      'Respond with ONLY a JSON object (no prose): {"conclusions": ["<each outcome the TASK required, short>"],',
+      `"claims": [${claimsSpec}]}.`,
+      "A claim is a single checkable assertion in the DELIVERABLE: a quote, a number/total, a stated behavior,",
+      "a claim about what was read/done, or a factual statement. Skip pure opinion unless stated as fact.",
+      "",
+      "TASK:",
+      clip(taskText, 1500),
+      "",
+      "DELIVERABLE:",
+      clip(deliverable, 7000),
+    ].join("\n")
+  }
   return [
     "Extract the atomic factual CLAIMS from the TEXT below. A claim is a single assertion that could be",
     "checked: a quote, a number/total, a stated behavior, a claim about what was read/done, or a factual",
     "statement. Skip pure opinion unless it is stated as fact.",
-    'Respond with ONLY a JSON array (no prose before or after), each item {"text": "<the claim>", "src":',
-    '"<the file/section it attributes to, or null>"}. Max 40 items.',
+    `Respond with ONLY a JSON array (no prose before or after), ${claimsSpec}`,
     "",
     "TEXT:",
     clip(deliverable, 8000),
   ].join("\n")
+}
+
+/** Lift the LAST bracket-balanced JSON object out of a possibly reasoning-laden response. */
+function lastJsonObject(text: string): any | null {
+  for (let start = text.lastIndexOf("{"); start >= 0; start = text.lastIndexOf("{", start - 1)) {
+    let depth = 0
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i]
+      if (ch === "{") depth++
+      else if (ch === "}") {
+        depth--
+        if (depth === 0) {
+          try {
+            const v = JSON.parse(text.slice(start, i + 1))
+            if (v && typeof v === "object" && (Array.isArray(v.claims) || Array.isArray(v.conclusions))) return v
+          } catch {}
+          break
+        }
+      }
+    }
+  }
+  return null
+}
+
+/** Parse a decomposition that may carry conclusions (the contract) alongside claims. Falls back to the
+ *  claims-only array form. Conclusions drive load-bearing binding (design F). */
+export function parseDecomposeFull(auxText: string): { conclusions: string[]; claims: Array<{ text: string; attribution?: string }> } {
+  const obj = lastJsonObject(String(auxText ?? ""))
+  if (obj && Array.isArray(obj.claims)) {
+    const conclusions = Array.isArray(obj.conclusions)
+      ? obj.conclusions.map((c: any) => String(c ?? "").trim()).filter((c: string) => c.length > 2).slice(0, 20)
+      : []
+    return { conclusions, claims: normalizeClaimObjs(obj.claims) }
+  }
+  return { conclusions: [], claims: parseDecompose(auxText) }
+}
+
+function normalizeClaimObjs(arr: any[]): Array<{ text: string; attribution?: string }> {
+  const seen = new Set<string>()
+  const out: Array<{ text: string; attribution?: string }> = []
+  for (const o of arr) {
+    const t = String((o && (o.text ?? o.claim ?? o.c)) ?? "").trim()
+    if (t.length <= 6) continue
+    const key = t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim()
+    if (seen.has(key)) continue
+    seen.add(key)
+    const src = o && (o.src ?? o.source ?? o.attribution)
+    out.push({ text: t, attribution: src && typeof src === "string" && !/^(none|null)$/i.test(src.trim()) ? src.trim() : undefined })
+    if (out.length >= 40) break
+  }
+  return out
 }
 
 /** Lift the LAST bracket-balanced JSON array out of a possibly reasoning-laden response. */

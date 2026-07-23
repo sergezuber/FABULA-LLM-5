@@ -1,5 +1,35 @@
 import { test, expect } from "bun:test"
-import { buildDecomposePrompt, parseDecompose } from "./decompose"
+import { buildDecomposePrompt, parseDecompose, parseDecomposeFull } from "./decompose"
+
+test("parseDecomposeFull: object form carries the task's conclusions AND the deliverable's claims", () => {
+  const aux = JSON.stringify({
+    conclusions: ["cover every chapter", "give a final total", "  "],
+    claims: [
+      { text: "The cup was warm on its own.", src: "ch01" },
+      { text: "correlation reached 0.9999", src: null },
+      { text: "The cup was warm on its own.", src: "ch01" }, // dup
+    ],
+  })
+  const out = parseDecomposeFull(aux)
+  expect(out.conclusions).toEqual(["cover every chapter", "give a final total"]) // empty dropped
+  expect(out.claims.length).toBe(2) // deduped
+  expect(out.claims[0].attribution).toBe("ch01")
+})
+
+test("parseDecomposeFull: bare array (no conclusions) → conclusions [] + claims", () => {
+  const out = parseDecomposeFull(JSON.stringify([{ text: "9 analysts over 47 years", src: "ch05" }]))
+  expect(out.conclusions).toEqual([])
+  expect(out.claims.length).toBe(1)
+})
+
+test("buildDecomposePrompt: with a task, asks for {conclusions, claims}; without, a plain claims array", () => {
+  const withTask = buildDecomposePrompt("the deliverable text here", "analyze the book")
+  expect(withTask).toContain('"conclusions"')
+  expect(withTask).toContain("TASK:")
+  const noTask = buildDecomposePrompt("the deliverable text here")
+  expect(noTask).toContain("JSON array")
+  expect(noTask).not.toContain('"conclusions"')
+})
 
 test("parseDecompose: JSON array (the primary path)", () => {
   const aux = JSON.stringify([

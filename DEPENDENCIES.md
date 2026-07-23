@@ -204,6 +204,14 @@ Downgrades a green verify_done to NOT-DONE when source changed but no reproducti
 |---|---|---|---|---|
 | @mimo-ai/plugin | npm | **yes** | plugin SDK (tool/hook API) | `cd plugin && bun install` |
 
+## attest — Universal verification gate
+
+Verifies the deliverable of ANY task, not just code: decomposes a written analysis/plan/summary into typed atomic claims and independently re-derives each — a quote must grep-match its cited source (scoped, so mis-attribution is caught), a number must appear in the source, a 'read all N files' claim is checked against the run ledger; only the residue reaches a quarantined entailment oracle that separates a faithful paraphrase from a fabrication. Refuted load-bearing claims return a typed repair. Silent on chat/opinion turns; lives entirely in a plugin hook, never the engine stop-path. Validated on a planted-defect bench (100% catch / 0% false-positive, Ask-F1 1.00) and a live run across trip/research/data classes; default-ON, fail-open (never falsely rejects grounded work). It costs a few aux-calls per deliverable task; turn it off in the plugin manager or with FABULA_ATTEST=0.
+
+| Dependency | Kind | Required | Purpose | Install / note |
+|---|---|---|---|---|
+| @mimo-ai/plugin | npm | **yes** | plugin SDK (tool/hook API) | `cd plugin && bun install` |
+
 ## learn — Learn (skill-packaging nudge)
 
 Closes the 'skills compound' loop as a light self-nudge: after the agent completes AND verifies a real multi-step change, a tool-result steer points at /distill so the fresh trajectory gets packaged into a reusable skill/command while it is fresh. The manual-trigger alternative to the guarded auto-distill pass — it never runs distill for you. Kill-switch: FABULA_LEARN_NUDGE=0.

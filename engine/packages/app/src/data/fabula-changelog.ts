@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.8.0"
+export const FABULA_VERSION = "0.10.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,30 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.10.0",
+    date: "2026-07-25",
+    items: [
+      {
+        ru: "Теперь видно, что происходит во время долгого разбора. Раньше на месте ответа стояло одно слово «Interrupted» и пустота на несколько минут — выглядело как обрыв, хотя шла работа. Теперь там написано, какая глава читается сейчас и сколько их всего, а затем — что собирается итоговый отчёт.",
+        en: "You can now see what is happening during a long analysis. The answer area used to show the single word 'Interrupted' and then nothing for minutes — which looked like a failure while work was going on. It now says which chapter is being read and how many there are, and then that the final report is being written.",
+      },
+    ],
+  },
+  {
+    version: "0.9.0",
+    date: "2026-07-25",
+    items: [
+      {
+        ru: "Длинный отчёт больше не обрывается на полуслове. Раньше объём ответа задавался заранее, а подобрать его нельзя в принципе: один и тот же текст на русском стоит примерно втрое дороже английского, поэтому любое число либо расточительно, либо режет. Теперь приложение спрашивает у модели, закончила она мысль или у неё кончилось место, и во втором случае даёт больше места и просит снова.",
+        en: "A long report is no longer cut off mid-word. The size of the answer used to be fixed in advance, which cannot be got right: the same text costs about three times more in Russian than in English, so any number is either wasteful or truncating. The app now asks the model whether it finished or simply ran out of room, and in the second case gives it more room and asks again.",
+      },
+      {
+        ru: "Полоса вверху больше не бежит в пустой сессии. Прерванный ход оставлял после себя сообщение без отметки о завершении, и полоса считала его незаконченной работой — бесконечно, хотя не происходило ничего.",
+        en: "The line at the top no longer runs in an idle session. An interrupted turn left behind a message with no completion stamp, and the line read it as unfinished work — forever, while nothing at all was happening.",
+      },
+    ],
+  },
   {
     version: "0.8.0",
     date: "2026-07-25",

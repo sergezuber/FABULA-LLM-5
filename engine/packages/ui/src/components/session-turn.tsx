@@ -154,6 +154,9 @@ export function SessionTurn(
     editToolDefaultOpen?: boolean
     active?: boolean
     status?: SessionStatus
+    /** What to show in place of the bare "Interrupted" divider when the caller knows the turn was
+     *  interrupted on purpose and the work is still going on somewhere else. */
+    interruptedLabel?: () => string | undefined
     onUserInteracted?: () => void
     classes?: {
       root?: string
@@ -291,7 +294,11 @@ export function SessionTurn(
   const interrupted = createMemo(() => assistantMessages().some((m) => m.error?.name === "MessageAbortedError"))
   const divider = createMemo(() => {
     if (compaction()) return i18n.t("ui.messagePart.compaction")
-    if (interrupted()) return i18n.t("ui.message.interrupted")
+    // A turn can be interrupted because it FAILED, or because the harness deliberately took the work
+    // out of band and is still doing it. Those look identical here, and the bare word reads as failure —
+    // the reader sees "Interrupted" and empty space for minutes while 28 chapters are being analysed.
+    // When the caller knows what is really going on, it says so instead.
+    if (interrupted()) return props.interruptedLabel?.() || i18n.t("ui.message.interrupted")
     return ""
   })
   const error = createMemo(

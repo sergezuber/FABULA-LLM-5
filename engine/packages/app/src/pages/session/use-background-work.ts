@@ -12,7 +12,7 @@ import { createSignal, createEffect, onCleanup } from "solid-js"
 const IDLE_MS = 4000 // nothing running: check occasionally, cost is negligible
 const ACTIVE_MS = 1500 // work in flight: keep the indicators responsive
 
-export type BackgroundWork = { active: boolean; state?: string; done?: number; total?: number }
+export type BackgroundWork = { active: boolean; state?: string; done?: number; total?: number; unit?: string }
 
 export function useBackgroundWork(sessionID: () => string | undefined) {
   const [work, setWork] = createSignal<BackgroundWork>({ active: false })

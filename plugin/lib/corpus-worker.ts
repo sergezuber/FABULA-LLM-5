@@ -29,6 +29,7 @@ const CHAPTER_CAP = Math.max(1024, parseInt(process.env.FABULA_CORPUS_CHAPTER_CA
 const SUMMARY_TOKENS = Math.max(200, parseInt(process.env.FABULA_CORPUS_SUMMARY_TOKENS || "0", 10) || 900)
 // NB the synthesis budget is NOT a constant — it scales with how many batches the report must cover
 // (synthTokensFor), so a book does not get a three-file-sized report cut off mid-heading.
+const SYNTH_HARD_CAP = Math.max(2000, parseInt(process.env.FABULA_CORPUS_SYNTH_HARD_CAP || "0", 10) || 16000)
 const MIN_FILES = Math.max(2, parseInt(process.env.FABULA_CORPUS_MIN || "2", 10) || 2)
 
 // ── heartbeat file: the spawner + any watchdog can see the worker is alive + how far it got ───────
@@ -45,6 +46,31 @@ async function localModel(): Promise<string> {
   try { return String((await (await fetch(`${BASE}/models`)).json())?.data?.[0]?.id || "") }
   catch { return "" }
 }
+/** Ask the model, and say whether it STOPPED or simply RAN OUT of room. Guessing a token budget cannot
+ *  work: the same report costs roughly three times more tokens in Russian than in English, so any constant
+ *  is either wasteful for one language or truncating for another — measured, a 28-chapter report was cut
+ *  mid-word at 4225 tokens against a 4260 budget. The model already reports which happened; use that
+ *  instead of a better guess. */
+async function callLocalFull(model: string, prompt: string, maxTokens: number): Promise<{ text: string; truncated: boolean }> {
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS)
+  try {
+    const r = await fetch(`${BASE}/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model, messages: [{ role: "user", content: prompt + "\n\n/no_think" }], max_tokens: maxTokens, temperature: 0.4, stream: false }),
+      signal: ctrl.signal,
+    })
+    if (!r.ok) throw new Error(`local model HTTP ${r.status}`)
+    const j: any = await r.json()
+    const choice = j.choices?.[0]
+    return {
+      text: choice?.message?.content || choice?.message?.reasoning_content || "",
+      truncated: choice?.finish_reason === "length",
+    }
+  } finally { clearTimeout(t) }
+}
+
 async function callLocal(model: string, prompt: string, maxTokens: number): Promise<string> {
   const ctrl = new AbortController()
   const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS)
@@ -118,18 +144,27 @@ async function main(): Promise<number> {
 
   // MAP — resume-safe: only batches with at least one not-done file run.
   let done = 0
+  let doneFiles = 0
   for (const batch of pendingBatches(key, batches)) {
-    hb("map", { done, total: batches.length, current: batch.map((f) => f.name) })
+    // Report REAL units, not batches: batching is an internal grouping, and "2 of 11" while the reader
+    // sees 28 files on disk is simply wrong. The noun comes from what discovery actually found — a
+    // chapter pattern matched or it did not — so nothing here assumes the corpus is a book.
+    hb("map", {
+      done: doneFiles,
+      total: disc.files.length,
+      unit: disc.fallback ? "files" : "chapters",
+      current: batch.map((f) => f.name),
+    })
     try {
       // Sanitize per batch, not only at the end: an unsanitized summary carries the model's reasoning
       // into the accumulator, from where it is quoted verbatim into the synthesize prompt AND into the
       // raw-summaries fallback report. Cleaning only the final answer leaves both paths polluted.
       const out = cleanAnswer(await callLocal(model, chapterSummaryPrompt(batch, taskText, CHAPTER_CAP), SUMMARY_TOKENS))
       markDone(key, batch, out)
-      done++
+      done++; doneFiles += batch.length
     } catch (e: any) {
       markDone(key, batch, `(batch failed: ${e?.message || "unknown"})`)
-      done++
+      done++; doneFiles += batch.length
     }
   }
 
@@ -139,7 +174,19 @@ async function main(): Promise<number> {
   if (summaries.length === 0) { markHandback(); await reInject(taskText, false); clearAccumulator(key); hb("fallback-no-summaries"); return 0 }
   let report: string
   try {
-    report = cleanAnswer(await callLocal(model, synthesizeReportPrompt(summaries, taskText), synthTokensFor(summaries.length, process.env)))
+    let budget = synthTokensFor(summaries.length, process.env)
+    let out = await callLocalFull(model, synthesizeReportPrompt(summaries, taskText), budget)
+    // A report cut mid-sentence is worse than a shorter one written to fit, so grow the room and ask
+    // again rather than shipping the stump. Bounded: two attempts, each doubling, never past the cap the
+    // socket will actually return.
+    for (let attempt = 0; attempt < 2 && out.truncated; attempt++) {
+      const grown = Math.min(SYNTH_HARD_CAP, budget * 2)
+      if (grown <= budget) break
+      budget = grown
+      hb("reduce-retry", { budget })
+      out = await callLocalFull(model, synthesizeReportPrompt(summaries, taskText), budget)
+    }
+    report = cleanAnswer(out.text)
     if (!report.trim()) report = summaries.map((s) => s.text).join("\n\n---\n\n")
   } catch { report = summaries.map((s) => s.text).join("\n\n---\n\n") }
   clearAccumulator(key)

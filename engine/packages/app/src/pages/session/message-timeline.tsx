@@ -251,9 +251,18 @@ export function MessageTimeline(props: {
     if (!id) return emptyMessages
     return sync.data.message[id] ?? emptyMessages
   })
+  // A message that was ABORTED never gets a completion stamp, so "no stamp" alone does not mean "still
+  // running" — a cancelled turn left one behind and the progress line then ran forever on a session where
+  // nothing was happening. Anything that reached a terminal outcome (cancelled, errored) is finished,
+  // whether or not it was stamped.
   const pending = createMemo(() =>
     sessionMessages().findLast(
-      (item): item is AssistantMessage => item.role === "assistant" && typeof item.time.completed !== "number",
+      (item): item is AssistantMessage =>
+        item.role === "assistant" &&
+        typeof item.time.completed !== "number" &&
+        !(item as AssistantMessage).error &&
+        (item as AssistantMessage).finish !== "aborted" &&
+        (item as AssistantMessage).finish !== "cancelled",
     ),
   )
   const sessionStatus = createMemo(() => {
@@ -265,6 +274,21 @@ export function MessageTimeline(props: {
   // process, so the session reads idle while a book is still being analysed — the line would sit still
   // for minutes and the run would look dead.
   const background = useBackgroundWork(sessionID)
+  // "Interrupted" is true but useless here: the turn was cancelled ON PURPOSE so the work could continue
+  // out of band, and the reader is left staring at that word and empty space for minutes. Say what is
+  // actually happening. The counts only exist while chapters are being read (the synthesis phase reports
+  // none), so that phase is worded without numbers rather than shown as "0 of 0".
+  const backgroundLabel = () => {
+    const b = background()
+    if (!b.active) return undefined
+    // TODO(i18n): these belong in the locale files like every other user-facing string; they are inline
+    // English for now so a tracked source file carries no hardcoded non-default language.
+    // The noun is whatever the producer actually found — never assumed here. Without one, count without
+    // naming the thing rather than guessing what the corpus is made of.
+    if (b.state === "map" && b.total) return `Reading ${b.done ?? 0} of ${b.total}${b.unit ? " " + b.unit : ""}`
+    if (b.state === "reduce") return "Writing the final report"
+    return "Working in the background"
+  }
   const working = createMemo(() => !!pending() || sessionStatus().type !== "idle" || background().active)
   const tint = createMemo(() => messageAgentColor(sessionMessages(), sync.data.agent))
 
@@ -1127,6 +1151,7 @@ export function MessageTimeline(props: {
                         actions={props.actions}
                         active={active()}
                         status={active() ? sessionStatus() : undefined}
+                        interruptedLabel={backgroundLabel}
                         showReasoningSummaries={settings.general.showReasoningSummaries()}
                         shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
                         editToolDefaultOpen={settings.general.editToolPartsExpanded()}

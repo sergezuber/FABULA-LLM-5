@@ -500,7 +500,7 @@ export const SessionRoutes = lazy(() =>
             content: {
               "application/json": {
                 schema: resolver(
-                  z.object({ active: z.boolean(), state: z.string().optional(), done: z.number().optional(), total: z.number().optional() }),
+                  z.object({ active: z.boolean(), state: z.string().optional(), done: z.number().optional(), total: z.number().optional(), unit: z.string().optional() }),
                 ),
               },
             },
@@ -523,7 +523,7 @@ export const SessionRoutes = lazy(() =>
                 const raw = JSON.parse(await fs.readFile(path.join(dir, f), "utf8"))
                 if (typeof raw?.ts !== "number" || Date.now() - raw.ts > stale) continue
                 if (raw?.state === "done") continue // finished; the answer has already been delivered
-                return { active: true, state: String(raw.state ?? ""), done: Number(raw.done ?? 0), total: Number(raw.total ?? 0) }
+                return { active: true, state: String(raw.state ?? ""), done: Number(raw.done ?? 0), total: Number(raw.total ?? 0), unit: raw.unit ? String(raw.unit) : undefined }
               }
             } catch {}
             return null

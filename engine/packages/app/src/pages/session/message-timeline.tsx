@@ -44,6 +44,8 @@ type MessageComment = {
 }
 
 const emptyMessages: MessageType[] = []
+import { useBackgroundWork } from "./use-background-work"
+
 const idle = { type: "idle" as const }
 type UserActions = {
   fork?: (input: { sessionID: string; messageID: string }) => Promise<void> | void
@@ -259,7 +261,11 @@ export function MessageTimeline(props: {
     if (!id) return idle
     return sync.data.session_status[id] ?? idle
   })
-  const working = createMemo(() => !!pending() || sessionStatus().type !== "idle")
+  // Out-of-band work counts as work. A background producer cancels the turn and keeps going in its own
+  // process, so the session reads idle while a book is still being analysed — the line would sit still
+  // for minutes and the run would look dead.
+  const background = useBackgroundWork(sessionID)
+  const working = createMemo(() => !!pending() || sessionStatus().type !== "idle" || background().active)
   const tint = createMemo(() => messageAgentColor(sessionMessages(), sync.data.agent))
 
   const [timeoutDone, setTimeoutDone] = createSignal(true)

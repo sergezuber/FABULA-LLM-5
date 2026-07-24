@@ -16,7 +16,8 @@
 //      headless-process exit; the worker discovers the corpus, map-reduces it (each batch an ISOLATED
 //      local-model call — the raw corpus never accumulates in one context, so compaction never triggers),
 //      PERSISTS each per-batch summary to a resume-safe accumulator, synthesizes the full report, and
-//      re-injects it into the chat over HTTP (POST /session/{id}/message on the live server).
+//      and delivers it as an ANSWER over HTTP (POST /session/{id}/assistant-message) — not as a user
+//      turn, which the chat would render as a narrow plain-text bubble with the machinery on show.
 // fabula-attest's text-only path then verifies the report.
 
 import type { Plugin } from "@mimo-ai/plugin"
@@ -24,7 +25,8 @@ import { spawn } from "node:child_process"
 import { fileURLToPath } from "node:url"
 import { dirname, join } from "node:path"
 import { gate } from "./lib/manage"
-import { isCorpusAnalysisTask } from "./lib/corpus"
+import { isCorpusAnalysisTask, accumulatorKey } from "./lib/corpus"
+import { existsSync } from "node:fs"
 
 const REPORT_TAG = "[fabula-corpus-report]"
 const RECURSION_PREFIX = REPORT_TAG // a re-injected report must not re-trigger the intercept
@@ -36,6 +38,17 @@ function bunBin(): string {
   const cands = [process.env.FABULA_BUN_BIN, join(process.env.HOME || "", ".bun", "bin", "bun"), "/opt/homebrew/bin/bun", "/usr/local/bin/bun", "bun"]
   for (const c of cands) if (c) return c
   return "bun"
+}
+
+/** Did a previous attempt hand this session's task back to the model? The worker writes the marker
+ *  beside its accumulator (same key), so the answer survives the process boundary between the two. */
+function handedBack(sessionID: string, dir: string | undefined): boolean {
+  try {
+    const base = process.env.XDG_DATA_HOME
+      ? join(process.env.XDG_DATA_HOME, "fabula", "corpus")
+      : join(process.env.HOME || "/tmp", ".local", "share", "fabula", "corpus")
+    return existsSync(join(base, `${accumulatorKey(sessionID, dir || process.cwd())}.handback.json`))
+  } catch { return false }
 }
 
 /** Spawn the detached worker. Fire-and-forget by design: the engine's hook timeout (5s) makes awaiting
@@ -63,9 +76,15 @@ export const FabulaCorpus: Plugin = async (pluginInput) =>
         const text = typeof input?.query === "string" ? input.query : ""
         if (!isCorpusAnalysisTask(text)) return // narrow trigger — ordinary tasks never intercepted
         if (text.startsWith(RECURSION_PREFIX)) return // never re-intercept our own re-inject
+        // When the pipeline cannot own a task (corpus too small, no model reachable, nothing summarized)
+        // it hands the ORIGINAL text back so the model answers it normally — and that text still matches
+        // this detector. Without a record of the hand-back the next turn intercepts it again, falls back
+        // again, and never terminates. The worker leaves the marker; honouring it ends the cycle after
+        // exactly one attempt, per session and corpus, with nothing shown to the reader.
+        const sid = input?.sessionID
+        if (sid && handedBack(sid, pluginInput?.directory)) return
         output.cancel = true
         output.cancelReason = "corpus map-reduce intercept — processing in the background"
-        const sid = input?.sessionID
         if (sid) spawnWorker(pluginInput, sid, text)
       } catch {}
     },

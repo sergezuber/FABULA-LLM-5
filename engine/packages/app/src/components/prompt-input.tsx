@@ -54,6 +54,7 @@ import { getSpeechRecognitionCtor } from "@/utils/runtime-adapters"
 import { PromptPopover, type AtOption, type AgentOption, type SlashCommand } from "./prompt-input/slash-popover"
 import { PromptContextItems } from "./prompt-input/context-items"
 import { BuddyWidget } from "@/components/buddy-widget"
+import { useBackgroundWork } from "@/pages/session/use-background-work"
 import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
@@ -248,7 +249,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         type: "idle",
       },
   )
-  const working = createMemo(() => status()?.type !== "idle")
+  // The companion must never doze while work is in flight. A background producer cancels the turn and
+  // continues in its own process, so session status alone says "idle" during minutes of real work —
+  // which is exactly when a sleeping pet reads as a hang.
+  const background = useBackgroundWork(() => params.id)
+  const working = createMemo(() => status()?.type !== "idle" || background().active)
   const imageAttachments = createMemo(() =>
     prompt.current().filter((part): part is ImageAttachmentPart => part.type === "image"),
   )

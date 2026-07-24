@@ -10,17 +10,24 @@
 //   5. KILL-SWITCH FABULA_CORPUS=0 → inert ({}), no hooks.
 
 import { test, expect, beforeAll } from "bun:test"
-import { writeFileSync, mkdtempSync, chmodSync, existsSync, readFileSync, rmSync } from "node:fs"
+import { writeFileSync, mkdtempSync, mkdirSync, chmodSync, existsSync, readFileSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 
 beforeAll(() => {
+  // Isolate the corpus data dir. The intercept and its worker both keep state under
+  // <XDG_DATA_HOME>/fabula/corpus — the accumulator, the heartbeat, and the hand-back marker that stops
+  // a fallback re-inject from being intercepted forever. Left unpinned, these tests write those files
+  // into the developer's REAL store and then read them back on the NEXT run: a hand-back marker from an
+  // earlier run made the intercept case fail against a tree that was perfectly correct.
+  process.env.XDG_DATA_HOME = mkdtempSync(join(tmpdir(), `corpus-data-${process.pid}-`))
   const stateFile = join(tmpdir(), `corpus-state-${process.pid}.json`)
   writeFileSync(stateFile, JSON.stringify({ disabled: [], enabled: ["corpus"] }))
   process.env.FABULA_PLUGIN_STATE = stateFile
 })
 
 import { FabulaCorpus } from "../fabula-corpus"
+import { accumulatorKey } from "../lib/corpus"
 
 // Mock SDK client: records every session.prompt call (the pipeline's re-inject / fallback).
 function mockClient() {
@@ -121,6 +128,24 @@ test("RECURSION GUARD: a re-injected report prefix → no cancel", async () => {
     out,
   )
   expect(out.cancel).toBeUndefined() // never re-intercept our own re-inject
+})
+
+// When the pipeline cannot own a task it hands the ORIGINAL text back so the model answers normally —
+// and that text still matches the detector. Without honouring the hand-back marker the next turn
+// intercepts it again, hands it back again, and never terminates: an infinite loop built out of the very
+// mechanism that exists to prevent one.
+test("HAND-BACK GUARD: a task already handed back to the model is not intercepted again", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "corpus-handback-"))
+  const store = join(process.env.XDG_DATA_HOME!, "fabula", "corpus")
+  mkdirSync(store, { recursive: true })
+  writeFileSync(join(store, `${accumulatorKey("s_hb", dir)}.handback.json`), JSON.stringify({ ts: 1 }))
+  const out: any = {}
+  await (await hooks(mockClient(), dir))["session.userQuery.pre"](
+    { sessionID: "s_hb", step: 1, query: "Прочитай все главы книги и сделай глубокий литературный анализ" },
+    out,
+  )
+  expect(out.cancel).toBeUndefined() // the model gets its turn; the cycle ends after one attempt
+  rmSync(dir, { recursive: true, force: true })
 })
 
 test("never throws on malformed input (fail-silent)", async () => {

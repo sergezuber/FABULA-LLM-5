@@ -31,6 +31,9 @@ import { Bus } from "@/bus"
 import { NamedError } from "@mimo-ai/shared/util/error"
 import { jsonRequest, runRequest } from "./trace"
 import { RateLimitMiddleware } from "../../rate-limit"
+import fs from "node:fs/promises"
+import path from "node:path"
+import { Global } from "@/global"
 
 const log = Log.create({ service: "server" })
 
@@ -478,6 +481,122 @@ export const SessionRoutes = lazy(() =>
           const body = c.req.valid("json")
           const svc = yield* Session.Service
           return yield* svc.fork({ ...body, sessionID })
+        }),
+    )
+    // Is out-of-band work running for this session RIGHT NOW? A background producer cancels the turn and
+    // keeps going in its own process, so the session reads as idle while real work is in flight — which is
+    // exactly when the UI must not look asleep. The producer leaves a heartbeat beside its state; freshness
+    // is the signal, so a producer that dies stops counting on its own without anyone cleaning up.
+    .get(
+      "/:sessionID/background-work",
+      describeRoute({
+        summary: "Background work status",
+        description:
+          "Whether an out-of-band producer (a detached pipeline) is currently working for this session, with its last reported progress.",
+        operationId: "session.backgroundWork",
+        responses: {
+          200: {
+            description: "Background work status",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({ active: z.boolean(), state: z.string().optional(), done: z.number().optional(), total: z.number().optional() }),
+                ),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("param", z.object({ sessionID: SessionID.zod })),
+      async (c) =>
+        jsonRequest("SessionRoutes.backgroundWork", c, function* () {
+          const sessionID = c.req.valid("param").sessionID
+          const dir = path.join(Global.Path.data, "corpus")
+          const stale = 90_000 // a heartbeat older than this means the producer is gone, not quiet
+          const found = yield* Effect.promise(async () => {
+            try {
+              const files = await fs.readdir(dir)
+              const key = sessionID.replace(/[^A-Za-z0-9]/g, "")
+              for (const f of files) {
+                if (!f.endsWith(".heartbeat.json") || !f.startsWith(key)) continue
+                const raw = JSON.parse(await fs.readFile(path.join(dir, f), "utf8"))
+                if (typeof raw?.ts !== "number" || Date.now() - raw.ts > stale) continue
+                if (raw?.state === "done") continue // finished; the answer has already been delivered
+                return { active: true, state: String(raw.state ?? ""), done: Number(raw.done ?? 0), total: Number(raw.total ?? 0) }
+              }
+            } catch {}
+            return null
+          })
+          return found ?? { active: false }
+        }),
+    )
+    // Append a finished ANSWER to a session without running the model. Out-of-band work (a background
+    // pipeline that produces a deliverable minutes after the turn that asked for it) previously had only
+    // session.prompt to hand its result back — i.e. it had to speak as the USER. That is wrong in three
+    // visible ways at once: the chat renders it as a narrow user bubble instead of a full-width answer,
+    // it renders as raw characters because a user turn is not a markdown surface, and any marker the
+    // producer needs (a recursion guard) is shown to the reader. This route lets such a producer deliver
+    // an ANSWER, which is what it actually is.
+    .post(
+      "/:sessionID/assistant-message",
+      describeRoute({
+        summary: "Append an assistant message",
+        description:
+          "Append a completed assistant message to a session WITHOUT invoking a model. For out-of-band producers that finish work after the originating turn ended and need to deliver the result as an answer.",
+        operationId: "session.appendAssistantMessage",
+        responses: {
+          200: {
+            description: "Appended message",
+            content: { "application/json": { schema: resolver(z.object({ messageID: z.string() })) } },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator("param", z.object({ sessionID: SessionID.zod })),
+      validator("json", z.object({ text: z.string().min(1), agent: z.string().optional() })),
+      async (c) =>
+        jsonRequest("SessionRoutes.appendAssistantMessage", c, function* () {
+          const sessionID = c.req.valid("param").sessionID
+          const body = c.req.valid("json")
+          const svc = yield* Session.Service
+          const session = yield* svc.get(sessionID)
+          // An answer belongs to the question it answers, and the transcript is the only honest source
+          // for both that parent and the model this session runs on — inventing either would put a
+          // message in the history that no consumer can trace back.
+          const history = yield* svc.messages({ sessionID })
+          const parent = [...history].reverse().find((m) => m.info.role === "user")?.info.id
+          if (!parent)
+            return yield* Effect.fail(new NamedError.Unknown({ message: "session has no user message to answer" }))
+          const lastAssistant = [...history].reverse().find((m) => m.info.role === "assistant")?.info as
+            | MessageV2.Assistant
+            | undefined
+          const now = Date.now()
+          const info: MessageV2.Assistant = {
+            id: MessageID.ascending(),
+            sessionID,
+            role: "assistant",
+            // Completed on arrival: nothing is streaming, so no consumer should wait on it. A message
+            // left open here would read as work still in flight and never settle.
+            time: { created: now, completed: now },
+            parentID: parent,
+            modelID: lastAssistant?.modelID ?? ("" as MessageV2.Assistant["modelID"]),
+            providerID: lastAssistant?.providerID ?? ("" as MessageV2.Assistant["providerID"]),
+            mode: "build",
+            agent: body.agent ?? "main",
+            path: { cwd: session.directory, root: session.directory },
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          }
+          yield* svc.updateMessage(info)
+          yield* svc.updatePart({
+            id: PartID.ascending(),
+            sessionID,
+            messageID: info.id,
+            type: "text",
+            text: body.text,
+          })
+          return { messageID: info.id }
         }),
     )
     .post(

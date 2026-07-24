@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.6.0"
+export const FABULA_VERSION = "0.8.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,30 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.8.0",
+    date: "2026-07-25",
+    items: [
+      {
+        ru: "Питомец больше НИКОГДА не засыпает, пока идёт работа, а полоса вверху движется только тогда, когда что-то действительно происходит. Раньше долгий разбор шёл в отдельном процессе, и приложение считало сессию простаивающей: питомец укладывался спать посреди работы, а индикаторы противоречили друг другу — из-за этого и возникало ощущение, что всё зависло. Теперь оба показателя читают одно и то же: идёт ли работа на самом деле, включая фоновую.",
+        en: "The companion NEVER falls asleep while work is running, and the line at the top moves only when something is actually happening. A long analysis used to run in a separate process while the app considered the session idle: the pet dozed off mid-work and the two indicators contradicted each other — which is what made a live run look like a hang. Both now read the same thing: whether work is really in flight, background work included.",
+      },
+    ],
+  },
+  {
+    version: "0.7.0",
+    date: "2026-07-25",
+    items: [
+      {
+        ru: "Готовый разбор книги теперь приходит как ОТВЕТ, а не как ваша же реплика. Раньше фоновая работа умела вернуть результат только тем же способом, каким пишете вы, — и чат показывал его узким пузырём простым текстом: звёздочки и решётки видны как символы, а сверху висела служебная пометка. Появился способ отдать готовый результат именно как ответ: он занимает всю ширину, размечен как положено, и служебная пометка читателю больше не показывается.",
+        en: "A finished book analysis now arrives as an ANSWER instead of as your own message. Background work could previously hand its result back only the way you write — so the chat showed it as a narrow plain-text bubble with asterisks and hashes as characters, and a service marker on top. There is now a way to deliver a finished result as an answer: it uses the full width, is formatted properly, and the service marker is no longer shown to the reader.",
+      },
+      {
+        ru: "Закрыт скрытый бесконечный цикл. Когда разбор не мог взять задачу на себя (слишком маленький корпус, недоступная модель), он возвращал ваш исходный текст модели — но этот же текст снова попадал под перехват, снова возвращался, и так без конца. Теперь возврат происходит ровно один раз на сессию и корпус.",
+        en: "A hidden infinite loop is closed. When the analysis could not take a task on (too small a corpus, an unreachable model) it handed your original text back to the model — and that same text was intercepted again, handed back again, without end. The hand-back now happens exactly once per session and corpus.",
+      },
+    ],
+  },
   {
     version: "0.6.0",
     date: "2026-07-25",

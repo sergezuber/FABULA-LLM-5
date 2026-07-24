@@ -34,6 +34,7 @@ const MIN_FILES = Math.max(2, parseInt(process.env.FABULA_CORPUS_MIN || "2", 10)
 // ── heartbeat file: the spawner + any watchdog can see the worker is alive + how far it got ───────
 const HB_DIR = process.env.XDG_DATA_HOME ? join(process.env.XDG_DATA_HOME, "fabula", "corpus") : join(process.env.HOME || "/tmp", ".local", "share", "fabula", "corpus")
 const HB = join(HB_DIR, `${accumulatorKey(sessionID, cwd)}.heartbeat.json`)
+const HANDBACK = join(HB_DIR, `${accumulatorKey(sessionID, cwd)}.handback.json`)
 function hb(state: string, extra: Record<string, unknown> = {}): void {
   try { writeFileSync(HB, JSON.stringify({ state, ts: Date.now(), sessionID, cwd, ...extra })) } catch {}
 }
@@ -61,6 +62,27 @@ async function callLocal(model: string, prompt: string, maxTokens: number): Prom
 }
 
 // ── re-inject the finished report into the chat over HTTP ─────────────────────────────────────────
+/** Deliver the finished report as an ANSWER. Handing it back through the prompt route made the producer
+ *  speak as the USER, which the chat then renders as a narrow plain-text bubble — markdown shown as raw
+ *  characters, and any marker the producer needs shown to the reader. An answer is what this actually is. */
+async function deliverAnswer(text: string): Promise<void> {
+  try {
+    const r = await fetch(`${serverUrl}/session/${sessionID}/assistant-message?directory=${encodeURIComponent(cwd)}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text }),
+    })
+    if (!r.ok) console.error(`[corpus-worker] deliver HTTP ${r.status}`)
+  } catch (e: any) { console.error(`[corpus-worker] deliver failed: ${e?.message}`) }
+}
+
+/** Record that this session+corpus was handed back to the model, so the intercept does not fire again
+ *  on the very text it just re-injected. The marker lives beside the accumulator (same key), survives
+ *  the process boundary between worker and hook, and is never shown to anyone. */
+function markHandback(): void {
+  try { writeFileSync(HANDBACK, JSON.stringify({ ts: Date.now(), sessionID, cwd })) } catch {}
+}
+
 async function reInject(text: string, noReply: boolean): Promise<void> {
   // The engine speaks the same wire format the SDK builds. directory header scopes the request to
   // the right project (the spawning session's cwd), matching how the SDK client rewrites requests.
@@ -83,12 +105,12 @@ async function main(): Promise<number> {
   hb("discover", { files: disc.files.length, matched: disc.matched, fallback: disc.fallback })
   if (disc.files.length < MIN_FILES) {
     // Too small to own — hand the task back to the model as a normal user turn.
-    await reInject(taskText, false)
+    markHandback(); await reInject(taskText, false)
     hb("fallback-too-small", { files: disc.files.length })
     return 0
   }
   const model = await localModel()
-  if (!model) { await reInject(taskText, false); hb("fallback-no-model"); return 0 }
+  if (!model) { markHandback(); await reInject(taskText, false); hb("fallback-no-model"); return 0 }
   const batches = planBatches(disc.files, { maxFiles: BATCH_MAX_FILES, maxBatchChars: BATCH_MAX_CHARS })
   const key = accumulatorKey(sessionID, cwd)
   seedAccumulator(key, taskText, batches)
@@ -114,7 +136,7 @@ async function main(): Promise<number> {
   // REDUCE — synthesize the full report from the per-batch summaries.
   hb("reduce", { summaries: doneSummaries(key).length })
   const summaries = doneSummaries(key)
-  if (summaries.length === 0) { await reInject(taskText, false); clearAccumulator(key); hb("fallback-no-summaries"); return 0 }
+  if (summaries.length === 0) { markHandback(); await reInject(taskText, false); clearAccumulator(key); hb("fallback-no-summaries"); return 0 }
   let report: string
   try {
     report = cleanAnswer(await callLocal(model, synthesizeReportPrompt(summaries, taskText), synthTokensFor(summaries.length, process.env)))
@@ -127,9 +149,9 @@ async function main(): Promise<number> {
   const n = disc.files.length
   const b = batches.length
   const header = /[Ѐ-ӿ]/.test(taskText)
-    ? `${reportTag}\n\nАнализ собран map-reduce по ${n} файлам корпуса (${b} батч${b === 1 ? "" : "ей"}) и синтезирован из их резюме.\n\n`
-    : `${reportTag}\n\nBuilt by map-reduce over ${n} corpus file${n === 1 ? "" : "s"} (${b} batch${b === 1 ? "" : "es"}), synthesized from their summaries.\n\n`
-  await reInject(header + report, true) // noReply: the report is final, the model does not "answer" it
+    ? `Анализ собран map-reduce по ${n} файлам корпуса (${b} батч${b === 1 ? "" : "ей"}) и синтезирован из их резюме.\n\n`
+    : `Built by map-reduce over ${n} corpus file${n === 1 ? "" : "s"} (${b} batch${b === 1 ? "" : "es"}), synthesized from their summaries.\n\n`
+  await deliverAnswer(header + report)
   hb("done", { reportChars: report.length })
   return 0
 }

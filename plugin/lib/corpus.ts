@@ -160,12 +160,26 @@ export function synthesizeReportPrompt(summaries: { name: string; text: string }
   ].join("\n")
 }
 
-/** Strip <think>…</think> and prefer <final>…</final> content. Mirrors graph.cleanAnswer. */
+/** Strip <think>…</think> and prefer <final>…</final> content. Mirrors graph.cleanAnswer.
+ *  UNPAIRED tags are handled too, and that is the point: a model opening a tag without closing it is
+ *  ordinary (a generation cut off at the token cap, or one that simply never emits the closer), while a
+ *  marker reaching the reader is a visible defect — observed live, a stray `<final>` shipped at the head
+ *  of a finished report. So: an unclosed <final> means the answer starts right after it; an unclosed
+ *  <think> with no answer after it means everything from that marker on is reasoning. Whatever survives,
+ *  no stray marker is ever returned. */
 export function cleanAnswer(text: string): string {
-  let t = (text || "").replace(/<think>[\s\S]*?<\/think>/gi, "")
-  const m = t.match(/<final>([\s\S]*?)<\/final>/i)
-  if (m) t = m[1]
-  return t.trim()
+  let t = String(text ?? "").replace(/<think>[\s\S]*?<\/think>/gi, "")
+  const paired = t.match(/<final>([\s\S]*?)<\/final>/i)
+  if (paired) t = paired[1]
+  else {
+    const openFinal = /<final>/i.exec(t)
+    if (openFinal) t = t.slice(openFinal.index + openFinal[0].length)
+    else {
+      const openThink = /<think>/i.exec(t)
+      if (openThink) t = t.slice(0, openThink.index)
+    }
+  }
+  return t.replace(/<\/?(?:think|final)>/gi, "").trim()
 }
 
 // ── task detection (the narrow intercept trigger) ──────────────────────────

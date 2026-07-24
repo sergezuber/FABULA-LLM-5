@@ -4,12 +4,13 @@
 // that). Asserts the CENTRAL INVARIANTS:
 //   1. MUTE on a non-corpus task (step 1) → no cancel;
 //   2. MUTE on step > 1 → no cancel (intercept is first-step only);
-//   3. INTERCEPT on a corpus-analysis task → cancel=true + reason, AND the out-of-band pipeline starts;
+//   3. INTERCEPT on a corpus-analysis task → cancel=true + reason, AND the detached worker is really
+//      launched with the right script, corpus directory and session (asserted, not assumed);
 //   4. RECURSION GUARD: a re-injected [fabula-corpus-report] prefix → no cancel (no infinite loop);
 //   5. KILL-SWITCH FABULA_CORPUS=0 → inert ({}), no hooks.
 
 import { test, expect, beforeAll } from "bun:test"
-import { writeFileSync } from "node:fs"
+import { writeFileSync, mkdtempSync, chmodSync, existsSync, readFileSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 
@@ -77,6 +78,39 @@ test("INTERCEPT on a corpus-analysis task (step 1) → cancel=true + reason", as
   expect(out.cancel).toBe(true)
   expect(typeof out.cancelReason).toBe("string")
   expect(out.cancelReason.length).toBeGreaterThan(0)
+})
+
+// The intercept only matters if the WORK actually starts. Cancelling the turn without launching the
+// pipeline is the worst outcome available — the user's task is dropped and nothing replaces it. Every
+// other case here asserts a DECISION; this one asserts the mechanism, by standing a marker script in
+// for `bun` (FABULA_BUN_BIN) so a spawn that happens is observable and one that never happens fails.
+test("INTERCEPT actually LAUNCHES the worker (not just cancels the turn)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "corpus-spawn-"))
+  const marker = join(dir, "argv.txt")
+  const fakeBun = join(dir, "fake-bun.sh")
+  writeFileSync(fakeBun, `#!/bin/sh\nprintf '%s\\n' "$@" > ${JSON.stringify(marker)}\nexit 0\n`)
+  chmodSync(fakeBun, 0o755)
+  const prevBun = process.env.FABULA_BUN_BIN
+  process.env.FABULA_BUN_BIN = fakeBun
+  try {
+    const out: any = {}
+    await (await hooks(mockClient(), dir))["session.userQuery.pre"](
+      { sessionID: "s_spawn", agentID: "build", step: 1, messageID: "m1", query: "Прочитай все главы книги и сделай глубокий литературный анализ" },
+      out,
+    )
+    expect(out.cancel).toBe(true)
+    for (let i = 0; i < 40 && !existsSync(marker); i++) await new Promise((r) => setTimeout(r, 50))
+    expect(existsSync(marker)).toBe(true) // the detached worker really ran
+    const argv = readFileSync(marker, "utf8").trim().split("\n")
+    expect(argv[0].endsWith("lib/corpus-worker.ts")).toBe(true) // the worker script, resolved next to the plugin
+    expect(existsSync(argv[0])).toBe(true) // …and it exists on disk (a wrong path would spawn nothing)
+    expect(argv[1]).toBe(dir) // the corpus directory it must scan
+    expect(argv[2]).toBe("s_spawn") // the session the report has to be delivered to
+  } finally {
+    if (prevBun === undefined) delete process.env.FABULA_BUN_BIN
+    else process.env.FABULA_BUN_BIN = prevBun
+    rmSync(dir, { recursive: true, force: true })
+  }
 })
 
 test("RECURSION GUARD: a re-injected report prefix → no cancel", async () => {

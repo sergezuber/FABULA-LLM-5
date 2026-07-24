@@ -177,6 +177,28 @@ describe("cleanAnswer", () => {
     expect(cleanAnswer("<think>scratch</think>\nvisible answer")).toBe("visible answer")
     expect(cleanAnswer("plain answer no tags")).toBe("plain answer no tags")
   })
+
+  // Observed live: a finished report was delivered to the chat with a literal `<final>` at its head,
+  // because the model opened the tag and never closed it — the paired-only regex left it untouched.
+  test("unclosed <final>: the answer starts after the marker, and the marker never ships", () => {
+    const out = cleanAnswer("thinking out loud\n<final>\n# REPORT\n\nbody of the report")
+    expect(out).toBe("# REPORT\n\nbody of the report")
+    expect(out).not.toContain("<final>")
+  })
+
+  test("unclosed <think> with no answer after it: the reasoning tail is dropped, not shipped", () => {
+    expect(cleanAnswer("<think>rambling on and on and never closing")).toBe("")
+    expect(cleanAnswer("preface\n<think>rambling forever")).toBe("preface")
+  })
+
+  test("unclosed <think> followed by an unclosed <final>: the answer wins", () => {
+    expect(cleanAnswer("<think>weighing it up\n<final>ANSWER")).toBe("ANSWER")
+  })
+
+  test("a stray closing marker is never returned either", () => {
+    expect(cleanAnswer("answer body</final>")).toBe("answer body")
+    expect(cleanAnswer("answer body</think>")).toBe("answer body")
+  })
 })
 
 // ── isCorpusAnalysisTask ───────────────────────────────────────────────────

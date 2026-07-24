@@ -13,6 +13,7 @@ import { Plugin } from "@/plugin"
 import { Config } from "@/config"
 import { NotFoundError } from "@/storage"
 import { ModelID, ProviderID } from "@/provider/schema"
+import { detectRepeatedCharShingle } from "./prompt/text-ngram-detection"
 import { Effect, Layer, Context } from "effect"
 import { InstanceState } from "@/effect"
 import { isOverflow as overflow, usable } from "./overflow"
@@ -23,18 +24,23 @@ import { trace } from "./trace"
 const log = Log.create({ service: "session.compaction" })
 
 /**
- * Did the summarizer CONTINUE THE TASK instead of summarizing? Deterministic markup check, no model.
+ * Did the summarizer CONTINUE THE TASK instead of summarizing? Deterministic check, no model.
  *
- * Measured live twice on the same day: a transcript that ends in chapter reads produced a "summary" of
- * "Продолжаю чтение глав 7-12:" followed by <tool_call> blocks rendered as plain text (the summarizer
- * has no tools), and a transcript saturated with suppressed list_plugins calls produced a bare
- * <tool_call><function=list_plugins> block. Both were then classified as a text loop, compaction
- * returned "stop", and the session ENDED SILENTLY mid-task with the garbage recorded as its summary.
- * A summary containing tool-call markup is a continuation wearing a summary's flag, every time.
+ * Two hijack shapes, both measured live:
+ *  1. Tool-call markup: a transcript ending in chapter reads produced a "summary" of
+ *     "Продолжаю чтение глав 7-12:" + <tool_call> blocks; a list_plugins-saturated transcript produced
+ *     a bare <tool_call><function=list_plugins> block. Both ended the session SILENTLY with the garbage
+ *     recorded as its summary.
+ *  2. Degenerative runaway (2026-07-23): the summarizer emitted hundreds of spaceless "глава_10aглава_10b…"
+ *     lines — no tool markup, so check #1 missed it; the processor did not classify it as text-repeat
+ *     (no inter-word spaces → word-n-gram blind), so it was accepted as a "summary" and the run continued
+ *     with a poisoned context, re-triggering the runaway for hours. The char-shingle detector (the same
+ *     one that guards the engine's stream monitor and the adapter transport) catches this shape: a summary
+ *     that degenerated into a repeating skeleton is a continuation wearing a summary's flag, every time.
  */
 export function summaryLooksHijacked(text: string): boolean {
   if (typeof text !== "string" || !text.trim()) return false
-  return text.includes("<tool_call") || text.includes("<function=")
+  return text.includes("<tool_call") || text.includes("<function=") || detectRepeatedCharShingle(text)
 }
 
 export const Event = {

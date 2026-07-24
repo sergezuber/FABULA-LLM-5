@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.4.1"
+export const FABULA_VERSION = "0.4.2"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.4.2",
+    date: "2026-07-24",
+    items: [
+      {
+        ru: "Потерянный клиент и дегенеративная генерация больше не сжигают видеокарту часами. Три независимых стража на транспортном choke-point (адаптер к модели), каждый ловит свой класс и не зависит от конкретной модели в сокете. (1) Любая генерация ограничена по длине (FABULA_MAX_OUTPUT_TOKENS) — раньше это было выключено, и один ход мог тянуться неограниченно. (2) Если клиент закрыл соединение посреди стрима, адаптер теперь закрывает соединение к модели — а закрытие сокета прерывает инференс; прежде сломанный сокет проглатывался, и модель честно досгенерировала весь многосоттысячный ответ в пустоту. (3) Детектор деградации на самом стриме ловит runaway-класс, который был невидим словесному n-gram: слитый без пробелов список «глава_10aглава_10b…» сворачивался в один токен, и страж между шагами его пропускал — теперь символьный shingle видит повторяющийся скелет и рвёт стрим за доли секунды. Тот же детектор закрыл дыру в компакции: «сводчик» мог уйти в такой runaway вместо резюме, и это не опознавалось как сбой. Всё доказано на реальных прогонах и покрыто тестами с мутационной проверкой.",
+        en: "A lost client and a degenerating generation no longer burn the GPU for hours. Three independent guards sit on the transport choke-point (the model adapter), each catching its own class, none depending on the model in the socket. (1) Every generation is now length-clamped (FABULA_MAX_OUTPUT_TOKENS) — it used to be off, so a single turn could run unbounded. (2) When a client closes mid-stream, the adapter now closes the connection to the model — and closing that socket aborts the inference; before, the broken write was swallowed and the model dutifully finished a multi-hundred-thousand-token answer into a dead socket. (3) A degeneration detector on the stream itself catches the runaway class that was invisible to the word n-gram: a spaceless list \"глава_10aглава_10b…\" collapsed to a single token, so the per-step guard missed it — now a character shingle sees the recurring skeleton and cuts the stream in under a second. The same detector closed a hole in compaction: the summarizer could slip into such a runaway instead of summarizing, and it was not recognized as a failure. Everything is proven on real runs and covered by mutation-verified tests.",
+      },
+    ],
+  },
   {
     version: "0.4.1",
     date: "2026-07-22",

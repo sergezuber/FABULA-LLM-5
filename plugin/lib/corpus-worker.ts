@@ -16,6 +16,7 @@ import { join } from "node:path"
 const [_node, _script, cwdArg, sessionID, taskB64, serverUrlArg, reportTagArg] = process.argv
 const cwd = cwdArg || process.cwd()
 const serverUrl = (serverUrlArg || "http://127.0.0.1:4096").replace(/\/+$/, "")
+let usedModel = ""
 const reportTag = reportTagArg || "[fabula-corpus-report]"
 if (!sessionID) { console.error("[corpus-worker] no sessionID"); process.exit(1) }
 let taskText = ""
@@ -29,6 +30,7 @@ const CHAPTER_CAP = Math.max(1024, parseInt(process.env.FABULA_CORPUS_CHAPTER_CA
 const SUMMARY_TOKENS = Math.max(200, parseInt(process.env.FABULA_CORPUS_SUMMARY_TOKENS || "0", 10) || 900)
 // NB the synthesis budget is NOT a constant — it scales with how many batches the report must cover
 // (synthTokensFor), so a book does not get a three-file-sized report cut off mid-heading.
+const usageTotal = { input: 0, output: 0, reasoning: 0 }
 const SYNTH_HARD_CAP = Math.max(2000, parseInt(process.env.FABULA_CORPUS_SYNTH_HARD_CAP || "0", 10) || 16000)
 const MIN_FILES = Math.max(2, parseInt(process.env.FABULA_CORPUS_MIN || "2", 10) || 2)
 
@@ -63,6 +65,10 @@ async function callLocalFull(model: string, prompt: string, maxTokens: number): 
     })
     if (!r.ok) throw new Error(`local model HTTP ${r.status}`)
     const j: any = await r.json()
+    const u = j.usage || {}
+    usageTotal.input += Number(u.prompt_tokens ?? 0)
+    usageTotal.output += Number(u.completion_tokens ?? 0)
+    usageTotal.reasoning += Number(u.completion_tokens_details?.reasoning_tokens ?? 0)
     const choice = j.choices?.[0]
     return {
       text: choice?.message?.content || choice?.message?.reasoning_content || "",
@@ -83,6 +89,10 @@ async function callLocal(model: string, prompt: string, maxTokens: number): Prom
     })
     if (!r.ok) throw new Error(`local model HTTP ${r.status}`)
     const j: any = await r.json()
+    const u = j.usage || {}
+    usageTotal.input += Number(u.prompt_tokens ?? 0)
+    usageTotal.output += Number(u.completion_tokens ?? 0)
+    usageTotal.reasoning += Number(u.completion_tokens_details?.reasoning_tokens ?? 0)
     return j.choices?.[0]?.message?.content || j.choices?.[0]?.message?.reasoning_content || ""
   } finally { clearTimeout(t) }
 }
@@ -96,7 +106,9 @@ async function deliverAnswer(text: string): Promise<void> {
     const r = await fetch(`${serverUrl}/session/${sessionID}/assistant-message?directory=${encodeURIComponent(cwd)}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text }),
+      // The pass really did spend these; a delivered answer carrying zeros makes the session's own
+      // accounting lie about work that demonstrably happened.
+      body: JSON.stringify({ text, model: usedModel, tokens: usageTotal }),
     })
     if (!r.ok) console.error(`[corpus-worker] deliver HTTP ${r.status}`)
   } catch (e: any) { console.error(`[corpus-worker] deliver failed: ${e?.message}`) }
@@ -136,6 +148,7 @@ async function main(): Promise<number> {
     return 0
   }
   const model = await localModel()
+  usedModel = model
   if (!model) { markHandback(); await reInject(taskText, false); hb("fallback-no-model"); return 0 }
   const batches = planBatches(disc.files, { maxFiles: BATCH_MAX_FILES, maxBatchChars: BATCH_MAX_CHARS })
   const key = accumulatorKey(sessionID, cwd)

@@ -554,7 +554,17 @@ export const SessionRoutes = lazy(() =>
         },
       }),
       validator("param", z.object({ sessionID: SessionID.zod })),
-      validator("json", z.object({ text: z.string().min(1), agent: z.string().optional() })),
+      validator(
+        "json",
+        z.object({
+          text: z.string().min(1),
+          agent: z.string().optional(),
+          // What the out-of-band pass actually spent. It ran real model calls; a delivered answer that
+          // reports nothing makes the session's own accounting understate work that demonstrably happened.
+          model: z.string().optional(),
+          tokens: z.object({ input: z.number(), output: z.number(), reasoning: z.number() }).optional(),
+        }),
+      ),
       async (c) =>
         jsonRequest("SessionRoutes.appendAssistantMessage", c, function* () {
           const sessionID = c.req.valid("param").sessionID
@@ -580,13 +590,18 @@ export const SessionRoutes = lazy(() =>
             // left open here would read as work still in flight and never settle.
             time: { created: now, completed: now },
             parentID: parent,
-            modelID: lastAssistant?.modelID ?? ("" as MessageV2.Assistant["modelID"]),
+            modelID: (body.model || lastAssistant?.modelID || "") as MessageV2.Assistant["modelID"],
             providerID: lastAssistant?.providerID ?? ("" as MessageV2.Assistant["providerID"]),
             mode: "build",
             agent: body.agent ?? "main",
             path: { cwd: session.directory, root: session.directory },
             cost: 0,
-            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            tokens: {
+              input: body.tokens?.input ?? 0,
+              output: body.tokens?.output ?? 0,
+              reasoning: body.tokens?.reasoning ?? 0,
+              cache: { read: 0, write: 0 },
+            },
           }
           yield* svc.updateMessage(info)
           yield* svc.updatePart({

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.10.0"
+export const FABULA_VERSION = "0.11.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.11.0",
+    date: "2026-07-25",
+    items: [
+      {
+        ru: "Статистика по токенам снова показывает правду после фонового разбора. Отчёт приходил с нулями — расход, модель и стоимость выглядели пустыми, хотя разбор реально сделал больше десятка обращений к модели. Теперь фоновый проход считает свой расход и передаёт его вместе с ответом, поэтому вкладка «Контекст» показывает то, что действительно потрачено.",
+        en: "Token statistics tell the truth again after a background analysis. The report used to arrive with zeros — usage, model and cost all looked empty, although the analysis really made more than a dozen model calls. The background pass now counts what it spends and reports it along with the answer, so the Context tab shows what was actually used.",
+      },
+      {
+        ru: "Надпись о ходе работы больше ничего не выдумывает про ваш материал: считаются реальные файлы, а не внутренние группы, и название берётся из того, что действительно найдено — главы это или просто файлы. Если признака нет, счётчик просто считает, не называя.",
+        en: "The progress line no longer invents anything about your material: it counts the real files rather than internal groupings, and the noun comes from what was actually found — chapters or plain files. With no such signal it simply counts without naming the thing.",
+      },
+    ],
+  },
   {
     version: "0.10.0",
     date: "2026-07-25",

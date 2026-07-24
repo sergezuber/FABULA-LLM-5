@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.4.3"
+export const FABULA_VERSION = "0.4.4"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.4.4",
+    date: "2026-07-24",
+    items: [
+      {
+        ru: "Задача «прочитай все главы книги и сделай глубокий анализ» больше не зацикливается. Раньше модель грузила главы по одной в один контекст, пока не срабатывала компакция — а компакция «уезжала» в продолжение анализа вместо резюме (hijack), ретраи падали, движок перестраивал границу, и модель читала главы заново, потому что прогресс чтения нигде не сохранялся. Бесконечный цикл, отчёта не было. Новый плагин перехватывает первый ход такой задачи, отменяет обычный агентский ход и гонит детерминированный map-reduce в фоне: находит корпус (любые .md/.txt, паттерн «глава/часть/chapter» — любой объём, без хардкода), бьёт на батчи, суммаризует каждый батч как ИЗОЛИРОВАННЫЙ вызов локальной модели (роль + стоп + только эти главы — сырой корпус никогда не накапливается в одном контексте, компакция не срабатывает), сохраняет каждое резюме в resume-safe аккумулятор (прерывание посередине — возобновляется, прогресс не теряется), затем синтезирует полный отчёт из резюме и вставляет его в чат. Узкий детектор — обычные задачи не трогает; fail-open на слишком маленьком корпусе. Любая модель в сокете.",
+        en: "A 'read all chapters and write a deep analysis' task no longer loops. The model used to load chapters one by one into one context until compaction tripped — and compaction HIJACKED (continued the analysis instead of summarizing), retries failed, the engine rebuilt the boundary, and the model re-read the chapters because the reading progress was never persisted. Infinite loop, no report. The new plugin intercepts the first turn of such a task, cancels the normal agent turn, and runs a deterministic map-reduce in the background: it discovers the corpus (any .md/.txt, a chapter/часть/chapter pattern — any volume, no hardcode), batches it, summarizes each batch as an ISOLATED local-model call (role + stop + only these chapters — the raw corpus never accumulates in one context, compaction never triggers), PERSISTS each summary to a resume-safe accumulator (an interruption mid-run resumes, progress is never lost), then synthesizes the full report from the summaries and re-injects it into the chat. A narrow detector — ordinary tasks are untouched; fail-open on a too-small corpus. Any model in the socket.",
+      },
+    ],
+  },
   {
     version: "0.4.3",
     date: "2026-07-24",

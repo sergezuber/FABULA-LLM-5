@@ -117,6 +117,11 @@ export const MANIFEST: PluginMeta[] = [
     tools: [], deps: [...NPM_BUNDLED],
   },
   {
+    id: "corpus", file: "fabula-corpus.ts", name: "Corpus map-reduce intercept", core: true, defaultEnabled: true,
+    description: "Resolves the book-analysis compaction loop at its root: on a 'read all chapters / the whole book and write a literary analysis' task the model loads chapters one by one until the prune threshold trips, compaction fires, the summarizer HIJACKS (continues the analysis instead of summarizing), retries, fails, the engine rebuilds deterministically — and the model re-reads from scratch because per-chapter progress was never persisted. Infinite loop, no report ever produced. This plugin INTERCEPTS the first step of such a turn (a narrow EN+RU corpus-analysis detector), cancels the normal agent turn, and runs a deterministic map-reduce in the background: discover the corpus (glob .md/.txt, chapter pattern — any volume, no hardcode), batch it, summarize each batch as an ISOLATED local-model call (role + STOP + that batch only — the raw corpus never accumulates in one context), PERSIST each summary to a resume-safe accumulator (an interruption mid-map resumes, progress is never lost), then synthesize the full report from the summaries and re-inject it into the chat. Compaction never triggers because no single context holds the raw corpus. Fail-open: fewer than 2 files or no model → the task falls back to the normal agent turn. Model-agnostic — any model in the socket. Kill-switch: FABULA_CORPUS=0; knobs FABULA_CORPUS_BATCH_SIZE / _BATCH_CHARS / _CHAPTER_CAP / _SUMMARY_TOKENS / _SYNTH_TOKENS / _MIN.",
+    tools: [], deps: [...NPM_BUNDLED, LOCAL_MODEL],
+  },
+  {
     id: "ops", file: "fabula-ops.ts", name: "Scheduling & ops", defaultEnabled: true,
     description: "Recurring/one-off jobs via launchd, a run-ledger with overdue detection, notifications.",
     tools: ["schedule_task", "list_scheduled", "cancel_scheduled", "send_notification"],

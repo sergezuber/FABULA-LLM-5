@@ -8,7 +8,7 @@
 // All args are strings; taskText is passed base64-encoded by the spawner to survive shell quoting.
 // The worker is fully self-contained: it imports only the pure core (corpus.ts) + node:fetch.
 
-import { discoverCorpus, planBatches, chapterSummaryPrompt, synthesizeReportPrompt, cleanAnswer, accumulatorKey, seedAccumulator, markDone, pendingBatches, doneSummaries, clearAccumulator } from "./corpus"
+import { discoverCorpus, planBatches, chapterSummaryPrompt, synthesizeReportPrompt, cleanAnswer, accumulatorKey, seedAccumulator, markDone, pendingBatches, doneSummaries, clearAccumulator, synthTokensFor } from "./corpus"
 import { writeFileSync, readFileSync, existsSync } from "node:fs"
 import { join } from "node:path"
 
@@ -27,7 +27,8 @@ const BATCH_MAX_FILES = Math.max(1, parseInt(process.env.FABULA_CORPUS_BATCH_SIZ
 const BATCH_MAX_CHARS = Math.max(2048, parseInt(process.env.FABULA_CORPUS_BATCH_CHARS || "60000", 10) || 60000)
 const CHAPTER_CAP = Math.max(1024, parseInt(process.env.FABULA_CORPUS_CHAPTER_CAP || "0", 10) || 8000)
 const SUMMARY_TOKENS = Math.max(200, parseInt(process.env.FABULA_CORPUS_SUMMARY_TOKENS || "0", 10) || 900)
-const SYNTH_TOKENS = Math.max(400, parseInt(process.env.FABULA_CORPUS_SYNTH_TOKENS || "0", 10) || 1400)
+// NB the synthesis budget is NOT a constant — it scales with how many batches the report must cover
+// (synthTokensFor), so a book does not get a three-file-sized report cut off mid-heading.
 const MIN_FILES = Math.max(2, parseInt(process.env.FABULA_CORPUS_MIN || "2", 10) || 2)
 
 // ── heartbeat file: the spawner + any watchdog can see the worker is alive + how far it got ───────
@@ -116,7 +117,7 @@ async function main(): Promise<number> {
   if (summaries.length === 0) { await reInject(taskText, false); clearAccumulator(key); hb("fallback-no-summaries"); return 0 }
   let report: string
   try {
-    report = cleanAnswer(await callLocal(model, synthesizeReportPrompt(summaries, taskText), SYNTH_TOKENS))
+    report = cleanAnswer(await callLocal(model, synthesizeReportPrompt(summaries, taskText), synthTokensFor(summaries.length, process.env)))
     if (!report.trim()) report = summaries.map((s) => s.text).join("\n\n---\n\n")
   } catch { report = summaries.map((s) => s.text).join("\n\n---\n\n") }
   clearAccumulator(key)

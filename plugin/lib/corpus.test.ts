@@ -7,6 +7,7 @@ import {
   discoverCorpus,
   planBatches,
   chapterSummaryPrompt,
+  synthTokensFor,
   synthesizeReportPrompt,
   cleanAnswer,
   isCorpusAnalysisTask,
@@ -154,6 +155,39 @@ describe("chapterSummaryPrompt", () => {
     expect(p).toContain("[обрезано")
     expect(p).toContain("ОСТАНОВИСЬ")
     expect(p.length).toBeLessThan(20000) // cap held
+  })
+
+  // The map step needs the SAME delimiter contract as the reduce step. Without it there is no boundary
+  // between a model's visible reasoning and its answer, and a model that narrates its thinking as plain
+  // text (no tags at all — observed live on a real book run: summaries beginning "Thinking Process: 1.
+  // Analyze the Request…") stores that preamble in the accumulator, which is then quoted verbatim into
+  // the synthesize prompt and into the fallback report. Asking for the delimiter works for any model;
+  // matching a particular phrasing would not.
+  test("asks for the same <final> delimiter the reduce step uses, so reasoning cannot leak into a summary", () => {
+    makeFile(CWD, "глава_02.md", "# Глава 2\ntext")
+    const p = chapterSummaryPrompt(discoverCorpus(CWD).files, "глубокий анализ книги", 1000)
+    expect(p).toContain("<final>")
+    expect(p).toContain("</final>")
+  })
+})
+
+// A fixed synthesis budget is a hardcoded volume. Observed live: a 28-chapter book produced a report
+// chopped mid-heading at the old 1400-token constant, while the same constant is generous for 3 files.
+describe("synthTokensFor", () => {
+  test("scales with the amount of source the report has to cover", () => {
+    expect(synthTokensFor(11, {})).toBeGreaterThan(synthTokensFor(3, {}))
+    expect(synthTokensFor(3, {})).toBeGreaterThan(synthTokensFor(1, {}))
+    expect(synthTokensFor(11, {})).toBeGreaterThan(1400) // the budget that truncated the real book
+  })
+  test("floor keeps a tiny corpus whole; ceiling keeps a huge one askable", () => {
+    expect(synthTokensFor(1, {})).toBeGreaterThanOrEqual(1400)
+    expect(synthTokensFor(10_000, {})).toBeLessThanOrEqual(6000)
+    expect(synthTokensFor(28, {})).toBe(synthTokensFor(500, {})) // both clamped at the ceiling
+  })
+  test("both ends are env-overridable, and degenerate counts never produce nonsense", () => {
+    expect(synthTokensFor(5, { FABULA_CORPUS_SYNTH_MAX: "2000" })).toBe(2000)
+    expect(synthTokensFor(1, { FABULA_CORPUS_SYNTH_TOKENS: "500", FABULA_CORPUS_SYNTH_PER_BATCH: "100" })).toBe(600)
+    for (const bad of [0, -5, NaN, Infinity]) expect(synthTokensFor(bad as number, {})).toBeGreaterThanOrEqual(1400)
   })
 })
 

@@ -92,7 +92,23 @@ export function planBatches(files: CorpusFile[], opts: { maxFiles?: number; maxB
 
 export const DEFAULT_CHAPTER_CAP = 8000 // chars per chapter inside an isolated call
 export const DEFAULT_SUMMARY_TOKENS = 900
-export const DEFAULT_SYNTH_TOKENS = 1400
+export const DEFAULT_SYNTH_TOKENS = 1400 // FLOOR for the synthesis, not the budget — see synthTokensFor
+export const SYNTH_TOKENS_PER_BATCH = 260 // room the report earns for each batch of source it covers
+export const DEFAULT_SYNTH_TOKENS_MAX = 6000 // ceiling; stays clear of the adapter's output clamp
+
+/** How much room the final report gets. A FIXED budget is a hardcoded volume: it is generous for three
+ *  files and truncates a real book — observed live, a 28-chapter corpus produced a report chopped
+ *  mid-heading at the 1400-token cap. The budget therefore SCALES with how much source the report has to
+ *  cover (one entry per batch that was actually summarized), with a floor so a tiny corpus still gets a
+ *  whole report, and a ceiling so a huge one cannot ask for more than the socket will return. Both ends
+ *  are env-overridable; nothing here knows how big "a book" is. Pure. */
+export function synthTokensFor(batchCount: number, env: Record<string, string | undefined> = {}): number {
+  const floor = Math.max(1, parseInt(env.FABULA_CORPUS_SYNTH_TOKENS || "", 10) || DEFAULT_SYNTH_TOKENS)
+  const ceiling = Math.max(floor, parseInt(env.FABULA_CORPUS_SYNTH_MAX || "", 10) || DEFAULT_SYNTH_TOKENS_MAX)
+  const perBatch = Math.max(0, parseInt(env.FABULA_CORPUS_SYNTH_PER_BATCH || "", 10) || SYNTH_TOKENS_PER_BATCH)
+  const n = Number.isFinite(batchCount) && batchCount > 0 ? Math.floor(batchCount) : 1
+  return Math.min(ceiling, floor + perBatch * n)
+}
 
 /** A role preamble derived deterministically from the task text. A "literary analysis / critique /
  *  разбор / рецензия" ask yields a literary-critic role; otherwise a generic analyst. Never blocks. */
@@ -130,6 +146,13 @@ export function chapterSummaryPrompt(batchFiles: CorpusFile[], taskText: string,
     "",
     "ЗАДАЧА: проанализируй главы ниже и дай КОМПАКТНОЕ аналитическое резюме (выводы, а не пересказ).",
     "Это один шаг map-reduce: ты видишь ТОЛЬКО эти главы — синтез финального отчёта сделает отдельный шаг.",
+    // Same delimiter contract as the reduce step. Without it the map step has no boundary between the
+    // model's visible reasoning and its answer, and models that narrate their thinking as PLAIN TEXT
+    // (no <think> tags — observed live: a summary beginning "Thinking Process: 1. Analyze the Request…")
+    // store that preamble in the accumulator, from where it is quoted verbatim into the synthesize
+    // prompt and into the fallback report. Asking for the delimiter generalizes across models; keying
+    // on any particular wording would not.
+    'Оберни ТОЛЬКО само резюме в теги <final></final> (любые рассуждения — вне тегов).',
     "",
     body,
     "",

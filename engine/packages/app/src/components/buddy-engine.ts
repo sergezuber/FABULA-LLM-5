@@ -368,7 +368,11 @@ export class BuddyEngine {
     if (st === "×") { this.ps(px, x, y, E); this.ps(px, x + 1, y + 1, E); this.ps(px, x + 1, y, E, 0.6); this.ps(px, x, y + 1, E, 0.6); return }
     if (st === "✦") { this.ps(px, x, y + 1, "#fff5c8"); this.ps(px, x + 2, y + 1, "#fff5c8"); this.ps(px, x + 1, y, "#fff5c8"); this.ps(px, x + 1, y + 2, "#fff5c8"); this.pr(px, x, y, 3, 3, "#ffcf5a", 0.55); this.ps(px, x + 1, y + 1, E); return }
     if (st === "◉") { this.pr(px, x, y, 2, 2, E); this.ps(px, x, y, "#fff", 0.9); return }
-    if (st === "@") { const f = Math.floor(this.time * 8) % 4; this.pr(px, x, y, 2, 2, E); this.ps(px, x + (f % 2), y + (f > 1 ? 1 : 0), "#fff", 0.85); return }
+    // The busy eye is a calm left↔right glance. The highlight used to travel all four corners of the
+    // socket eight times a second, which reads as a pupil spinning like a ball and pulls attention off
+    // the text the reader is there for. Horizontal only, ~1.4s a side: enough to say "awake", quiet
+    // enough to ignore while reading.
+    if (st === "@") { const look = Math.floor(this.time * 0.7) % 2; this.pr(px, x, y, 2, 2, E); this.ps(px, x + look, y, "#fff", 0.85); return }
     this.pr(px, x, y, 2, 2, E); this.ps(px, x, y, W)
   }
 
@@ -429,7 +433,10 @@ export class BuddyEngine {
       case "walk": { pose.legStep = Math.floor(this.stridePhase) % 4; pose.bob = (pose.legStep === 1 || pose.legStep === 3) ? -1 : 0; const g = this.SP[st.species].gait; if (g === "hop") { pose.bob = -Math.round(Math.abs(Math.sin(this.stridePhase * 1.5)) * 3); pose.legStep = -1; pose.tuck = pose.bob < -1 } if (g === "float") { pose.bob = Math.round(Math.sin(this.time * 3) * 1.5); pose.legStep = -1 } if (g === "slide") { pose.legStep = -1; pose.bob = 0 } break }
       case "sit": { pose.sit = true; pose.bob = 1; break }
       case "sleep": { pose.sit = true; pose.bob = 1; pose.eye = "closed"; pose.mouth = "none"; pose.fx = "zzz"; break }
-      case "think": { pose.eye = "@"; pose.mouth = "line"; pose.fx = "dots"; const b = Math.floor(ph * 2.5) % 2; pose.bob = b ? -1 : 0; break }
+      // Busy, not frantic: the body used to bob 2.5 times a second while thinking, which combined with
+      // the old spinning eye read as agitation rather than work. Slower than the idle bob, so "busy"
+      // still differs from "idle" without becoming the loudest thing on screen.
+      case "think": { pose.eye = "@"; pose.mouth = "line"; pose.fx = "dots"; const b = Math.floor(ph * 0.9) % 2; pose.bob = b ? -1 : 0; break }
       case "awaiting": { pose.eye = "◉"; pose.fx = "q"; const b = Math.floor(ph * 1.8) % 2; pose.bob = b ? -1 : 0; break }
       case "sad": { pose.eye = "°"; pose.mouth = "sad"; pose.bob = 1; break }
       case "wave": { pose.eye = "happy"; pose.mouth = "smile"; pose.arm = 1; break }

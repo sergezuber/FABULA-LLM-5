@@ -1,4 +1,5 @@
 import path from "path"
+import { plainTitle } from "./title"
 import os from "os"
 import z from "zod"
 import { SessionID, MessageID, PartID } from "./schema"
@@ -429,11 +430,13 @@ export const layer = Layer.effect(
           Stream.mkString,
           Effect.orDie,
         )
-      const cleaned = text
-        .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
-        .split("\n")
-        .map((line) => line.trim())
-        .find((line) => line.length > 0)
+      const cleaned = plainTitle(
+        text
+          .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+          .split("\n")
+          .map((line) => line.trim())
+          .find((line) => line.length > 0) ?? "",
+      )
       if (!cleaned) return
       const t = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
       yield* sessions

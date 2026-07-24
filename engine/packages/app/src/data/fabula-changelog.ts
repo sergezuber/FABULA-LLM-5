@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.4.4"
+export const FABULA_VERSION = "0.6.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,42 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.6.0",
+    date: "2026-07-25",
+    items: [
+      {
+        ru: "Питомец больше не таращится. Пока шла работа, блик в его глазах пробегал по всем четырём углам восемь раз в секунду — зрачок буквально крутился, и тело подрагивало два с половиной раза в секунду. Теперь это спокойный взгляд влево-вправо и неспешное покачивание: видно, что он бодр, но он больше не перетягивает внимание с текста, который вы читаете.",
+        en: "The pet no longer stares wildly. While work was running, the highlight in its eyes travelled all four corners of the socket eight times a second — the pupil literally spun — and the body bobbed two and a half times a second. It is now a calm left-right glance and an unhurried bob: still clearly awake, but no longer pulling your attention off the text you are reading.",
+      },
+      {
+        ru: "Названия чатов больше не показывают разметку. Сессия могла появиться в списке буквально как «**Status**: success | partial | failed | blocked» — со звёздочками, потому что название подставлялось как есть. Теперь заголовок приводится к чистому тексту: убираются звёздочки, решётки, обратные кавычки, ссылки и маркеры списка. Уже созданные названия останутся прежними — правило работает для новых.",
+        en: "Chat names no longer show raw markup. A session could appear in the list literally as '**Status**: success | partial | failed | blocked' — asterisks and all, because the generated name was used as-is. Titles are now reduced to plain text: emphasis, heading marks, backticks, links and list markers are removed. Names created earlier stay as they are; the rule applies to new ones.",
+      },
+    ],
+  },
+  {
+    version: "0.5.0",
+    date: "2026-07-24",
+    items: [
+      {
+        ru: "Анализ большой книги теперь действительно доводится до отчёта. Разбор корпуса вынесен в отдельный фоновый процесс: раньше он запускался внутри хука, а хук движок обрывает через 5 секунд — и в headless-режиме процесс завершался сразу после отмены хода, унося работу с собой. Ход отменялся, а разбор молча не начинался. Теперь хук только принимает решение и запускает работника, который живёт независимо и доставляет готовый отчёт в чат сам.",
+        en: "A large-book analysis now actually reaches a report. The corpus pass moved into its own background process: it used to run inside the hook, and the engine kills a hook after 5 seconds — while in headless mode the process exited the moment the turn was cancelled, taking the work with it. The turn was cancelled and the analysis silently never started. The hook now only makes the decision and launches a worker that lives independently and delivers the finished report to the chat itself.",
+      },
+      {
+        ru: "Из готового отчёта больше не торчат служебные пометки модели. Отчёт доходил до читателя с меткой вида «<final>» в начале — модель открывала тег и не закрывала, а очистка срабатывала только на парных. Теперь непарные пометки убираются в любом случае, а резюме каждой части чистится сразу, а не только итог: неочищенное резюме дословно попадало и в запрос на синтез, и в запасной вариант отчёта.",
+        en: "Service markers no longer show up in a finished report. A report reached the reader with a stray '<final>' at its head — the model opened the tag and never closed it, and the cleanup only handled matched pairs. Unpaired markers are now stripped either way, and each part's summary is cleaned as it is produced rather than only at the end: an uncleaned summary was quoted verbatim both into the synthesis request and into the fallback report.",
+      },
+      {
+        ru: "Строка о том, как собран отчёт, теперь пишется на языке запроса, а не всегда на одном.",
+        en: "The line describing how the report was assembled now follows the language of the request instead of always being written in one language.",
+      },
+      {
+        ru: "Ускорен каждый ход: постоянно загружаемые инструкции похудели примерно на 68 000 токенов. В них по недосмотру попал большой внутренний документ, который уходил в модель при каждом запросе в каждом проекте и отнимал внимание у самой задачи.",
+        en: "Every turn got cheaper: the always-loaded instructions lost roughly 68,000 tokens. A large internal document had been listed among them, so it was sent to the model on every request in every project and competed with the task itself for attention.",
+      },
+    ],
+  },
   {
     version: "0.4.4",
     date: "2026-07-24",

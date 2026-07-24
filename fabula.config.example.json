@@ -15,10 +15,11 @@
   "checkpoint": {
     "fork": true
   },
+  "_comment_instructions": "Loaded into EVERY request of EVERY project, so every byte here is a per-turn cost that competes with the task for the model's attention — keep this list small and general. Project-specific rules do NOT belong here: the engine already auto-discovers the nearest project-level agent instructions file for the repository being worked on. Situational, deep material belongs in skills, loaded on demand.",
   "instructions": [
     "system-prompt.example.md",
     "prompts/runtime-tools-addendum.md",
-    "AGENTS.md"
+    "prompts/agent-rules.md"
   ],
   "provider": {
     "lmstudio": {

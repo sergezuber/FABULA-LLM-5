@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.4.2"
+export const FABULA_VERSION = "0.4.3"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.4.3",
+    date: "2026-07-24",
+    items: [
+      {
+        ru: "Универсальный гейт проверки теперь ловит и результат, отданный текстом в чат, а не только файлом. Главный мотивирующий кейс — литературный анализ книги по главам — как раз выдавался развёрнутым текстом в окно чата, и на него гейт молчал: старый путь срабатывал только когда модель писала/редактировала файл. Новый путь срабатывает в конце хода (session.post), и только если задача была вооружена как проверяемый деливерабл, ход завершился нормально, ни одного файла не писалось (значит результат — текст), финальный ответ длинный и структурированный (разбор по главам/разделам, а не просто длинная простыня текста), и slice принадлежит главному агенту, а не фоновому субагенту вроде компакции. Если ключевое утверждение не подтверждается источниками — гейт возвращает замечание прямо в чат, и в следующем ходе модель может его обосновать. Ограниченное число повторных замечаний на задачу, защита от рекурсии, молчит на разговорных и коротких ответах. Чистое ядро покрыто тестами; wiring-тест проверяет все инварианты против реальных хуков.",
+        en: "The universal verification gate now also catches a deliverable handed over AS CHAT TEXT, not just as a file. The headline motivating case — a chapter-by-chapter literary analysis of a book — was exactly delivered as long-form text in the chat window, and the gate stayed silent on it: the old path fired only when the model wrote or edited a file. The new path fires at turn end (session.post), and only when the task armed as a verifiable deliverable, the turn completed normally, no file was written (so the result is the text), the final answer is long and structured (a chapter/section breakdown, not just a long wall of prose), and the slice belongs to the main agent rather than a background subagent like compaction. When a load-bearing claim is not supported by the sources, the gate nudges a remark back into the chat so the model can ground it next turn. Bounded re-engagement, a recursion guard, and it stays silent on conversational and short answers. The pure core is unit-tested; a wiring test exercises every invariant against the real hooks.",
+      },
+    ],
+  },
   {
     version: "0.4.2",
     date: "2026-07-24",

@@ -19,10 +19,14 @@ import { taskIsVerifiable } from "./lib/attest/arming"
 import { shouldArm, buildContract } from "./lib/attest/contract"
 import { runAttestGate } from "./lib/attest/gate"
 import { detectStripped } from "./lib/attest/remediation"
+import { isTextDeliverable, shouldRemark, SUBAGENT_ROLES } from "./lib/attest/textdeliverable"
 import type { Claim, Contract, SourceDoc, LedgerView } from "./lib/attest/types"
 
 const READ_TOOLS = new Set(["read", "view"])
 const WRITE_TOOLS = new Set(["create_file", "str_replace"]) // the deliverable is a file the model wrote/edited
+// Remark (nudge back into the chat when a text-only deliverable fails) caps how many times the gate
+// will re-engage on the same task — a bounded loop, never unbounded re-entry.
+const REMARK_MAX = Math.max(0, parseInt(process.env.FABULA_ATTEST_REMARK_MAX || "1", 10) || 1)
 
 const CALL_BUDGET = Math.max(0, parseInt(process.env.FABULA_ATTEST_CALL_BUDGET || "6", 10) || 6)
 const MAX_ROUNDS = Math.max(1, parseInt(process.env.FABULA_ATTEST_MAX || "2", 10) || 2)
@@ -37,12 +41,15 @@ interface SessState {
   reads: string[] // ledger view (partial)
   rounds: number // gate fires this many times, capped at MAX_ROUNDS (bounded re-entry)
   lastClaims: Claim[] // previous round's claims — for the Goodhart-by-deletion guard between rounds
+  hadWriteTool: boolean // a write/edit tool ran this turn → the deliverable is a FILE, not the chat text
+  textChecked: boolean // recursion guard: the text deliverable path already ran for this turn
+  remarks: number // how many text-deliverable remarks already sent this task (bounded by REMARK_MAX)
 }
 const states = new Map<string, SessState>()
 function stateFor(sid: string): SessState {
   let s = states.get(sid)
   if (!s) {
-    s = { armed: false, contract: buildContract(false), taskText: "", sources: new Map(), reads: [], rounds: 0, lastClaims: [] }
+    s = { armed: false, contract: buildContract(false), taskText: "", sources: new Map(), reads: [], rounds: 0, lastClaims: [], hadWriteTool: false, textChecked: false, remarks: 0 }
     states.set(sid, s)
   }
   return s
@@ -66,7 +73,7 @@ function readDeliverable(dir: string, path: string): string {
   }
 }
 
-export const FabulaAttest: Plugin = async () =>
+export const FabulaAttest: Plugin = async (pluginInput) =>
   process.env.FABULA_ATTEST === "0" ? {} : gate("attest", {
     // Ход 1 — arm ONLY when the task requests a checkable deliverable (model-free pre-screen → Contract →
     // shouldArm). This is the invariant that keeps the gate silent on chat / opinion turns.
@@ -86,6 +93,9 @@ export const FabulaAttest: Plugin = async () =>
         s.reads = []
         s.rounds = 0
         s.lastClaims = []
+        s.hadWriteTool = false
+        s.textChecked = false
+        s.remarks = 0
       } catch {}
     },
 
@@ -104,6 +114,7 @@ export const FabulaAttest: Plugin = async () =>
         }
         // a written/edited deliverable → run the gate (armed only), BOUNDED to MAX_ROUNDS re-checks.
         if (WRITE_TOOLS.has(t) && s.armed && s.rounds < MAX_ROUNDS) {
+          s.hadWriteTool = true // a file was the deliverable → the text path must NOT also fire
           const path = argStr(input?.args, ["path", "file_path", "filename"])
           const deliverable = t === "create_file"
             ? argStr(input?.args, ["content", "file_text", "text"])
@@ -128,6 +139,59 @@ export const FabulaAttest: Plugin = async () =>
             if (output.metadata && typeof output.metadata === "object") output.metadata.attest = "not-done"
           }
         }
+      } catch {}
+    },
+
+    // Text-only deliverable (design §4, §17.I) — the motivating case: a literary analysis delivered AS
+    // TEXT IN THE CHAT, not a file. Fires once at turn end (session.post), ONLY when the task armed as a
+    // deliverable, completed normally, did NOT write a file (the file path covers that), and the final text
+    // is a structured analytical answer (not a long chat reply). BOUNDED to REMARK_MAX re-engagements per
+    // task. When a load-bearing claim is refuted, a remark is nudged back into the chat so the model can
+    // ground it in the next turn. Fail-silent throughout: any doubt → no remark.
+    "session.post": async (input: any) => {
+      try {
+        const sid = input?.sessionID
+        if (!sid) return
+        const s = stateFor(sid)
+        // recursion guard for THIS turn; plus the bounded re-engagement across the whole task
+        if (s.textChecked || s.remarks >= REMARK_MAX) return
+        const deliverable = isTextDeliverable({
+          armed: s.armed,
+          outcome: input?.outcome,
+          agentID: input?.agentID,
+          finalText: input?.finalText,
+          hadWriteTool: s.hadWriteTool,
+          subagents: SUBAGENT_ROLES,
+          alreadyChecked: s.textChecked,
+        })
+        if (!deliverable) return
+        s.textChecked = true // mark immediately — even if the gate errors, never re-fire this turn
+        const out = await runAttestGate({
+          deliverable: input?.finalText || "",
+          sources: [...s.sources.entries()].map(([label, text]) => ({ label, text })) as SourceDoc[],
+          ledger: { readLabels: s.reads.slice(), partial: true } as LedgerView,
+          contract: s.contract, callAux, budget: CALL_BUDGET, taskText: s.taskText,
+          selfConsistency: SELF_CONSISTENCY, wallclockMs: WALLCLOCK_MS,
+        })
+        s.lastClaims = out.claims
+        const refuted = out.results.filter((r) => r.failure === "refuted").length
+        if (!shouldRemark(out.verdict.done, refuted)) return
+        // Send the remark back into the chat: the main agent reads it on its NEXT turn and can ground the
+        // refuted claim. noReply=false so the agent engages; bounded by REMARK_MAX so it can't loop.
+        const client = (pluginInput as any)?.client
+        if (!client?.session?.prompt) return // no SDK client available → degrade to silent (never throw)
+        const remark =
+          `🔎 ВЕРИФИКАЦИЯ ДЕЛИВЕРАБЛА: ${refuted} ключевое утверждение не подтверждается источниками.\n` +
+          `${out.steer || ""}\n\n` +
+          `ОБЯЗАНО: либо подкрепить утверждение ссылкой на источник (цитата/число должны буквально встречаться в материале), либо явно пометить как непроверяемое суждение. Не удаляй утверждение, чтобы пройти проверку.`
+        s.remarks++
+        await client.session.prompt({
+          path: { id: sid },
+          body: {
+            parts: [{ type: "text", text: remark }],
+            // keep the main agent in the loop, not a subagent
+          },
+        })
       } catch {}
     },
   })

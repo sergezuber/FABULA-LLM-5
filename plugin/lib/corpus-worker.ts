@@ -98,6 +98,78 @@ async function callLocal(model: string, prompt: string, maxTokens: number): Prom
 }
 
 // ── re-inject the finished report into the chat over HTTP ─────────────────────────────────────────
+/** Write the report into the chat AS IT IS PRODUCED. A synthesis that buffers on the model side and
+ *  lands in one lump after minutes of silence reads as a freeze; streamed, the reader can start reading
+ *  immediately and can see the thing is alive without watching a counter. Falls back to the one-shot
+ *  delivery on any streaming failure, and always closes the message — a half-written one left open is
+ *  the same defect that once kept the progress line running forever.
+ *  NB the map phase stays non-streaming on purpose: those summaries are internal and never shown. */
+async function streamAnswer(model: string, prompt: string, maxTokens: number): Promise<{ text: string; truncated: boolean } | null> {
+  let messageID = ""
+  let partID = ""
+  let text = ""
+  let truncated = false
+  const post = async (body: any) => {
+    const r = await fetch(`${serverUrl}/session/${sessionID}/assistant-message?directory=${encodeURIComponent(cwd)}`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+    })
+    if (!r.ok) throw new Error(`assistant-message HTTP ${r.status}`)
+    return await r.json()
+  }
+  try {
+    const opened = await post({ text: "", model, final: false })
+    messageID = opened.messageID; partID = opened.partID
+    const ctrl = new AbortController()
+    const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS)
+    try {
+      const r = await fetch(`${BASE}/chat/completions`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model, messages: [{ role: "user", content: prompt + "\n\n/no_think" }], max_tokens: maxTokens, temperature: 0.4, stream: true }),
+        signal: ctrl.signal,
+      })
+      if (!r.ok || !r.body) throw new Error(`local model HTTP ${r.status}`)
+      const reader = r.body.getReader(); const dec = new TextDecoder()
+      let buf = ""; let lastPush = 0
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += dec.decode(value, { stream: true })
+        const lines = buf.split("\n"); buf = lines.pop() || ""
+        for (const line of lines) {
+          if (!line.startsWith("data:")) continue
+          const payload = line.slice(5).trim()
+          if (payload === "[DONE]") continue
+          try {
+            const j = JSON.parse(payload)
+            const ch = j.choices?.[0]
+            if (ch?.finish_reason === "length") truncated = true
+            const piece = ch?.delta?.content || ""
+            if (piece) text += piece
+            const u = j.usage
+            if (u) {
+              usageTotal.input += Number(u.prompt_tokens ?? 0)
+              usageTotal.output += Number(u.completion_tokens ?? 0)
+              usageTotal.reasoning += Number(u.completion_tokens_details?.reasoning_tokens ?? 0)
+            }
+          } catch {}
+        }
+        // Rewrite at a human cadence, not per token: the reader gains nothing from 60 updates a second
+        // and the engine would carry the write traffic for all of them.
+        if (text && Date.now() - lastPush > 400) { lastPush = Date.now(); await post({ text: cleanAnswer(text), messageID, partID, final: false }).catch(() => {}) }
+      }
+    } finally { clearTimeout(t) }
+    const finalText = cleanAnswer(text)
+    if (!finalText.trim()) throw new Error("empty stream")
+    await post({ text: finalText, messageID, partID, final: true, model, tokens: usageTotal })
+    return { text: finalText, truncated }
+  } catch (e: any) {
+    // Never leave a half-written message open — an unfinished one reads as work still in flight.
+    if (messageID && partID) await post({ text: cleanAnswer(text) || "(the report could not be completed)", messageID, partID, final: true, model, tokens: usageTotal }).catch(() => {})
+    console.error(`[corpus-worker] stream failed: ${e?.message}`)
+    return null
+  }
+}
+
 /** Deliver the finished report as an ANSWER. Handing it back through the prompt route made the producer
  *  speak as the USER, which the chat then renders as a narrow plain-text bubble — markdown shown as raw
  *  characters, and any marker the producer needs shown to the reader. An answer is what this actually is. */
@@ -188,7 +260,11 @@ async function main(): Promise<number> {
   let report: string
   try {
     let budget = synthTokensFor(summaries.length, process.env)
-    let out = await callLocalFull(model, synthesizeReportPrompt(summaries, taskText), budget)
+    // Try to write it into the chat as it is produced; fall back to producing it whole if streaming
+    // fails, so a transport problem costs formatting-in-flight, never the report itself.
+    const streamed = await streamAnswer(model, synthesizeReportPrompt(summaries, taskText), budget)
+    if (streamed && !streamed.truncated) { hb("done", { reportChars: streamed.text.length, streamed: true }); return 0 }
+    let out = streamed ?? (await callLocalFull(model, synthesizeReportPrompt(summaries, taskText), budget))
     // A report cut mid-sentence is worse than a shorter one written to fit, so grow the room and ask
     // again rather than shipping the stump. Bounded: two attempts, each doubling, never past the cap the
     // socket will actually return.

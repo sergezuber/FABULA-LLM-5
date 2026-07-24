@@ -563,6 +563,12 @@ export const SessionRoutes = lazy(() =>
           // reports nothing makes the session's own accounting understate work that demonstrably happened.
           model: z.string().optional(),
           tokens: z.object({ input: z.number(), output: z.number(), reasoning: z.number() }).optional(),
+          // Streaming: omit both to OPEN a message, pass them back to keep writing into it. `final`
+          // stamps it complete. A report that lands in one lump after minutes of silence reads as a
+          // freeze; written as it is produced, the reader can start reading and can see it is alive.
+          messageID: z.string().optional(),
+          partID: z.string().optional(),
+          final: z.boolean().optional(),
         }),
       ),
       async (c) =>
@@ -582,13 +588,41 @@ export const SessionRoutes = lazy(() =>
             | MessageV2.Assistant
             | undefined
           const now = Date.now()
+          // Continuing an open message: rewrite its text and, when told, close it.
+          if (body.messageID && body.partID) {
+            yield* svc.updatePart({
+              id: body.partID as PartID,
+              sessionID,
+              messageID: body.messageID as MessageID,
+              type: "text",
+              text: body.text,
+            })
+            if (body.final) {
+              const open = (yield* svc.messages({ sessionID })).find((m) => m.info.id === body.messageID)
+              if (open && open.info.role === "assistant") {
+                const a = open.info as MessageV2.Assistant
+                yield* svc.updateMessage({
+                  ...a,
+                  time: { ...a.time, completed: now },
+                  modelID: (body.model || a.modelID) as MessageV2.Assistant["modelID"],
+                  tokens: {
+                    input: body.tokens?.input ?? a.tokens.input,
+                    output: body.tokens?.output ?? a.tokens.output,
+                    reasoning: body.tokens?.reasoning ?? a.tokens.reasoning,
+                    cache: a.tokens.cache,
+                  },
+                })
+              }
+            }
+            return { messageID: body.messageID, partID: body.partID }
+          }
           const info: MessageV2.Assistant = {
             id: MessageID.ascending(),
             sessionID,
             role: "assistant",
             // Completed on arrival: nothing is streaming, so no consumer should wait on it. A message
             // left open here would read as work still in flight and never settle.
-            time: { created: now, completed: now },
+            time: { created: now, completed: body.final === false ? undefined : now },
             parentID: parent,
             modelID: (body.model || lastAssistant?.modelID || "") as MessageV2.Assistant["modelID"],
             providerID: lastAssistant?.providerID ?? ("" as MessageV2.Assistant["providerID"]),
@@ -604,14 +638,9 @@ export const SessionRoutes = lazy(() =>
             },
           }
           yield* svc.updateMessage(info)
-          yield* svc.updatePart({
-            id: PartID.ascending(),
-            sessionID,
-            messageID: info.id,
-            type: "text",
-            text: body.text,
-          })
-          return { messageID: info.id }
+          const partID = PartID.ascending()
+          yield* svc.updatePart({ id: partID, sessionID, messageID: info.id, type: "text", text: body.text })
+          return { messageID: info.id, partID }
         }),
     )
     .post(

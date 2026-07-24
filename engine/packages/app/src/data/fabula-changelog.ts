@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.11.0"
+export const FABULA_VERSION = "0.12.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.12.0",
+    date: "2026-07-25",
+    items: [
+      {
+        ru: "Отчёт по книге теперь пишется в чат на глазах, а не сваливается целиком в конце. Раньше текст копился на стороне модели, и после нескольких минут тишины появлялся разом — читать было нечего, и казалось, что всё замерло. Теперь он идёт по мере написания: можно начинать читать сразу и видно, что работа жива. Если поток оборвётся, отчёт всё равно будет получен целиком обычным способом.",
+        en: "A book report is now written into the chat as it goes, instead of dropping in whole at the end. The text used to accumulate on the model side and appear all at once after minutes of silence — nothing to read, and it looked frozen. It now arrives as it is written: you can start reading immediately and can see the work is alive. If the stream breaks, the report is still produced in full the ordinary way.",
+      },
+    ],
+  },
   {
     version: "0.11.0",
     date: "2026-07-25",

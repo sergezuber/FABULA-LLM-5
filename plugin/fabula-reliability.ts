@@ -100,7 +100,7 @@ function exploreStateFor(sid: string): ExploreState {
   return s
 }
 
-export const FabulaReliability: Plugin = async () => gate("reliability", ({
+export const FabulaReliability: Plugin = async (pluginInput?: any) => gate("reliability", ({
   // New user turn → clear per-turn loop counters for this session.
   "chat.message": async (input: any) => {
     if (input?.sessionID) guard.resetTurn(input.sessionID)

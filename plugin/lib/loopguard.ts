@@ -190,6 +190,10 @@ interface TurnState {
   searchCalls: number       // total grep/glob calls this turn (per-tool thrash budget)
   degenerateSearch: number  // empty/catch-all search patterns this turn
   webQueries: Map<string, number> // canonical web-search query key (+extras) → call count this turn
+  queryText: Map<string, string>  // canonical key → the query AS TYPED, for telling the reader what was
+                                  // tried; the canonical form is for matching and unreadable by design
+  blockedCount: number // times THIS guard stopped a call this turn (explicit: inferring it from other
+                       // tallies produced a signal that was simply false for web-search thrash)
   touched: number // for LRU eviction ordering
 }
 
@@ -219,8 +223,9 @@ export class LoopGuard {
     const st = this.sessions.get(sessionID)
     if (!st) return { queries: [], blocked: false }
     return {
-      queries: [...st.webQueries.keys()],
-      blocked: st.blockedRetries.size > 0 || st.searchCalls > 0 || st.degenerateSearch > 0,
+      // Original text where we have it, canonical key only as a last resort.
+      queries: [...st.webQueries.keys()].map((k) => st.queryText.get(k) || k).filter((q) => q.trim().length > 0),
+      blocked: st.blockedCount > 0,
     }
   }
   private clock = 0
@@ -264,11 +269,13 @@ export class LoopGuard {
       st.sameToolFail.set(tool, same)
 
       if (exact >= this.cfg.exactFailureStopAfter) {
+        st.blockedCount++ // every stop this guard issues, counted where it is issued
         return mk("stop", "repeated_exact_failure_stop", exact,
           `STOP: \`${tool}\` failed ${exact} times with identical arguments. Do not retry it unchanged. ` +
           `Inspect the error above, change the arguments/approach, or report the blocker.`)
       }
       if (same >= this.cfg.sameToolFailStopAfter) {
+        st.blockedCount++ // every stop this guard issues, counted where it is issued
         return mk("stop", "same_tool_failure_stop", same,
           `STOP: \`${tool}\` failed ${same} times this turn. Stop using this tool path; choose a different approach or tool.`)
       }
@@ -298,6 +305,7 @@ export class LoopGuard {
     st.noProgress.set(sig, { hash: rhash, count })
 
     if (count >= this.cfg.noProgressStopAfter) {
+      st.blockedCount++ // every stop this guard issues, counted where it is issued
       return mk("stop", "idempotent_no_progress_stop", count, "STOP: " + noProgressGuidance(tool, count))
     }
     if (count >= this.cfg.noProgressWarnAfter) {
@@ -333,10 +341,12 @@ export class LoopGuard {
     const sig = toolSignature(tool, args)
     const np = st.noProgress.get(sig)
     if (np && np.count >= this.cfg.noProgressHardBlockAfter) {
+      st.blockedCount++ // every stop this guard issues, counted where it is issued
       return mk("stop", "idempotent_no_progress_block", np.count, "LOOP BLOCKED: " + noProgressGuidance(tool, np.count))
     }
     const ef = st.exactFail.get(sig) ?? 0
     if (ef >= this.cfg.exactFailHardBlockAfter) {
+      st.blockedCount++ // every stop this guard issues, counted where it is issued
       return mk("stop", "exact_failure_block", ef,
         `LOOP BLOCKED: \`${tool}\` already failed ${ef} times with these exact arguments. Retrying it unchanged ` +
         `will fail again. Change the arguments or the approach, or report the blocker — do not repeat this call.`)
@@ -375,7 +385,13 @@ export class LoopGuard {
       }
       const n = (st.webQueries.get(canonical) ?? 0) + 1
       st.webQueries.set(canonical, n)
+      // Remember the query AS TYPED under the same key. The canonical form exists for MATCHING — it is
+      // normalised and token-sorted, so showing it to a reader turns "osho woodcutter parable exact text"
+      // into "exact osho parable text woodcutter". First one wins: that is what the reader actually asked,
+      // the later ones are its near-duplicates.
+      if (!st.queryText.has(canonical)) st.queryText.set(canonical, String(q).trim())
       if (n >= this.cfg.webNearDupBlockAfter) {
+        st.blockedCount++ // every stop this guard issues, counted where it is issued
         return mk("stop", "web_search_duplicate", n,
           `LOOP BLOCKED: this is a repeat of a search you already ran this turn (same or near-identical query — ` +
           `"${q.slice(0, 120)}"). Re-searching returns the SAME results and only floods context. Either use what the ` +
@@ -399,11 +415,13 @@ export class LoopGuard {
     if (degenerate) {
       const n = (st.degenerateSearch += 1)
       if (n >= this.cfg.degenerateSearchStopAfter) {
+        st.blockedCount++ // every stop this guard issues, counted where it is issued
         return mk("stop", "degenerate_search_thrash", n,
           `LOOP BLOCKED: \`${tool}\` was called ${n} times with an empty/catch-all pattern — that matches every line and ` +
           `only floods context. STOP searching: you already have enough. Synthesize your findings and write the answer NOW, ` +
           `or grep for a SPECIFIC literal term (a function/struct/error/env name).`)
       }
+      st.blockedCount++ // every stop this guard issues, counted where it is issued
       return mk("stop", "degenerate_search_pattern", n,
         `\`${tool}\` rejected: an empty or catch-all pattern (\`${String(pattern)}\`) matches every line and floods context. ` +
         `Provide a SPECIFIC search term — a literal substring or anchored regex (e.g. \`func NewServer\`, \`panic(\`, \`os.Getenv\`). ` +
@@ -427,7 +445,7 @@ export class LoopGuard {
 
   // ── internals ──
   private fresh(): TurnState {
-    return { exactFail: new Map(), sameToolFail: new Map(), noProgress: new Map(), blockedRetries: new Map(), searchCalls: 0, degenerateSearch: 0, webQueries: new Map(), touched: ++this.clock }
+    return { exactFail: new Map(), sameToolFail: new Map(), noProgress: new Map(), blockedRetries: new Map(), searchCalls: 0, degenerateSearch: 0, webQueries: new Map(), queryText: new Map(), blockedCount: 0, touched: ++this.clock }
   }
   private touch(sessionID: string): TurnState {
     let st = this.sessions.get(sessionID)

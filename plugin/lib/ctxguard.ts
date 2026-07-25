@@ -41,12 +41,18 @@ export function contextWindow(env: NodeJS.ProcessEnv = process.env): number {
  *  changes and then governs traffic it no longer describes; 0 means "not learned", and every caller falls
  *  back to the default rather than guessing. */
 let LEARNED = 0
-export function learnedWindow(): number {
-  return LEARNED
+let LEARNED_AT = 0
+/** How long a learned ceiling stays trusted. A model reload changes the answer, and caching it for the
+ *  life of the process reintroduces exactly the staleness this mechanism exists to remove — measured
+ *  2026-07-25: the model was reloaded from 65536 to 262144 and the harness kept shedding against the old
+ *  figure until it was restarted by hand. Re-asking every minute costs one cheap local call. */
+export const LEARNED_TTL_MS = 60_000
+export function learnedWindow(now = Date.now()): number {
+  return LEARNED > 0 && now - LEARNED_AT < LEARNED_TTL_MS ? LEARNED : 0
 }
 
 export function setLearnedWindow(n: number): void {
-  if (Number.isFinite(n) && n > 0) LEARNED = n
+  if (Number.isFinite(n) && n > 0) { LEARNED = n; LEARNED_AT = Date.now() }
 }
 /** Fraction of the window at which we force consolidation. Must leave room for the reply + reasoning. */
 export function highWater(env: NodeJS.ProcessEnv = process.env): number {

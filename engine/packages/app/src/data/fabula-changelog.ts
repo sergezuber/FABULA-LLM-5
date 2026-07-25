@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.24.0"
+export const FABULA_VERSION = "0.25.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.25.0",
+    date: "2026-07-25",
+    items: [
+      {
+        ru: "Перезагрузили модель с другим окном — FABULA заметит это сама, в течение минуты. Запомненное значение теперь имеет срок годности. Без него получалось ровно то, от чего мы уходили: модель перезагрузили с 64K на 256K, а обвязка продолжала работать по старому числу, пока её не перезапустили руками. Запомнить навсегда — это та же записанная константа, только спрятанная в памяти процесса.",
+        en: "Reload the model with a different window and FABULA notices by itself, within a minute. A learned figure now expires. Without that you got exactly what we were moving away from: the model was reloaded from 64K to 256K and the harness kept working off the old number until it was restarted by hand. Remembering forever is the same written-down constant, just hidden in process memory.",
+      },
+    ],
+  },
   {
     version: "0.24.0",
     date: "2026-07-25",

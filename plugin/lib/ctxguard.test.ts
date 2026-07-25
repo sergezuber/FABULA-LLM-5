@@ -14,6 +14,8 @@ import {
   CONSOLIDATE_MARKER,
   BOUNDED_MARKER,
   setLearnedWindow,
+  learnedWindow,
+  LEARNED_TTL_MS,
 } from "./ctxguard"
 
 const msg = (role: string, text: string) => ({ info: { role }, parts: [{ type: "text", text }] })
@@ -97,4 +99,15 @@ test("decide: bulk-read ask BELOW the ceiling → BOUNDED (steer from the start)
 
 test("directive markers are distinct so the hook's idempotency check is unambiguous", () => {
   expect(CONSOLIDATE_MARKER).not.toBe(BOUNDED_MARKER)
+})
+
+test("a learned ceiling expires, so a model reload is noticed without a restart", () => {
+  const t0 = Date.now()
+  setLearnedWindow(65536)
+  expect(learnedWindow(t0)).toBe(65536)
+  // Still trusted inside the window…
+  expect(learnedWindow(t0 + LEARNED_TTL_MS - 1)).toBe(65536)
+  // …and forgotten after it, so the next probe re-asks. The measured case: the model was reloaded from
+  // 65536 to 262144 and a permanent cache kept the harness shedding against the old figure.
+  expect(learnedWindow(t0 + LEARNED_TTL_MS + 1)).toBe(0)
 })

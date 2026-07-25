@@ -99,8 +99,13 @@ def loaded_window(model_id, timeout=1.5):
     every caller must treat 0 as "unknown" and fall back, never as "no room"."""
     if not model_id:
         return 0
-    if model_id in _WINDOW_CACHE:
-        return _WINDOW_CACHE[model_id]
+    # Cached with a TTL, not forever: a model reload changes the answer, and a permanent cache is the same
+    # staleness this function exists to remove (measured — reloaded 65536 -> 262144 and the adapter kept
+    # clamping against the old figure until restarted by hand).
+    import time as _t
+    ent = _WINDOW_CACHE.get(model_id)
+    if ent and _t.time() - ent[1] < 60:
+        return ent[0]
     win = 0
     try:
         import urllib.request as _u
@@ -113,7 +118,7 @@ def loaded_window(model_id, timeout=1.5):
     except Exception:
         win = 0  # fail OPEN: an unknown window must never be mistaken for a full one
     if win > 0:
-        _WINDOW_CACHE[model_id] = win
+        _WINDOW_CACHE[model_id] = (win, _t.time())
     return win
 
 def effective_window(model_id):

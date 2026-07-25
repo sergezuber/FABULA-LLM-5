@@ -681,6 +681,17 @@ const live: Layer.Layer<
               input: repaired.input,
             }
           }
+          // Last resort. Say WHY out loud: this branch produced 39 silent dispatches on a real session
+          // and every diagnosis of it — mine and another reader's — was guesswork, because the record
+          // never said whether the call named a hidden tool, an unknown one, or a known one with bad
+          // arguments. Those three want different fixes, so the log now distinguishes them.
+          l.error("tool call unresolved -> invalid", {
+            tool: failed.toolCall.toolName,
+            known: Boolean(tools[failed.toolCall.toolName]),
+            dispatcherPresent: Boolean(tools["expand_tools"]),
+            shadow: shadowFor(input.sessionID, failed.toolCall.toolName, input.parentSessionID) ? "hit" : "miss",
+            error: failed.error.message,
+          })
           return {
             ...failed.toolCall,
             input: JSON.stringify({

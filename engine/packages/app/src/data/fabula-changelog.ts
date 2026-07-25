@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.13.0"
+export const FABULA_VERSION = "0.14.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.14.0",
+    date: "2026-07-25",
+    items: [
+      {
+        ru: "Когда вызов инструмента не удаётся выполнить, теперь записывается ПОЧЕМУ: инструмент неизвестен, скрыт из текущего набора или вызван с негодными аргументами. Раньше все три случая выглядели одинаково, и понять причину зависания можно было только гаданием.",
+        en: "When a tool call cannot be carried out, the reason is now recorded: the tool is unknown, hidden from the current set, or called with unusable arguments. All three used to look identical, so the cause of a hang could only be guessed at.",
+      },
+    ],
+  },
   {
     version: "0.13.0",
     date: "2026-07-25",

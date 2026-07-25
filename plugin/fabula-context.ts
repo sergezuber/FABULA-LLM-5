@@ -5,6 +5,7 @@
 
 import type { Plugin } from "@mimo-ai/plugin"
 import { isEnabled } from "./lib/manage"
+import { languageSteer } from "./lib/langsteer"
 import { pinAwareTruncate } from "./lib/memserve"
 import { promises as fs, realpathSync } from "node:fs"
 import * as path from "node:path"
@@ -184,6 +185,15 @@ export const FabulaContext: Plugin = async (input: any) => {
         if (!Array.isArray(parts)) return
         const textPart = [...parts].reverse().find((p: any) => typeof p?.text === "string")
         if (!textPart) return
+        // LANGUAGE STEER (RULE #9/#14). Measured live: a Russian question came back with Chinese spliced
+        // into the middle of its own sentences ("### Откуда, скорее всего, 这个故事:"). The content was right
+        // and the text was not something a reader can pass on. Any model in the socket can code-mix, so
+        // the harness pins the language deterministically on EVERY turn instead of hoping a prompt line is
+        // read. Silent when the language is unclear — it never guesses.
+        if (!String(textPart.text).includes("[Write the entire answer in ")) {
+          textPart.text += languageSteer(String(textPart.text))
+        }
+        
         const t = String(textPart.text).toLowerCase()
         if (t.includes("[fabula: search first]")) return // already steered this turn
         // Triggers, EN + RU, deliberately broad on the "current" axis — a false positive costs one search,

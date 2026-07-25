@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.17.0"
+export const FABULA_VERSION = "0.18.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.18.0",
+    date: "2026-07-25",
+    items: [
+      {
+        ru: "Ответ теперь пишется целиком на языке вопроса. На живом прогоне русский ответ приехал с китайскими вставками прямо посреди собственных предложений — «Откуда, скорее всего, 这个故事», «看似 абсурдную инструкцию». Смысл был верным, но такой текст некому показать. Обвязка сама определяет язык вопроса по буквам и на каждом ходу требует держаться его; названия, термины и код остаются как есть, а если язык непонятен — она молчит и ничего не выдумывает.",
+        en: "An answer is now written entirely in the language of the question. On a live run a Russian answer arrived with Chinese spliced into the middle of its own sentences — 'Откуда, скорее всего, 这个故事', '看似 абсурдную инструкцию'. The meaning was right, but there is nobody you can show text like that to. The harness works out the language of the question from its letters and asks for it on every turn; names, technical terms and code are left alone, and when the language is unclear it stays silent rather than guessing.",
+      },
+    ],
+  },
   {
     version: "0.17.0",
     date: "2026-07-25",

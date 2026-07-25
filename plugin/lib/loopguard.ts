@@ -211,6 +211,18 @@ export function classifyFailure(tool: string, result: string | null | undefined,
 export class LoopGuard {
   private cfg: GuardConfig
   private sessions = new Map<string, TurnState>()
+
+  /** What was ATTEMPTED this turn, and was anything stopped. Read by the exhaustion answer: a harness
+   *  that tells the model "stop searching" must be able to say "we could not find it" itself, and to
+   *  say WHAT it looked for. Read-only view — never let a reader mutate turn state. */
+  attemptsFor(sessionID: string): { queries: string[]; blocked: boolean } {
+    const st = this.sessions.get(sessionID)
+    if (!st) return { queries: [], blocked: false }
+    return {
+      queries: [...st.webQueries.keys()],
+      blocked: st.blockedRetries.size > 0 || st.searchCalls > 0 || st.degenerateSearch > 0,
+    }
+  }
   private clock = 0
 
   constructor(cfg: Partial<GuardConfig> = {}) {

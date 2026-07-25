@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.14.0"
+export const FABULA_VERSION = "0.15.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.15.0",
+    date: "2026-07-25",
+    items: [
+      {
+        ru: "Если найти ответ не удалось, вы теперь об этом узнаёте. Раньше в такой ситуации агент перебирал почти одинаковые запросы, натыкался на защиту от повторов и умолкал — оставался пустой ход без объяснений, и выглядело это как зависание. Теперь ход завершается честным ответом: что именно искалось, что не нашлось, и что от вас поможет — название, автор, книга или ссылка.",
+        en: "If an answer could not be found, you are now told so. The agent used to cycle through near-identical queries, hit the repeat guard and fall silent — leaving an empty turn with no explanation, which looked like a hang. The turn now ends with an honest answer: what was searched for, that it was not found, and what from you would help — a title, an author, a book or a link.",
+      },
+    ],
+  },
   {
     version: "0.14.0",
     date: "2026-07-25",

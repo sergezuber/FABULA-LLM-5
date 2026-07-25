@@ -12,6 +12,7 @@
 
 import type { Plugin } from "@mimo-ai/plugin"
 import { gate } from "./lib/manage"
+import { decideExhausted } from "./lib/exhausted"
 import { dropSessionChannels } from "./lib/beltwire"
 import { tool } from "@mimo-ai/plugin"
 import { LoopGuard, eofNotice } from "./lib/loopguard"
@@ -202,6 +203,49 @@ export const FabulaReliability: Plugin = async () => gate("reliability", ({
     if (output.args == null) return
     const r = repairArgs(input.tool, output.args)
     if (r.changed) applyArgs(output, r.args)
+  },
+
+  // A turn that could not find an answer must SAY SO. The guard stops the search call and tells the model
+  // to synthesize (loopguard: web_search_budget_exceeded) — but stopping a call is not ending a turn.
+  // Observed live: fourteen near-identical searches for one parable, three blocks, then "Thinking" and
+  // nothing at all. The reader was left with a dead turn. session.post is observe-only, so this gates
+  // nothing: it appends an honest ANSWER naming what was tried. Fail-silent throughout — a diagnostic
+  // path must never become the thing that breaks a turn.
+  "session.post": async (input: any) => {
+    try {
+      const sid = input?.sessionID
+      if (!sid) return
+      const attempts = guard.attemptsFor(sid)
+      const verdict = decideExhausted({
+        queries: attempts.queries,
+        blocked: attempts.blocked,
+        finalText: typeof input?.finalText === "string" ? input.finalText : "",
+        outcome: String(input?.outcome ?? ""),
+      })
+      // Diagnostic channel: the engine log, which the reader never sees. Emitted on BOTH outcomes — the
+      // case where the harness stayed silent is exactly the one that used to be unexplainable afterwards.
+      console.error(
+        `[fabula-reliability] exhaustion check session=${sid} outcome=${input?.outcome} ` +
+          `attempts=${attempts.queries.length} blocked=${attempts.blocked} ` +
+          `finalTextChars=${String(input?.finalText ?? "").length} ` +
+          `decision=${verdict.answer ? "ANSWER" : "silent"} reason=${verdict.reason}`,
+      )
+      if (!verdict.answer) return
+      const serverUrl = String(pluginInput?.serverUrl || "http://127.0.0.1:4096").replace(/\/+$/, "")
+      const dir = String(pluginInput?.directory || process.cwd())
+      const r = await fetch(`${serverUrl}/session/${sid}/assistant-message?directory=${encodeURIComponent(dir)}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text: verdict.answer }),
+      })
+      console.error(
+        r.ok
+          ? `[fabula-reliability] exhaustion answer delivered session=${sid}`
+          : `[fabula-reliability] exhaustion answer HTTP ${r.status} session=${sid}`,
+      )
+    } catch (e: any) {
+      console.error(`[fabula-reliability] exhaustion check failed: ${e?.stack || e?.message || e}`)
+    }
   },
 
   // Loop-steer + output cap. Order: cap first, then evaluate the loop on the capped text,

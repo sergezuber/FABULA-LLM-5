@@ -73,6 +73,8 @@ export interface ScanMessage {
     metadata?: { passed?: boolean; autoRewind?: unknown; notDone?: unknown } | null
     /** tool input (only `command` is read, for bash edit detection) */
     input?: { command?: string } | null
+    /** recorded failure text, when the call did not succeed */
+    error?: string | null
   }>
 }
 
@@ -174,6 +176,19 @@ export function turnMadeToolCalls(messages: readonly ScanMessage[]): boolean {
  * of a spurious judge call is seconds; the cost of the missing one was a silently dead long task.
  */
 export function sessionShowsTaskEvidence(messages: readonly ScanMessage[]): boolean {
+  // OUTSTANDING work — not a history of tool use.
+  //
+  // "Any assistant tool part anywhere" was the wrong axis and it over-fired badly (measured live,
+  // 2026-07-25): a question that could only ever be answered in prose — find a story — used twenty-two
+  // searches, delivered a complete answer, and was re-entered by the judge anyway, because the session
+  // had touched tools. The reader watched a finished answer scroll past and then saw the agent keep
+  // working, which is exactly the "answers, then cannot stop" shape this layer exists to prevent, only
+  // arriving through the layer itself. Using a tool is not a debt. An unfinished obligation is.
+  //
+  // So the question asked here is the one the literature actually poses (ANSWER as a terminal action,
+  // arXiv:2606.28733; verifiable vs non-verifiable, arXiv:2506.00103): is there anything LEFT that can be
+  // checked and has not been? The trajectory answers it directly, and it answers the same way whatever
+  // the model, the context window, or the length of the reply — none of which appear in this decision.
   return messages.some((m) =>
     m.role === "assistant"
       ? m.parts.some((p) => p.type === "tool")
@@ -181,26 +196,46 @@ export function sessionShowsTaskEvidence(messages: readonly ScanMessage[]): bool
   )
 }
 
+
+/** Did THIS turn produce assistant text at all? Presence only — never length: a one-word answer and a
+ *  ten-thousand-word one are equally an answer, and gating on size would make the decision depend on the
+ *  very thing it must be independent of. */
+export function turnProducedText(messages: readonly ScanMessage[]): boolean {
+  const lastUser = messages.map((m) => m.role).lastIndexOf("user")
+  return messages
+    .slice(lastUser + 1)
+    .some((m) => m.role === "assistant" && m.parts.some((p) => p.type === "text"))
+}
+
+/** Is there an obligation left that CAN be checked and has not been? Read off the trajectory, so it says
+ *  the same thing whatever model produced it. */
+export function outstandingWork(messages: readonly ScanMessage[]): boolean {
+  const f = trajectoryFeatures(messages)
+  return f.unverifiedEdits || f.lastVerify === "red" || f.notDone > 0
+}
+
 export function goalStopLayerFires(input: { auto: boolean; messages: readonly ScanMessage[] }): boolean {
-  // The short-circuit exists for CONVERSATIONAL turns — the "answers, then loops and cannot stop"
-  // failure it was built against was a chat question judged by a same-model judge on a 200k context.
-  // It used to fire on ANY turn without unverified edits, which covered every READING task too: a
-  // book-analysis session that stopped mid-task at "chapters 2-4 read, continuing in batches" was
-  // honored as a finished answer, because reading produces no edits (measured live, three sessions in a
-  // row, 2026-07-21). A turn that was actively CALLING TOOLS is not a conversation — it is a task, and
-  // a task's stop must reach the judge (which is bounded by MAX_GOAL_REACT and the hard-veto, and whose
-  // comparative framing already knows an informational request is satisfied by a direct answer).
-  // Scope refinement (measured same day, the restart hole): conversation-vs-task is a property of the
-  // SESSION, not of one turn — a tool-free announcement inside a session full of tool work must still
-  // reach the judge, or a restart + «продолжай» dies at a single text-only plan. Both earlier conjuncts
-  // are subsumed today: any current-turn tool part is session evidence (turnMadeToolCalls), and a
-  // non-terminal answer requires an edit TurnEvent, which is itself an assistant tool part
-  // (answerIsTerminal) — so `terminal && !evidence` reduces to `!evidence`. answerIsTerminal is kept
-  // as defense-in-depth: it reads the SAME artifact signal as the force-verify gate, and if turnEvents
-  // ever learns a non-tool edit source the three-factor form stays correct without anyone remembering
-  // this reduction.
+  // WHEN IS A TURN FINISHED? Explicit /goal is the user opting INTO the loop and is never short-circuited.
+  // Otherwise the stop is honored only for a session that was never a task: no unverified artifact, and no
+  // sign the session is task work (a tool part anywhere, or a rebuild boundary).
+  //
+  // ⚠️ KNOWN OPEN, and deliberately not papered over (2026-07-25). Two MEASURED failures live in the
+  // SAME structural shape — prior tool work, then a text stop — and want opposite answers:
+  //   · a book-analysis turn made dozens of reads and stopped at "chapters 2-4 read, continuing in
+  //     batches". Honoring that killed the run mid-task (2026-07-21, three sessions).
+  //   · a research turn made twenty-two searches and DELIVERED its answer. Re-entering that made the
+  //     reader watch a finished answer scroll past while the agent kept working (2026-07-25).
+  // Structure cannot separate a report from a promise: both are text after tool calls. `turnProducedText`
+  // and `outstandingWork` above were written for a rule keyed on "did the turn do the work it reports",
+  // which resolves the second case and REOPENS the first — so that rule is not wired, and they stand
+  // ready for the fix rather than pretending to be it. The discriminator has to be SEMANTIC, which is the
+  // judge's job under its comparative framing (arXiv:2510.08517) — the open work is that the judge called
+  // the research answer insufficient, plus the fact that a re-entry arrives AFTER the reader has already
+  // been shown the text as final. Neither is fixed by moving this predicate.
   return input.auto === true && answerIsTerminal(input.messages) && !sessionShowsTaskEvidence(input.messages)
 }
+
+
 
 /**
  * Is there SOME verification command for this project? Mirrors the verify_done tool's detection
@@ -259,14 +294,26 @@ export interface TrajectoryFeatures {
   rewinds: number
   notDone: number
   unverifiedEdits: boolean
+  /** Calls the HARNESS itself refused this turn (loop/budget guards). See isHarnessSteer. */
+  harnessBlocked: number
+}
+
+/** The marker the guards stamp on a message they throw. Kept in step with plugin/lib/steer.ts, which is
+ *  where it is applied; the two are separate build graphs, and a mismatch degrades to "no signal" — the
+ *  judge simply learns nothing new — never to a wrong one. */
+export const HARNESS_STEER_PREFIX = "[fabula-steer] "
+
+/** Was this call refused by the harness rather than failing on its own? */
+export function isHarnessSteer(error?: string | null): boolean {
+  return String(error ?? "").replace(/^Error:\s*/, "").startsWith(HARNESS_STEER_PREFIX)
 }
 
 /** Deterministic process-level features of THIS turn (since the last real user boundary). */
 export function trajectoryFeatures(messages: readonly ScanMessage[]): TrajectoryFeatures {
-  let verifyGreen = 0, verifyRed = 0, edits = 0, rewinds = 0, notDone = 0
+  let verifyGreen = 0, verifyRed = 0, edits = 0, rewinds = 0, notDone = 0, harnessBlocked = 0
   let lastVerify: "green" | "red" | "none" = "none"
   for (const m of messages) {
-    if (isRealUserBoundary(m)) { verifyGreen = 0; verifyRed = 0; edits = 0; rewinds = 0; notDone = 0; lastVerify = "none"; continue }
+    if (isRealUserBoundary(m)) { verifyGreen = 0; verifyRed = 0; edits = 0; rewinds = 0; notDone = 0; harnessBlocked = 0; lastVerify = "none"; continue }
     if (m.role !== "assistant") continue
     for (const p of m.parts) {
       if (p.type !== "tool" || !p.tool) continue
@@ -276,11 +323,14 @@ export function trajectoryFeatures(messages: readonly ScanMessage[]): Trajectory
         else if (md?.passed === false) { verifyRed++; lastVerify = "red" }
       } else if (EDIT_TOOLS.has(p.tool)) edits++
       else if (BASH_TOOLS.has(p.tool) && bashEditsTree(p.input?.command)) edits++
+      // A call the HARNESS refused is the one fact that separates "there is more to do" from "there is
+      // nothing left this agent is allowed to try". Both look identical otherwise — tool calls, then text.
+      if (isHarnessSteer(p.error)) harnessBlocked++
       if (md?.autoRewind != null) rewinds++
       if (md?.notDone != null) notDone++
     }
   }
-  return { verifyGreen, verifyRed, lastVerify, edits, rewinds, notDone, unverifiedEdits: needsForcedVerify(messages) }
+  return { verifyGreen, verifyRed, lastVerify, edits, rewinds, notDone, unverifiedEdits: needsForcedVerify(messages) , harnessBlocked }
 }
 
 /**
@@ -313,7 +363,16 @@ export function badDynamicsSignature(
 export function renderFeatureBlock(f: TrajectoryFeatures): string {
   return `[trajectory this turn] verify_done: ${f.verifyGreen} green / ${f.verifyRed} red (last: ${f.lastVerify}); ` +
     `${f.edits} source edit(s), ${f.rewinds} auto-rewind(s), ${f.notDone} terminal not-done` +
-    (f.unverifiedEdits ? "; UNVERIFIED source edits present" : "")
+    (f.unverifiedEdits ? "; UNVERIFIED source edits present" : "") +
+    // The decisive fact for a non-verifiable ask, and the one the judge could not see. A turn that
+    // searched twenty-two ways and was then REFUSED further searches has no improvement left to make;
+    // without this line the judge read it as an ordinary answer and sent the agent back for more, so the
+    // reader watched a finished answer scroll past and the work carry on. A turn whose tools all
+    // SUCCEEDED and that reports partial progress carries no such line, and is judged exactly as before.
+    (f.harnessBlocked > 0
+      ? `; the harness REFUSED ${f.harnessBlocked} further tool call(s) this turn (loop/budget guard) — ` +
+        `repeating that tool is NOT available, so more of it cannot improve the answer`
+      : "")
 }
 
 // ── Post-compaction stall ────────────────────────────────────────────────────────────────────────

@@ -2285,6 +2285,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                       passed: p.state?.metadata?.passed,
                       autoRewind: p.state?.metadata?.autoRewind,
                       notDone: p.state?.metadata?.notDone,
+                      // A refusal by the harness is a fact about what is still POSSIBLE, not about what
+                      // went wrong — the judge needs it to tell an exhausted turn from an unfinished one.
+                      error: (p.state as any)?.error,
                     }
                   : undefined,
               input: p.type === "tool" ? { command: p.state?.input?.command } : undefined,

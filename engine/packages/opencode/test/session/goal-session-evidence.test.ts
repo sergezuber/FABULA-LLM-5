@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { goalStopLayerFires, sessionShowsTaskEvidence, type ScanMessage } from "../../src/session/verify-gate"
+import { goalStopLayerFires, sessionShowsTaskEvidence, type ScanMessage , trajectoryFeatures, renderFeatureBlock} from "../../src/session/verify-gate"
 
 /**
  * The conversational short-circuit of the goal stop-layer must be scoped to the SESSION,
@@ -66,8 +66,83 @@ describe("goalStopLayerFires — session-scoped conversation test", () => {
   test("explicit /goal is never short-circuited, task session or not", () => {
     expect(goalStopLayerFires({ auto: false, messages: [user(), assistantText()] })).toBe(false)
   })
-  test("current turn actively calling tools never short-circuits (unchanged contract)", () => {
-    const messages = [user(), assistantTool()]
+  // CONTRACT SHARPENED 2026-07-25. This used to read "a turn calling tools never short-circuits", which
+  // was a proxy for "do not stop mid-work" — and it is what re-entered a research turn that had already
+  // delivered its answer. The precise statement is: a turn that did work and said NOTHING has not
+  // answered; a turn that did work and then answered has.
+  test("a turn that called tools and produced no text has not answered", () => {
+    const messages = [user(), { role: "assistant" as const, parts: [{ type: "tool" as const, tool: "read" }] }]
     expect(goalStopLayerFires({ auto: true, messages })).toBe(false)
+  })
+  // ⚠️ This is the case that is NOT resolved: a turn that did work and then answered still reaches the
+  // judge, because the identical shape also covers a turn that did work and reported it UNFINISHED
+  // (2026-07-21). Asserted as it BEHAVES, so the gap stays visible instead of being wished away.
+  test("a turn that called tools and then answered still reaches the judge — the open case", () => {
+    expect(goalStopLayerFires({ auto: true, messages: [user(), assistantTool()] })).toBe(false)
+  })
+})
+
+// The live over-fire (2026-07-25) is NOT closed by this layer, and these cases record why rather than
+// asserting a behaviour that would reopen the 2026-07-21 one. See the comment on goalStopLayerFires.
+describe("the two measured cases are structurally identical — recorded, not resolved", () => {
+  const tool = (id: string) => ({ role: "assistant" as const, parts: [{ type: "tool" as const, tool: "read", id }] })
+  const text = { role: "assistant" as const, parts: [{ type: "text" as const, text: "…" }] }
+  const ask = { role: "user" as const, parts: [{ type: "text" as const }] }
+
+  test("a delivered research answer and an unfinished reading report look the same to this layer", () => {
+    const delivered = [ask, tool("1"), tool("2"), text]
+    const unfinished = [ask, tool("1"), tool("2"), text]
+    expect(goalStopLayerFires({ auto: true, messages: delivered as any })).toBe(
+      goalStopLayerFires({ auto: true, messages: unfinished as any }),
+    )
+  })
+
+  test("both reach the judge, which is the layer that CAN read the difference", () => {
+    expect(goalStopLayerFires({ auto: true, messages: [ask, tool("1"), text] as any })).toBe(false)
+  })
+
+  test("an explicit /goal is never short-circuited", () => {
+    expect(goalStopLayerFires({ auto: false, messages: [ask, text] as any })).toBe(false)
+  })
+})
+
+// The difference the judge could not see. Both shapes are "tool calls, then text" — what separates them
+// is whether the agent still HAS a move. A refused call says it does not.
+describe("harnessBlocked — exhausted vs unfinished", () => {
+  const ask = { role: "user" as const, parts: [{ type: "text" as const }] }
+  const ok = (tool: string) => ({ role: "assistant" as const, parts: [{ type: "tool" as const, tool }] })
+  const refused = (tool: string) => ({
+    role: "assistant" as const,
+    parts: [{ type: "tool" as const, tool, error: "[fabula-steer] LOOP BLOCKED: 16 distinct web searches" }],
+  })
+  const text = { role: "assistant" as const, parts: [{ type: "text" as const }] }
+
+  test("a turn the harness refused is counted, and the judge is told repeating is unavailable", () => {
+    const f = trajectoryFeatures([ask, ok("web_search"), refused("web_search"), text] as any)
+    expect(f.harnessBlocked).toBe(1)
+    expect(renderFeatureBlock(f)).toContain("REFUSED")
+    expect(renderFeatureBlock(f)).toContain("cannot improve")
+  })
+
+  test("a reading turn whose tools all SUCCEEDED says nothing new — judged exactly as before", () => {
+    const f = trajectoryFeatures([ask, ok("read"), ok("read"), ok("read"), text] as any)
+    expect(f.harnessBlocked).toBe(0)
+    expect(renderFeatureBlock(f)).not.toContain("REFUSED")
+  })
+
+  test("an ordinary tool failure is NOT a refusal — only the harness's own marker counts", () => {
+    const broke = { role: "assistant" as const, parts: [{ type: "tool" as const, tool: "read", error: "ENOENT: no such file" }] }
+    expect(trajectoryFeatures([ask, broke, text] as any).harnessBlocked).toBe(0)
+  })
+
+  test("the count resets at a real user boundary — it describes THIS turn", () => {
+    const f = trajectoryFeatures([ask, refused("web_search"), text, ask, ok("read"), text] as any)
+    expect(f.harnessBlocked).toBe(0)
+  })
+
+  test("the signal does not depend on answer length or context size", () => {
+    const short = [ask, refused("web_search"), { role: "assistant" as const, parts: [{ type: "text" as const, text: "no" }] }]
+    const long = [ask, refused("web_search"), { role: "assistant" as const, parts: [{ type: "text" as const, text: "x".repeat(80_000) }] }]
+    expect(trajectoryFeatures(short as any).harnessBlocked).toBe(trajectoryFeatures(long as any).harnessBlocked)
   })
 })

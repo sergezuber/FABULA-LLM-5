@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.18.0"
+export const FABULA_VERSION = "0.19.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.19.0",
+    date: "2026-07-25",
+    items: [
+      {
+        ru: "Работа больше не продолжается после готового ответа. Проверяющий слой видел «инструменты вызывались, потом текст» и не мог отличить готовый ответ от отчёта о незаконченной работе — обе картины выглядят одинаково, поэтому один раз он убивал задачу посередине, а другой раз гонял агента дальше уже после того, как вы прочли ответ. Различие не в тексте: если обвязка сама запретила агенту продолжать (исчерпан бюджет поиска), делать больше нечего — и теперь она об этом прямо сообщает. Ход, где все инструменты отработали успешно, оценивается ровно как раньше.",
+        en: "Work no longer continues after a finished answer. The checking layer saw 'tools were called, then text' and could not tell a delivered answer from a report of unfinished work — the two look identical, so it once killed a task midway and another time sent the agent back after you had already read the answer. The difference is not in the wording: when the harness itself has refused the agent further calls (a search budget spent), there is nothing more to try — and that is now stated outright. A turn whose tools all succeeded is judged exactly as before.",
+      },
+    ],
+  },
   {
     version: "0.18.0",
     date: "2026-07-25",

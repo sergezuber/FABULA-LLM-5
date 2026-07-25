@@ -22,12 +22,18 @@ import {
   boundedReadDirective,
   CONSOLIDATE_MARKER,
   BOUNDED_MARKER,
+  probeWindow,
 } from "./lib/ctxguard"
 
 export const FabulaCtxGuard: Plugin = async () => {
   if (!isEnabled("ctxguard")) return {}
   return {
     "experimental.chat.messages.transform": async (_i: any, output: any) => {
+      // Learn the per-call ceiling from the server before deciding anything. Awaited here because this
+      // hook CAN await and the pure core cannot; cached after the first call, silent on failure. Without
+      // it the guard sheds against a default that may be twice the real ceiling — which is how the
+      // accumulated context outgrew the request and killed the serving process (2026-07-25).
+      await probeWindow().catch(() => 0)
       try {
         // NEVER steer the summarizer. The engine runs this hook for the COMPACTION build too, and a task
         // directive planted there turns the summarizer back into a task executor — measured live: it

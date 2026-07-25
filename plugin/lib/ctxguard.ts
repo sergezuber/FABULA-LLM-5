@@ -21,11 +21,32 @@ export const DEFAULT_CONTEXT_WINDOW = 131072
 export const DEFAULT_HIGH_WATER = 0.75
 export const DEFAULT_CHARS_PER_TOKEN = 3.5
 
-/** The serving window. Shares FABULA_CONTEXT_WINDOW with the adapter's overflow telemetry — one source of
- *  truth for "how big is the socket" — and defaults to the value the local build is loaded at. */
+/** The per-CALL ceiling. Shares FABULA_CONTEXT_WINDOW with the adapter's overflow telemetry — one source
+ *  of truth for "how big is one request" — and defaults to the local build's usual value.
+ *
+ *  This number does NOT bound the conversation. It is the input the shedding machinery needs in order to
+ *  consolidate IN TIME, which is how an unbounded task passes through a bounded call at all. Read as a
+ *  ceiling on the user it would be exactly backwards, and getting it wrong is what broke: unset, the guard
+ *  assumed 131072 against a model serving 65536, never shed, the accumulated context outgrew the request,
+ *  and the serving process died mid-generation (measured 2026-07-25, crash at a 67850-token prefix). */
 export function contextWindow(env: NodeJS.ProcessEnv = process.env): number {
   const n = Number(env.FABULA_CONTEXT_WINDOW)
-  return Number.isFinite(n) && n > 0 ? n : DEFAULT_CONTEXT_WINDOW
+  if (Number.isFinite(n) && n > 0) return n
+  const learned = learnedWindow()
+  return learned > 0 ? learned : DEFAULT_CONTEXT_WINDOW
+}
+
+/** What the SERVER says it is loaded at, learned once per process by the plugin hook (which can await)
+ *  and read here synchronously. A typed constant goes stale the moment the model or its load config
+ *  changes and then governs traffic it no longer describes; 0 means "not learned", and every caller falls
+ *  back to the default rather than guessing. */
+let LEARNED = 0
+export function learnedWindow(): number {
+  return LEARNED
+}
+
+export function setLearnedWindow(n: number): void {
+  if (Number.isFinite(n) && n > 0) LEARNED = n
 }
 /** Fraction of the window at which we force consolidation. Must leave room for the reply + reasoning. */
 export function highWater(env: NodeJS.ProcessEnv = process.env): number {
@@ -125,4 +146,26 @@ export function decide(messages: any[], lastUserText: string, env: NodeJS.Proces
   if (nearCeiling(tokens, env)) return { action: "consolidate", tokens, pct }
   if (isBulkReadAsk(lastUserText)) return { action: "bounded", tokens, pct }
   return { action: "none", tokens, pct }
+}
+
+/** Ask the serving API what the loaded model's per-call ceiling is, and hand it to the guard. Called from
+ *  the plugin hook, which can await; failure is silent and leaves the default in place — a probe that
+ *  cannot answer must never make the guard shed early or late, only leave it as it was. */
+export async function probeWindow(fetchImpl: typeof fetch = fetch, url = process.env.FABULA_MODEL_API || "http://localhost:1234/api/v0/models"): Promise<number> {
+  if (learnedWindow() > 0) return learnedWindow()
+  try {
+    const ctl = new AbortController()
+    const t = setTimeout(() => ctl.abort(), 1500)
+    const r = await fetchImpl(url, { signal: ctl.signal })
+    clearTimeout(t)
+    if (!r.ok) return 0
+    const data: any = await r.json()
+    for (const m of data?.data ?? []) {
+      if (m?.state === "loaded") {
+        const n = Number(m.loaded_context_length)
+        if (Number.isFinite(n) && n > 0) { setLearnedWindow(n); return n }
+      }
+    }
+  } catch { /* a probe that cannot answer changes nothing */ }
+  return 0
 }

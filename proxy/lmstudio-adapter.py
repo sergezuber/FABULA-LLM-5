@@ -84,6 +84,51 @@ from adapter_util import (
 # max_tokens is fitted to the remaining window so a tool call can't truncate mid-arguments (§3p2 prevention).
 CONTEXT_WINDOW = int(os.environ.get("FABULA_CONTEXT_WINDOW", "0"))
 
+# ── The window is a PROPERTY OF THE LOADED MODEL, so it is asked for, not configured ───────────────────
+#
+# Pinning it in .env was wrong twice over. It is a constant where FABULA is meant to derive: swap the
+# model, change the load config, and a number typed yesterday silently governs today's traffic. And it is
+# the wrong number the moment either changes — measured 2026-07-25, a model serving 65536 tokens was fed a
+# 67850-token prefix and the serving process died mid-generation ("The model has crashed (Exit code:
+# null)" in the app, ConnectionResetError here), because nothing in the loop knew what the real ceiling
+# was. LM Studio publishes it per loaded model; asking costs one cached call per model id.
+_WINDOW_CACHE = {}
+
+def loaded_window(model_id, timeout=1.5):
+    """The serving window of `model_id` as the server itself reports it. 0 when it cannot be learned —
+    every caller must treat 0 as "unknown" and fall back, never as "no room"."""
+    if not model_id:
+        return 0
+    if model_id in _WINDOW_CACHE:
+        return _WINDOW_CACHE[model_id]
+    win = 0
+    try:
+        import urllib.request as _u
+        base = UPSTREAM.rsplit("/v1", 1)[0] if "/v1" in UPSTREAM else UPSTREAM
+        with _u.urlopen(base + "/api/v0/models", timeout=timeout) as r:
+            for m in (json.loads(r.read().decode("utf-8", "replace")).get("data") or []):
+                if m.get("id") == model_id and m.get("state") == "loaded":
+                    win = int(m.get("loaded_context_length") or 0)
+                    break
+    except Exception:
+        win = 0  # fail OPEN: an unknown window must never be mistaken for a full one
+    if win > 0:
+        _WINDOW_CACHE[model_id] = win
+    return win
+
+def effective_window(model_id):
+    """An explicit override still wins — someone pinning it knows something we do not. Otherwise ask."""
+    return CONTEXT_WINDOW if CONTEXT_WINDOW > 0 else loaded_window(model_id)
+
+def derived_output_cap(model_id):
+    """How much room to leave a single generation, DERIVED from the window rather than typed. A quarter of
+    the window keeps three quarters for the conversation, which is the ratio the context guard already
+    sheds at. 0 (unknown window, no override) means no clamp — the previous behaviour, unchanged."""
+    if MAX_OUTPUT_TOKENS > 0:
+        return MAX_OUTPUT_TOKENS
+    w = effective_window(model_id)
+    return max(1024, w // 4) if w > 0 else 0
+
 # Phase-0 context audit tap (Context OS §9): when set to a file path, the adapter atomically
 # writes the LAST /chat/completions request body there so context_audit.py can compute the
 # per-layer token breakdown from the real wire. Off by default (empty).
@@ -361,9 +406,14 @@ class Handler(BaseHTTPRequestHandler):
                         apply_reasoning(j, load_reasoning_map(), level)
                         changed = True
                     # FIX 4b: optional hard output cap — bounds a runaway reasoning/generation spiral
-                    if MAX_OUTPUT_TOKENS > 0:
+                    # Cap DERIVED from the loaded model's own window (derived_output_cap). An explicit
+                    # FABULA_MAX_OUTPUT_TOKENS still wins; with neither an override nor a knowable window the
+                    # request passes through untouched. A caller asking 32000 tokens of a 65536-token model
+                    # needs this: prompt plus reply has to fit, and only the server knows the ceiling.
+                    _cap = derived_output_cap(j.get("model"))
+                    if _cap > 0:
                         cur = j.get("max_tokens")
-                        newv = MAX_OUTPUT_TOKENS if not isinstance(cur, int) else min(cur, MAX_OUTPUT_TOKENS)
+                        newv = _cap if not isinstance(cur, int) else min(cur, _cap)
                         if cur != newv:
                             j["max_tokens"] = newv
                             changed = True

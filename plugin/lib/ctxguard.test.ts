@@ -13,6 +13,7 @@ import {
   DEFAULT_CONTEXT_WINDOW,
   CONSOLIDATE_MARKER,
   BOUNDED_MARKER,
+  setLearnedWindow,
 } from "./ctxguard"
 
 const msg = (role: string, text: string) => ({ info: { role }, parts: [{ type: "text", text }] })
@@ -40,8 +41,16 @@ test("nearCeiling flips exactly at high-water * window", () => {
   expect(nearCeiling(750, env)).toBe(true)
 })
 
-test("default window matches the loaded serving window", () => {
-  expect(contextWindow({} as any)).toBe(DEFAULT_CONTEXT_WINDOW) // 131072 = 128K
+test("the per-call ceiling: explicit beats learned beats default", () => {
+  // An explicit setting always wins — someone who pinned it knows something the probe does not.
+  expect(contextWindow({ FABULA_CONTEXT_WINDOW: "40000" } as any)).toBe(40000)
+  // A learned value beats the default, and this is the whole point: the default was TWICE the ceiling a
+  // 65536-token model actually serves, so the guard never shed and the context outgrew the request.
+  setLearnedWindow(65536)
+  expect(contextWindow({} as any)).toBe(65536)
+  // A failed probe reports 0 and must change nothing — it can never shrink the window to nothing.
+  setLearnedWindow(0)
+  expect(contextWindow({} as any)).toBe(65536)
 })
 
 test("bulk-read ask recognised in EN", () => {

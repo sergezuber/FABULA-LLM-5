@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.23.0"
+export const FABULA_VERSION = "0.24.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.24.0",
+    date: "2026-07-25",
+    items: [
+      {
+        ru: "Сброс накопленного теперь срабатывает вовремя, потому что FABULA спрашивает у сервера, сколько помещается в один запрос, вместо того чтобы читать записанное однажды число. Записанное число устаревает в тот же миг, когда вы меняете модель или её настройку загрузки, — и дальше управляет тем, что уже не описывает. Именно так и вышло: считалось, что помещается вдвое больше реального, накопленное перерастало запрос, и сервер модели умирал на генерации. Длина вашей задачи этим не ограничена ничуть: ровно наоборот, своевременный сброс и есть то, чем длинная работа проходит через короткий запрос.",
+        en: "Shedding the accumulated context now happens in time, because FABULA asks the server how much fits in one request instead of reading a number written down once. A written-down number goes stale the moment you change the model or its load settings — and then governs traffic it no longer describes. That is exactly what happened: twice the real amount was assumed to fit, the accumulated context outgrew the request, and the model server died mid-generation. None of this limits how long your task can be: timely shedding is precisely what carries long work through a short request.",
+      },
+    ],
+  },
   {
     version: "0.23.0",
     date: "2026-07-25",

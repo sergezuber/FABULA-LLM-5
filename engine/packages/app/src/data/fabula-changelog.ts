@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.25.0"
+export const FABULA_VERSION = "0.26.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.26.0",
+    date: "2026-07-25",
+    items: [
+      {
+        ru: "Название чата не может быть машинным вызовом. Прошлая правка отбрасывала строку, целиком состоящую из тега, — и модель тут же выдала тег с полезной нагрузкой следом, который прошёл насквозь. Теперь отбрасывается сочетание углового тега и фигурных скобок: так выглядит машинный вывод и никогда — название, которое дал бы человек. Одно без другого не трогаем, поэтому «Как работает <div> в вёрстке» остаётся названием.",
+        en: "A chat name cannot be a machine call. The previous change discarded a line that was entirely a tag — and the model promptly produced a tag with a payload after it, which sailed straight through. What is discarded now is an angle-bracket token together with braces: that is what machine output looks like and never what a person would name a chat. Either one alone is left alone, so 'Как работает <div> в вёрстке' stays a name.",
+      },
+    ],
+  },
   {
     version: "0.25.0",
     date: "2026-07-25",

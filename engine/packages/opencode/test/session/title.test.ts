@@ -104,3 +104,17 @@ describe("markup is not a title", () => {
     expect(chooseTitle({ raw: "Как работает <div> в вёрстке", promptText: "", userText: "q" })).toContain("вёрстке")
   })
 })
+
+test("a control token WITH a payload is refused — the live case the first filter missed", () => {
+  const t = chooseTitle({
+    raw: '<tool_call>web_search{"query": "Osho woodcutter story cutting trees third level"}',
+    promptText: "",
+    userText: "найди историю про дровосека у Ошо",
+  })
+  expect(t).not.toContain("tool_call")
+  expect(t).not.toContain("{")
+  expect(t.toLowerCase()).toContain("дровосек")
+})
+test("a tag without a payload is still prose", () => {
+  expect(chooseTitle({ raw: "Как работает <div> в вёрстке", promptText: "", userText: "q" })).toContain("вёрстке")
+})

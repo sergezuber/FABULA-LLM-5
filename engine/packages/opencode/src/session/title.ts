@@ -77,7 +77,13 @@ export function chooseTitle(input: { raw: string; promptText?: string; userText?
   // Markup is not a title. Live, a session came back named `<tool_calls>` — the model emitted a control
   // token where prose was asked for, and it is too short for the echo test to reach. A title is something
   // a person reads; anything that is entirely a tag, or carries no letters at all, is not one.
-  const prose = (l: string) => /\p{L}/u.test(l) && !/^<[^>]*>?$/.test(l) && !/^\[[^\]]*\]?$/.test(l)
+  // A title is prose. The first version only refused a line that was ENTIRELY a tag, and the model
+  // promptly produced `<tool_call>web_search{"query": ...}` — a tag with a payload after it, which sailed
+  // through. An angle-bracket token together with a brace is machine output, never something a person
+  // would name a chat; either one alone is left alone, so "Как работает <div> в вёрстке" survives.
+  const machine = (l: string) => /<[^>\s]+>/.test(l) && /[{}]/.test(l)
+  const prose = (l: string) =>
+    /\p{L}/u.test(l) && !machine(l) && !/^<[^>]*>?$/.test(l) && !/^\[[^\]]*\]?$/.test(l)
   const own = lines.find((l) => prose(l) && !echoesPrompt(l, input.promptText ?? ""))
   return own ?? titleFromUser(input.userText ?? "")
 }

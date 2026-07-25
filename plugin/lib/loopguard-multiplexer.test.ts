@@ -17,7 +17,7 @@
 // a byte-identical result for byte-identical arguments proves zero new information. What it lacked was
 // letting that proof apply to every tool. This file pins that: detection by evidence, not by name.
 import { test, expect, describe } from "bun:test"
-import { LoopGuard, isIdempotent } from "./loopguard"
+import { LoopGuard, isIdempotent , isRetrievalTool, retrievalTargetOf} from "./loopguard"
 
 const SID = "ses_loop_mux"
 // the exact call from the wedged session
@@ -212,5 +212,32 @@ describe("the flat operation payload is repaired, not destroyed", () => {
     expect(toolSignature("task", { operation: { action: "list" } })).not.toBe(
       toolSignature("task", { operation: { action: "done", id: "T1" } }),
     )
+  })
+})
+
+// The measured walk-around (2026-07-25, session ses_065ee60bbffe…): the guard refused every web_search
+// exactly as designed, and the model kept the turn alive with web_fetch instead — REFUSED, fetch, fetch,
+// REFUSED, past step 33 and forty-two refusals. A bound that names one tool bounds one tool.
+describe("the budget bounds the ACTIVITY, not one tool name", () => {
+  test("fetching is retrieval too — it consumes the same per-turn budget", () => {
+    expect(isRetrievalTool("web_fetch")).toBe(true)
+    expect(isRetrievalTool("web_search")).toBe(true)
+    expect(isRetrievalTool("browser_navigate")).toBe(false) // named for navigation, not retrieval
+  })
+
+  test("an MCP server's own fetch is covered, whatever it is prefixed with", () => {
+    expect(isRetrievalTool("mcp__docs__fetch_page")).toBe(true)
+    expect(isRetrievalTool("mcp__web__search_internet")).toBe(true)
+  })
+
+  test("code search stays OUT — grepping the repo is not reaching outside", () => {
+    expect(isRetrievalTool("grep")).toBe(false)
+    expect(isRetrievalTool("codesearch")).toBe(false)
+  })
+
+  test("a fetch's URL is its query, so twenty pages read count as twenty attempts", () => {
+    expect(retrievalTargetOf({ url: "https://example.com/a" })).toBe("https://example.com/a")
+    expect(retrievalTargetOf({ query: "osho woodcutter" })).toBe("osho woodcutter")
+    expect(retrievalTargetOf({})).toBeUndefined() // unreadable schema → stay out of the way
   })
 })

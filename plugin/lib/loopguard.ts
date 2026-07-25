@@ -102,6 +102,32 @@ export function isWebSearchTool(tool: string): boolean {
   return /(^|[_-])search(es)?([_-]|$)/i.test(tool)
 }
 
+/**
+ * Fetching a page is the SAME activity as searching for one: reaching outside for information.
+ *
+ * MEASURED, and it is why a budget on `web_search` alone bought nothing (2026-07-25, session
+ * ses_065ee60bbffe…). The guard refused the searches exactly as designed, and the model simply walked
+ * around it — web_search REFUSED, web_fetch ok, web_fetch ok, web_search REFUSED, and round again, past
+ * step 33 and forty-two refusals, with no gate involved at all. The turn could not end because the door
+ * next to the locked one was standing open. A bound that names one tool bounds one tool; the activity is
+ * what has to be bounded, or the model just changes which verb it uses.
+ *
+ * The URL is the "query" for a fetch — distinct URLs consume the same per-turn budget as distinct
+ * queries, so twenty pages read is twenty attempts, whichever tool asked for them.
+ */
+export function isRetrievalTool(tool: string): boolean {
+  if (SEARCH_TOOLS.has(tool)) return false
+  return isWebSearchTool(tool) || /(^|[_-])fetch(es)?([_-]|$)|(^|[_-])(browse|crawl|scrape)([_-]|$)/i.test(tool)
+}
+
+/** What this retrieval call is asking for: a query, or the URL of a fetch. */
+export function retrievalTargetOf(args: any): string | undefined {
+  const q = searchQueryOf(args)
+  if (q !== undefined) return q
+  const u = args?.url ?? args?.uri ?? args?.link
+  return typeof u === "string" && u.trim() ? u.trim() : undefined
+}
+
 /** The query string of a search-like call, wherever the schema puts it. Undefined → unknown schema,
  *  stay out of the way (never block what we can't read). */
 export function searchQueryOf(args: any): string | undefined {

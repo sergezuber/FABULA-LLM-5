@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.19.0"
+export const FABULA_VERSION = "0.20.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.20.0",
+    date: "2026-07-25",
+    items: [
+      {
+        ru: "Поиск, который некуда продолжать, больше не может тянуться бесконечно. Ограничение стояло на поиске в интернете — и агент обходил его соседним инструментом: поиск запрещён, страница загружена, ещё одна, снова поиск, снова запрет, и так за тридцать третий шаг и сорок два отказа. Дверь заперли, а соседняя осталась открытой. Теперь ограничение считает не вызовы одного инструмента, а обращения наружу вообще: загруженная страница расходует тот же лимит, что и запрос. Поиск по вашему коду сюда не входит.",
+        en: "A search with nowhere left to go can no longer run on forever. The limit was set on web search — and the agent walked around it with the tool next to it: search refused, page fetched, another fetched, search again, refused again, on past step thirty-three and forty-two refusals. One door was locked and the one beside it stood open. The limit now counts reaching outside at all, not calls to one tool: a fetched page spends the same budget as a query. Searching your own code is not counted.",
+      },
+    ],
+  },
   {
     version: "0.19.0",
     date: "2026-07-25",

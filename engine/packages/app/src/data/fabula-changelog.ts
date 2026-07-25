@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.12.0"
+export const FABULA_VERSION = "0.13.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.13.0",
+    date: "2026-07-25",
+    items: [
+      {
+        ru: "Устранена причина зависаний, когда агент бесконечно повторял почти одинаковые запросы. Чтобы не раздувать контекст, часть инструментов скрывается из списка, а вызов скрытого перенаправляется к настоящему исполнителю. Перенаправление опиралось на кэш, который со временем вытесняется, — и после этого любой скрытый инструмент превращался в ловушку: модель звала его, получала ошибку вместо результата, переформулировала и звала снова. Теперь промах кэша стоит одного лишнего обращения, а не срыва задачи.",
+        en: "Fixed the cause of hangs where the agent endlessly repeated near-identical requests. To keep the context small some tools are hidden from the list, and a call to a hidden one is rerouted to its real executor. That rerouting relied on a cache that is evicted over time — after which every hidden tool became a trap: the model called it, got an error instead of a result, rephrased and called again. A cache miss now costs one extra roundtrip instead of derailing the task.",
+      },
+    ],
+  },
   {
     version: "0.12.0",
     date: "2026-07-25",

@@ -641,10 +641,21 @@ const live: Layer.Layer<
           // expand_tools dispatcher (its shadow executor runs the real tool with every hook
           // intact; the hidden schema never touches the prefix). Logged as the router's
           // missed-tool calibration signal.
-          if (tools["expand_tools"] && shadowFor(input.sessionID, failed.toolCall.toolName)) {
+          // The shadow map is a CACHE (per session, LRU-evicted), and a cache miss must not become a
+          // hard failure. It did: a hidden tool called by name in a session whose entry had been evicted
+          // — or in a CHILD session, because the parent lookup this function supports was never passed —
+          // fell through to `invalid`. The model then got an error instead of a result, rephrased, and
+          // called again; measured on a real session, 39 invalid dispatches and a search spiral that the
+          // loop guard could slow but not end. Route any hidden-but-named tool through the dispatcher:
+          // worst case it reports honestly in one roundtrip, which is the contract the router promises.
+          const hiddenByName = !tools[failed.toolCall.toolName]
+          if (tools["expand_tools"] && hiddenByName) {
             l.info("fabula-belt shadow-repair (missed-tool)", {
               tool: failed.toolCall.toolName,
               sessionID: input.sessionID,
+              // Distinguishes a cache HIT from the fallback, so the router's calibration signal stays
+              // readable: a rising miss count means the profile is wrong, not that dispatch is broken.
+              shadow: shadowFor(input.sessionID, failed.toolCall.toolName, input.parentSessionID) ? "hit" : "miss",
             })
             return {
               ...failed.toolCall,

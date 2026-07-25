@@ -199,3 +199,35 @@ describe("the shadow channel is bounded (W6)", () => {
     expect(shadowFor("ses_churn_0", "t")).toBeUndefined() // the quiet old ones were still released
   })
 })
+
+// A hidden tool called by name must reach its executor even when the per-session shadow entry is gone.
+// The shadow map is a CACHE with LRU eviction, and it was also consulted without the parent id it
+// supports — so a long-lived session or a child session lost every hidden tool: the call fell through to
+// the `invalid` placeholder, the model got an error instead of a result, rephrased, and called again.
+// Measured on a real session: 39 invalid dispatches and a search spiral the loop guard could slow but
+// not end. The decision below is what the dispatcher gates on, so it must not depend on the cache.
+describe("hidden-tool dispatch does not depend on the shadow cache", () => {
+  // Mirrors the guard in llm.ts experimental_repairToolCall.
+  const shouldDispatch = (tools: Record<string, unknown>, called: string) =>
+    Boolean(tools["expand_tools"]) && !tools[called]
+
+  test("a hidden tool is dispatched even with no shadow entry (evicted session)", () => {
+    expect(shouldDispatch({ expand_tools: {}, read: {} }, "recommend_LLM_apps")).toBe(true)
+  })
+
+  test("a VISIBLE tool is never rerouted — it executes normally", () => {
+    expect(shouldDispatch({ expand_tools: {}, read: {} }, "read")).toBe(false)
+  })
+
+  test("without the dispatcher there is nothing to reroute through", () => {
+    expect(shouldDispatch({ read: {} }, "recommend_LLM_apps")).toBe(false)
+  })
+
+  test("shadowFor consults the PARENT map, which is why the call site must pass the parent id", () => {
+    const child = "ses_child"
+    const parent = "ses_parent"
+    stashShadow(parent, new Map([["recommend_LLM_apps", { execute: async () => "ok" } as any]]))
+    expect(shadowFor(child, "recommend_LLM_apps")).toBeUndefined()
+    expect(shadowFor(child, "recommend_LLM_apps", parent)).toBeDefined()
+  })
+})

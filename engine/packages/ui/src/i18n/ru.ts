@@ -64,6 +64,7 @@ export const dict = {
   "ui.sessionTurn.status.gatheringThoughts": "Сбор мыслей",
   "ui.sessionTurn.status.consideringNextSteps": "Рассмотрение следующих шагов",
 
+  "ui.messagePart.steer.summary": "Служебная заметка",
   "ui.messagePart.questions.dismissed": "Вопросы отклонены",
   "ui.messagePart.compaction": "Сессия сжата",
   "ui.messagePart.compaction.running": "Сжатие контекста…",

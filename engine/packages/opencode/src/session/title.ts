@@ -20,3 +20,60 @@ export function plainTitle(raw: string): string {
   t = t.replace(/[*_`~]{2,}/g, "") // leftover runs from unpaired syntax
   return t.replace(/\s+/g, " ").trim()
 }
+
+// ── The title must be ABOUT the conversation ───────────────────────────────────────────────────────────
+//
+// Stripping syntax was never enough. The title call hands the model the agent's OWN system prompt
+// (llm.ts builds `system` from `input.agent.prompt`), then asks it to "Generate a title" — and the
+// acceptance code took the FIRST non-empty line with no check at all. Observed live: a session about an
+// Osho parable was titled `**Status**: success | partial | failed | blocked`, which is a line out of the
+// "Subagent return format" section of that very prompt. Removing the asterisks left the same defect
+// wearing cleaner clothes.
+//
+// The rule below is deterministic and general (no string is special-cased): a candidate that appears
+// VERBATIM in the text we sent is an echo of our own instructions, not a summary of the conversation.
+// Whatever the model quotes — this line or one nobody has seen yet — the same test catches it. When
+// nothing survives, the title is derived from the user's own words, which are always on topic.
+
+/** Fold to a comparison form: case, punctuation and spacing carry no meaning for "is this the same line". */
+function foldForCompare(s: string): string {
+  return String(s ?? "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+}
+
+/** Below this many folded characters a candidate is too short for a verbatim hit to mean anything: a
+ *  two-word title can collide with a long prompt by chance, and discarding a good title is the worse
+ *  error. Long candidates appearing word-for-word in what we sent are echoes, effectively always. */
+export const ECHO_MIN_CHARS = 14
+
+/** Does this candidate merely quote the instructions we sent the model? */
+export function echoesPrompt(candidate: string, promptText: string): boolean {
+  const c = foldForCompare(candidate)
+  if (c.length < ECHO_MIN_CHARS) return false
+  const p = foldForCompare(promptText)
+  if (!p) return false
+  return p.includes(c)
+}
+
+/** Last resort: the user's own opening words. Always about the conversation, by construction. */
+export function titleFromUser(userText: string, max = 60): string {
+  const t = plainTitle(String(userText ?? "").replace(/\s+/g, " "))
+  if (!t) return ""
+  if (t.length <= max) return t
+  const cut = t.slice(0, max)
+  const sp = cut.lastIndexOf(" ")
+  return (sp > max * 0.5 ? cut.slice(0, sp) : cut).trim() + "…"
+}
+
+/** Pick the title: the first model line that is not an echo of our own prompt, else the user's words. */
+export function chooseTitle(input: { raw: string; promptText?: string; userText?: string }): string {
+  const lines = String(input.raw ?? "")
+    .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+    .split("\n")
+    .map((l) => plainTitle(l))
+    .filter((l) => l.length > 0)
+  const own = lines.find((l) => !echoesPrompt(l, input.promptText ?? ""))
+  return own ?? titleFromUser(input.userText ?? "")
+}

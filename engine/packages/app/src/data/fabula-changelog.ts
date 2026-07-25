@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.16.0"
+export const FABULA_VERSION = "0.17.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,28 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.17.0",
+    date: "2026-07-25",
+    items: [
+      {
+        ru: "Фоновые проходы самообучения больше не отнимают модель у вас. Они запускались на первом шаге вашего же хода и потом работали всё время рядом с ним: на разобранном прогоне два прохода выдали 22 сообщения, пока вы ждали, а каждый запрос к модели простаивал в очереди в среднем 44 секунды (до 5 минут, очередь доходила до семи). Ничего не висело — всё стояло в очереди. Теперь такой проход ждёт, пока машина освободится, и пропускается совсем, если тишины так и не наступило.",
+        en: "Background self-improvement passes no longer take the model away from you. They were started at the first step of your own turn and then ran alongside it the whole time: on the run we traced, two passes produced 22 messages while you waited, and every request to the model spent an average of 44 seconds queueing (up to five minutes, with the queue reaching seven deep). Nothing was hung — everything was queued. Such a pass now waits for the machine to go quiet, and is skipped entirely if quiet never comes.",
+      },
+      {
+        ru: "Название чата больше не может оказаться строкой из служебных инструкций. Модель, которую просят придумать название, получает вместе с просьбой собственные инструкции — и однажды процитировала строку оттуда: чат про притчу Ошо назывался «Status: success | partial | failed | blocked». Прошлая правка сняла звёздочки и на этом остановилась. Теперь название, дословно повторяющее то, что мы отправили, отбрасывается, а если подходящего не нашлось — берутся первые слова вашего сообщения.",
+        en: "A chat name can no longer turn out to be a line of internal instructions. The model asked to invent a name is handed its own instructions along with the request, and once quoted a line straight back: a chat about an Osho parable was called 'Status: success | partial | failed | blocked'. The previous change removed the asterisks and stopped there. A name that repeats what we sent word-for-word is now discarded, and if nothing suitable is left, the opening words of your message are used.",
+      },
+      {
+        ru: "Служебные замечания надзора больше не выглядят как поломка. Когда обвязка останавливает бесконечный поиск, она пишет указание модели — и это указание показывалось вам красной карточкой ошибки, хотя всё работало правильно. Теперь такие замечания сложены под спойлер «Служебная заметка».",
+        en: "Supervision notes no longer look like breakage. When the harness stops a runaway search it writes an instruction to the model — and that instruction was shown to you as a red error card, although everything was working correctly. Such notes now sit folded under a 'Harness note' spoiler.",
+      },
+      {
+        ru: "Поиск в интернете без запроса больше не отчитывается успехом. Модель однажды передала поиску адрес страницы вместо слов — поиск отправил в запрос слово «undefined», ничего не нашёл и доложил, что всё прошло хорошо. Теперь он прямо говорит, чего не хватает, и подсказывает нужный инструмент.",
+        en: "A web search with no query no longer reports success. The model once handed the search a page address instead of words — the search sent the literal word 'undefined', found nothing, and reported that all was well. It now says plainly what is missing and names the right tool.",
+      },
+    ],
+  },
   {
     version: "0.16.0",
     date: "2026-07-25",

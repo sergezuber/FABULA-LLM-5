@@ -77,6 +77,7 @@ export const dict: Record<string, string> = {
   "ui.messagePart.title.write": "Write",
   "ui.messagePart.option.typeOwnAnswer": "Type your own answer",
   "ui.messagePart.review.title": "Review your answers",
+  "ui.messagePart.steer.summary": "Harness note",
   "ui.messagePart.questions.dismissed": "Questions dismissed",
   "ui.messagePart.compaction": "Session compacted",
   "ui.messagePart.compaction.running": "Compacting context…",

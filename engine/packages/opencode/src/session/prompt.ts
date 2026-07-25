@@ -1,5 +1,6 @@
 import path from "path"
-import { plainTitle } from "./title"
+import { chooseTitle } from "./title"
+import { foregroundBusy, waitExpired, POLL_MS } from "./background-defer"
 import os from "os"
 import z from "zod"
 import { SessionID, MessageID, PartID } from "./schema"
@@ -430,13 +431,18 @@ export const layer = Layer.effect(
           Stream.mkString,
           Effect.orDie,
         )
-      const cleaned = plainTitle(
-        text
-          .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
-          .split("\n")
-          .map((line) => line.trim())
-          .find((line) => line.length > 0) ?? "",
-      )
+      // The call above is handed the agent's own system prompt, so "the first non-empty line" is not a
+      // title — it is whatever the model emitted first, and live that was a line quoted out of those very
+      // instructions. chooseTitle discards any line appearing verbatim in what we sent and falls back to
+      // the user's own opening words, which cannot be off-topic.
+      const cleaned = chooseTitle({
+        raw: text,
+        promptText: ag.prompt ?? "",
+        userText: firstUser.parts
+          .filter((pt): pt is MessageV2.TextPart => pt.type === "text")
+          .map((pt) => pt.text)
+          .join(" "),
+      })
       if (!cleaned) return
       const t = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
       yield* sessions
@@ -3033,11 +3039,29 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             // trigger actually fires. Detached fire-and-forget on the full runtime.
             if (dreamTrigger || distillTrigger) {
               const { AppRuntime } = yield* Effect.promise(() => import("@/effect/app-runtime"))
+              // The trigger is decided here — at STEP 1 of the user's own turn — but the WORK waits for the
+              // machine to go quiet. Running it here is what put 22 background messages alongside a live turn
+              // and 44s of average queueing in front of every request; see background-defer.ts. A pass that
+              // never finds a quiet moment is SKIPPED, not forced: its trigger fires again on a later turn.
+              const awaitQuiet = (own: string[], label: string) =>
+                Effect.gen(function* () {
+                  let waited = 0
+                  while (foregroundBusy(yield* status.list(), own)) {
+                    if (waitExpired(waited)) {
+                      log.info("background pass skipped — foreground never went quiet", { pass: label, waitedMs: waited })
+                      return false
+                    }
+                    yield* Effect.sleep(POLL_MS)
+                    waited += POLL_MS
+                  }
+                  return true
+                })
               if (dreamTrigger) {
                 AppRuntime.runPromise(
                   Session.Service.use((svc) =>
                     Effect.gen(function* () {
                       const s = yield* svc.create({ title: AUTO_DREAM_TITLE })
+                      if (!(yield* awaitQuiet([s.id], "auto-dream"))) return
                       const sp = yield* Service
                       yield* sp.prompt({ sessionID: s.id, agent: "dream", model: mdl, parts: [{ type: "text", text: DREAM_TASK }] })
                     }),
@@ -3049,6 +3073,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   Session.Service.use((svc) =>
                     Effect.gen(function* () {
                       const s = yield* svc.create({ title: AUTO_DISTILL_TITLE })
+                      if (!(yield* awaitQuiet([s.id], "auto-distill"))) return
                       const sp = yield* Service
                       yield* sp.prompt({ sessionID: s.id, agent: "distill", model: mdl, parts: [{ type: "text", text: DISTILL_TASK }] })
                     }),

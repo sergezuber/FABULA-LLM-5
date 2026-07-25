@@ -40,6 +40,7 @@ import { Collapsible } from "./collapsible"
 import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
 import { ToolErrorCard } from "./tool-error-card"
+import { isSteer, steerText } from "./harness-steer"
 import { Checkbox } from "./checkbox"
 import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
@@ -1396,6 +1397,22 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
                       {i18n.t("ui.messagePart.questions.dismissed")}
                     </span>
                   </div>
+                )
+              }
+              // A harness STEER is not a tool failure. The guards stop a call by throwing (the only
+              // channel a before-hook has), so the engine files it under "error" — and rendering every
+              // such state red meant a search loop being correctly stopped looked like the app breaking,
+              // with instructions written for the model on show. Marked at the source (plugin/lib/
+              // steer.ts) rather than guessed here, because "ENOENT: no such file" has the same shape as
+              // "LOOP BLOCKED:" and a heuristic wide enough to catch ours would bury real failures.
+              if (isSteer(cleaned)) {
+                return (
+                  <details data-slot="harness-steer" class="text-13-regular text-text-weak">
+                    <summary class="cursor-pointer select-none">
+                      {i18n.t("ui.messagePart.steer.summary")}
+                    </summary>
+                    <div class="mt-1 whitespace-pre-wrap">{steerText(cleaned)}</div>
+                  </details>
                 )
               }
               return (

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { plainTitle } from "../../src/session/title"
+import { plainTitle, chooseTitle } from "../../src/session/title"
 
 describe("plainTitle", () => {
   test("strips the emphasis that was showing up literally in the sidebar", () => {
@@ -32,5 +32,61 @@ describe("plainTitle", () => {
     expect(plainTitle("Rename user_id to account_id")).toBe("Rename user_id to account_id")
     expect(plainTitle("2 * 3 = 6")).toBe("2 * 3 = 6") // a lone asterisk is arithmetic, not emphasis
     expect(plainTitle("")).toBe("")
+  })
+})
+
+// The live defect, verbatim. Session ses_06667e96cffeM9816ZyStjYEGU asked about an Osho parable and was
+// listed as "Status: success | partial | failed | blocked" — line 179 of session/llm.ts, i.e. the model
+// quoting the very instructions the title call hands it. Stripping the asterisks left it intact.
+describe("chooseTitle", () => {
+  const AGENT_PROMPT = [
+    "## Subagent return format",
+    "",
+    "When you finish your task, your final assistant message will be delivered to the spawning agent.",
+    "",
+    "  **Status**: success | partial | failed | blocked",
+    "  **Summary**: one paragraph",
+  ].join("\n")
+  const USER = "я читал в одной из книг ОШО историю про дровосека. найди эту историю"
+
+  test("a line quoted out of our own prompt is refused; the user's words are used instead", () => {
+    const t = chooseTitle({ raw: "**Status**: success | partial | failed | blocked", promptText: AGENT_PROMPT, userText: USER })
+    expect(t).not.toContain("success | partial")
+    expect(t.toLowerCase()).toContain("ошо")
+  })
+
+  test("a real title is kept untouched", () => {
+    expect(chooseTitle({ raw: "Ошо: притча про дровосека", promptText: AGENT_PROMPT, userText: USER })).toBe(
+      "Ошо: притча про дровосека",
+    )
+  })
+
+  test("an echoed FIRST line does not cost a good SECOND one", () => {
+    const t = chooseTitle({
+      raw: "**Status**: success | partial | failed | blocked\nОшо: притча про дровосека",
+      promptText: AGENT_PROMPT,
+      userText: USER,
+    })
+    expect(t).toBe("Ошо: притча про дровосека")
+  })
+
+  test("a short title is never refused by a chance collision with a long prompt", () => {
+    // "task" occurs in the prompt above; a two-word title must survive it.
+    expect(chooseTitle({ raw: "Task list", promptText: AGENT_PROMPT, userText: USER })).toBe("Task list")
+  })
+
+  test("nothing usable at all → the user's opening words, trimmed at a word boundary", () => {
+    const t = chooseTitle({ raw: "", promptText: AGENT_PROMPT, userText: USER })
+    expect(t.length).toBeLessThanOrEqual(61)
+    expect(t).not.toBe("")
+    expect(t.toLowerCase()).toContain("ошо")
+  })
+
+  test("no user text either → empty, and the caller keeps the existing name", () => {
+    expect(chooseTitle({ raw: "", promptText: AGENT_PROMPT, userText: "" })).toBe("")
+  })
+
+  test("malformed input never throws", () => {
+    expect(() => chooseTitle({} as any)).not.toThrow()
   })
 })

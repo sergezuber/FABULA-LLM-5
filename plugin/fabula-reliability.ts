@@ -12,6 +12,7 @@
 
 import type { Plugin } from "@mimo-ai/plugin"
 import { gate } from "./lib/manage"
+import { asSteer } from "./lib/steer"
 import { decideExhausted } from "./lib/exhausted"
 import { dropSessionChannels } from "./lib/beltwire"
 import { tool } from "@mimo-ai/plugin"
@@ -154,7 +155,7 @@ export const FabulaReliability: Plugin = async (pluginInput?: any) => gate("reli
     // (matches every line → dumps the tree → context bloat) that varies by path and so slips past the
     // signature-based peekBlock below. Reject before execution → no flood, model gets a corrective error.
     const searchBlock = guard.peekSearch(sid, tool, args)
-    if (searchBlock) { await emitPing(sid, "blocked", `blocked: ${tool} search-thrash`, "octagonal_sign"); throw new Error(searchBlock.guidance) }
+    if (searchBlock) { await emitPing(sid, "blocked", `blocked: ${tool} search-thrash`, "octagonal_sign"); throw new Error(asSteer(searchBlock.guidance)) }
     const block = guard.peekBlock(sid, tool, args)
     if (block) {
       await emitPing(sid, "blocked", `blocked: ${tool} ${pingTarget(args)} (repeated)`, "octagonal_sign")
@@ -174,7 +175,7 @@ export const FabulaReliability: Plugin = async (pluginInput?: any) => gate("reli
           `this turn. Take a DIFFERENT next action now — use the data already in context, or a different tool.`
         return
       }
-      throw new Error(block.guidance)
+      throw new Error(asSteer(block.guidance))
     }
     if (!output) return
     // actor ONLY: reshape into a strict-VALID `{operation:{…}}`. The engine validates the model's args with the ORIGINAL

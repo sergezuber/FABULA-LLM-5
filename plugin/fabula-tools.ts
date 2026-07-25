@@ -174,16 +174,28 @@ export const FabulaTools: Plugin = async () => {
       web_search: tool({
         description: "Search the web",
         args: { query: z.string().describe("Search query") },
-        async execute(args) {
-          const u = `${SEARXNG}/search?q=${encodeURIComponent(args.query)}&format=json&safesearch=0`
+        async execute(args: any) {
+          // A search with no query cannot search. Observed live: the model handed web_search the
+          // arguments of web_fetch ({url, format}), `query` arrived undefined, the call searched for
+          // the literal string "undefined" and reported COMPLETED — a wasted round trip dressed as a
+          // success, on a turn where every round trip cost a full prefill. Any model in the socket can
+          // misroute a call; the tool is what has to notice.
+          const q = typeof args?.query === "string" ? args.query.trim() : ""
+          if (!q) {
+            const url = typeof args?.url === "string" ? args.url.trim() : ""
+            return url
+              ? `web_search needs a \`query\`; you passed a \`url\`, which is web_fetch's argument. Call web_fetch with url="${url}" to read that page, or call web_search with the words to look for.`
+              : "web_search needs a non-empty `query` — the words to look for. Nothing was searched."
+          }
+          const u = `${SEARXNG}/search?q=${encodeURIComponent(q)}&format=json&safesearch=0`
           const r = await fetchWithTimeout(u)
           if (!r.ok) return `web_search error: SearXNG HTTP ${r.status} (is SearXNG up on ${SEARXNG} with JSON format enabled?)`
           const data: any = await r.json()
           const results = (data.results || []).slice(0, 8)
-          if (!results.length) return `No results for "${args.query}".`
+          if (!results.length) return `No results for "${q}".`
           const lines = results.map((x: any, i: number) =>
             `${i + 1}. ${x.title}\n   ${x.url}\n   ${(x.content || "").replace(/\s+/g, " ").slice(0, 280)}`)
-          return { output: `Results for "${args.query}":\n\n${lines.join("\n\n")}`, metadata: { count: results.length } }
+          return { output: `Results for "${q}":\n\n${lines.join("\n\n")}`, metadata: { count: results.length } }
         },
       }),
 

@@ -146,3 +146,28 @@ describe("harnessBlocked — exhausted vs unfinished", () => {
     expect(trajectoryFeatures(short as any).harnessBlocked).toBe(trajectoryFeatures(long as any).harnessBlocked)
   })
 })
+
+// Measured on the live app: even a turn that delivered its answer showed gate {"g":"goal","fired":1} —
+// the judge sent it back. When the harness itself has refused further calls there is nothing left to buy.
+describe("an exhausted turn ends", () => {
+  const ask = { role: "user" as const, parts: [{ type: "text" as const }] }
+  const ok = (t: string) => ({ role: "assistant" as const, parts: [{ type: "tool" as const, tool: t }] })
+  const refused = { role: "assistant" as const, parts: [{ type: "tool" as const, tool: "web_search", error: "[fabula-steer] LOOP BLOCKED: budget" }] }
+  const text = { role: "assistant" as const, parts: [{ type: "text" as const, text: "here is what I found" }] }
+
+  test("searched, was REFUSED, then answered → the stop is honored", () => {
+    expect(goalStopLayerFires({ auto: true, messages: [ask, ok("web_search"), refused, text] as any })).toBe(true)
+  })
+
+  test("the book case is untouched: reads all SUCCEEDED, so it still reaches the judge", () => {
+    expect(goalStopLayerFires({ auto: true, messages: [ask, ok("read"), ok("read"), text] as any })).toBe(false)
+  })
+
+  test("refused but said NOTHING → still reaches the judge", () => {
+    expect(goalStopLayerFires({ auto: true, messages: [ask, refused] as any })).toBe(false)
+  })
+
+  test("explicit /goal is never short-circuited, exhausted or not", () => {
+    expect(goalStopLayerFires({ auto: false, messages: [ask, refused, text] as any })).toBe(false)
+  })
+})

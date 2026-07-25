@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.21.0"
+export const FABULA_VERSION = "0.22.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.22.0",
+    date: "2026-07-25",
+    items: [
+      {
+        ru: "Ход, которому больше некуда идти, завершается сразу. Проверяющий слой возвращал агента к работе даже после готового ответа — по записи решений видно, как он срабатывал. Теперь так: если обвязка сама запретила агенту продолжать и он всё-таки написал ответ, значит сказано всё, что он в состоянии сказать, и ход закрывается. Задача, где инструменты отработали успешно и работа правда осталась, по-прежнему проверяется как раньше.",
+        en: "A turn with nowhere left to go now ends at once. The checking layer sent the agent back to work even after a delivered answer — the decision record shows it firing. Now: if the harness itself refused the agent further calls and it still wrote an answer, everything it is able to say has been said, and the turn closes. A task whose tools succeeded and whose work genuinely remains is still checked as before.",
+      },
+      {
+        ru: "Название чата не может быть разметкой. Одна сессия получила имя «<tool_calls>» — модель выдала служебный токен там, где просили обычные слова, и он был слишком коротким, чтобы прежняя проверка его заметила. Теперь имя, состоящее из тега или скобок либо вовсе без букв, отбрасывается.",
+        en: "A chat name cannot be markup. One session was named '<tool_calls>' — the model emitted a control token where plain words were asked for, and it was too short for the previous check to notice. A name that is a tag, a bracketed marker, or carries no letters at all is now discarded.",
+      },
+    ],
+  },
   {
     version: "0.21.0",
     date: "2026-07-25",

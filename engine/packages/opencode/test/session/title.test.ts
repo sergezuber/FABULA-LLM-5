@@ -90,3 +90,17 @@ describe("chooseTitle", () => {
     expect(() => chooseTitle({} as any)).not.toThrow()
   })
 })
+
+describe("markup is not a title", () => {
+  test("a control token the model emitted instead of prose is refused", () => {
+    const t = chooseTitle({ raw: "<tool_calls>", promptText: "", userText: "найди историю про дровосека" })
+    expect(t).not.toContain("tool_calls")
+    expect(t.toLowerCase()).toContain("дровосек")
+  })
+  test("a bracketed marker line is refused too", () => {
+    expect(chooseTitle({ raw: "[thinking]", promptText: "", userText: "про басни и притчи" })).not.toContain("[")
+  })
+  test("real prose containing a tag-like word survives", () => {
+    expect(chooseTitle({ raw: "Как работает <div> в вёрстке", promptText: "", userText: "q" })).toContain("вёрстке")
+  })
+})

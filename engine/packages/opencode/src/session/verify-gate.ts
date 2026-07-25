@@ -232,7 +232,16 @@ export function goalStopLayerFires(input: { auto: boolean; messages: readonly Sc
   // judge's job under its comparative framing (arXiv:2510.08517) — the open work is that the judge called
   // the research answer insufficient, plus the fact that a re-entry arrives AFTER the reader has already
   // been shown the text as final. Neither is fixed by moving this predicate.
-  return input.auto === true && answerIsTerminal(input.messages) && !sessionShowsTaskEvidence(input.messages)
+  if (input.auto !== true) return false
+  if (!answerIsTerminal(input.messages)) return false
+  // EXHAUSTED is not UNFINISHED, and this is the one place the difference is decidable without reading
+  // meaning. When the harness itself has refused further calls and the turn still produced text, the
+  // agent has said everything it is ABLE to say — sending it back cannot buy anything, and the reader has
+  // already been shown that text as the answer. The book-analysis case (2026-07-21) is untouched: its
+  // reads all SUCCEEDED, so nothing was refused and it still reaches the judge.
+  const f = trajectoryFeatures(input.messages)
+  if (f.harnessBlocked > 0 && turnProducedText(input.messages)) return true
+  return !sessionShowsTaskEvidence(input.messages)
 }
 
 

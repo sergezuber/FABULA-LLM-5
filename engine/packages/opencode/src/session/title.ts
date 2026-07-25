@@ -74,6 +74,10 @@ export function chooseTitle(input: { raw: string; promptText?: string; userText?
     .split("\n")
     .map((l) => plainTitle(l))
     .filter((l) => l.length > 0)
-  const own = lines.find((l) => !echoesPrompt(l, input.promptText ?? ""))
+  // Markup is not a title. Live, a session came back named `<tool_calls>` — the model emitted a control
+  // token where prose was asked for, and it is too short for the echo test to reach. A title is something
+  // a person reads; anything that is entirely a tag, or carries no letters at all, is not one.
+  const prose = (l: string) => /\p{L}/u.test(l) && !/^<[^>]*>?$/.test(l) && !/^\[[^\]]*\]?$/.test(l)
+  const own = lines.find((l) => prose(l) && !echoesPrompt(l, input.promptText ?? ""))
   return own ?? titleFromUser(input.userText ?? "")
 }

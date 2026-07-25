@@ -78,7 +78,24 @@ export function languageSteer(userText: string): string {
   const d = dominantScript(userText)
   if (!d) return ""
   return (
-    `\n\n[Write the entire answer in ${scriptName(d)} — every heading, every sentence. Do not splice words ` +
-    `or phrases from another language into it. Technical terms, names and code may stay as they are.]`
+    `\n\n[Write the entire answer in ${scriptName(d)} — every heading, every sentence, every word. Sources ` +
+    `you read may be in other languages; carry over their MEANING, never their characters. Before you emit ` +
+    `each sentence, check it contains no Chinese, Japanese, Korean or Arabic characters. Latin-script ` +
+    `technical terms, product names, URLs and code identifiers are the only exception.]`
+  )
+}
+
+/** The same pin as a standing posture line, for the system channel. A single channel is a single point of
+ *  failure: measured live, the user-turn steer alone left three Chinese characters in a 1929-character
+ *  Russian answer — obeyed for 1926 of them, which is a steer behaving like a steer. Stating the rule in
+ *  BOTH channels is what the project's other pins (date, freshness) already do. */
+export function languagePosture(userText: string): string {
+  const d = dominantScript(userText)
+  if (!d) return ""
+  return (
+    `LANGUAGE: this conversation is in ${scriptName(d)}. Every answer you write is in ${scriptName(d)} ` +
+    `throughout. Never emit Chinese, Japanese, Korean or Arabic characters in it, not even inside a ` +
+    `single word or phrase, however natural the term feels — translate the idea instead. Latin-script ` +
+    `technical terms, names, URLs and code identifiers are the only exception.`
   )
 }

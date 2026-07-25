@@ -5,8 +5,12 @@
 
 import type { Plugin } from "@mimo-ai/plugin"
 import { isEnabled } from "./lib/manage"
-import { languageSteer } from "./lib/langsteer"
+import { languageSteer, languagePosture } from "./lib/langsteer"
 import { pinAwareTruncate } from "./lib/memserve"
+
+/** The language pin for the turn in flight, handed from the user-turn hook to the system-prompt hook.
+ *  Module-scoped because the two hooks share no argument; last write wins, which is the current turn. */
+let LAST_LANGUAGE_PIN = ""
 import { promises as fs, realpathSync } from "node:fs"
 import * as path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -106,6 +110,11 @@ export const FabulaContext: Plugin = async (input: any) => {
   const dir = input?.directory || process.cwd()
   return {
     "experimental.chat.system.transform": async (_i: any, output: any) => {
+      try {
+        if (LAST_LANGUAGE_PIN && Array.isArray(output?.system) && !output.system.some((x: any) => String(x).startsWith("LANGUAGE:"))) {
+          output.system.push(LAST_LANGUAGE_PIN)
+        }
+      } catch { /* never break a turn over the language pin */ }
       if (!output || !Array.isArray(output.system)) return
       // THE CURRENT DATE, computed at turn time — not baked into the prompt file. A hardcoded date in
       // system-prompt.md ("Tuesday, June 09, 2026") made the model believe that was today, so a request
@@ -191,7 +200,12 @@ export const FabulaContext: Plugin = async (input: any) => {
         // the harness pins the language deterministically on EVERY turn instead of hoping a prompt line is
         // read. Silent when the language is unclear — it never guesses.
         if (!String(textPart.text).includes("[Write the entire answer in ")) {
-          textPart.text += languageSteer(String(textPart.text))
+          const rawAsk = String(textPart.text)
+          textPart.text += languageSteer(rawAsk)
+          // Hand the same pin to the SYSTEM channel. One channel is one point of failure: measured live,
+          // the user-turn steer alone was obeyed for 1926 characters of a 1929-character answer and
+          // slipped on three. Every other pin here (date, freshness) states its rule in both places.
+          LAST_LANGUAGE_PIN = languagePosture(rawAsk)
         }
         
         const t = String(textPart.text).toLowerCase()

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.20.0"
+export const FABULA_VERSION = "0.21.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.21.0",
+    date: "2026-07-25",
+    items: [
+      {
+        ru: "Требование писать на языке вопроса теперь стоит в двух местах сразу — и в самом обращении, и в постоянных указаниях. С одним каналом оно выполнялось почти полностью: на ответе в 1929 символов проскочило три иероглифа. Один канал — одна точка отказа; так же продублированы все прочие постоянные указания.",
+        en: "The requirement to write in the language of the question is now stated in two places at once — in the request itself and in the standing instructions. With one channel it was followed almost completely: three foreign characters slipped into a 1929-character answer. One channel is one point of failure; every other standing instruction is stated twice for the same reason.",
+      },
+    ],
+  },
   {
     version: "0.20.0",
     date: "2026-07-25",

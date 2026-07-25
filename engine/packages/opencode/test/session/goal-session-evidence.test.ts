@@ -171,3 +171,34 @@ describe("an exhausted turn ends", () => {
     expect(goalStopLayerFires({ auto: false, messages: [ask, refused, text] as any })).toBe(false)
   })
 })
+
+// The wiring, not the logic. The rule was correct and shipped DEAD: the refusal was mapped into
+// `metadata` while isHarnessSteer reads it on the part. It type-checked, and a live turn with 22 refusals
+// still recorded stopLayer:false. This drives the shape the ENGINE actually builds.
+describe("the refusal reaches the rule from the engine's own part shape", () => {
+  const ask = { role: "user" as const, parts: [{ type: "text" as const }] }
+  const enginePart = (state: any) => ({
+    type: "tool", tool: "web_search", synthetic: undefined,
+    metadata: { passed: state?.metadata?.passed, autoRewind: undefined, notDone: undefined },
+    error: state?.error, input: { command: undefined },
+  })
+  const refusedTurn = [
+    ask,
+    { role: "assistant" as const, parts: [enginePart({ error: "[fabula-steer] LOOP BLOCKED: budget" })] },
+    { role: "assistant" as const, parts: [{ type: "text" as const, text: "here is what I found" }] },
+  ]
+
+  test("a refusal carried on the PART is seen", () => {
+    expect(trajectoryFeatures(refusedTurn as any).harnessBlocked).toBe(1)
+    expect(goalStopLayerFires({ auto: true, messages: refusedTurn as any })).toBe(true)
+  })
+
+  test("the same refusal buried in metadata is NOT seen — the exact bug, pinned", () => {
+    const buried = [
+      ask,
+      { role: "assistant" as const, parts: [{ type: "tool", tool: "web_search", metadata: { error: "[fabula-steer] LOOP BLOCKED" } }] },
+      { role: "assistant" as const, parts: [{ type: "text" as const, text: "x" }] },
+    ]
+    expect(trajectoryFeatures(buried as any).harnessBlocked).toBe(0)
+  })
+})

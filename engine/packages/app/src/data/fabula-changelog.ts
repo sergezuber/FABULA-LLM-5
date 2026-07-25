@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.22.0"
+export const FABULA_VERSION = "0.23.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.23.0",
+    date: "2026-07-25",
+    items: [
+      {
+        ru: "Правило «ходу некуда идти — закрываем» наконец получает нужные ему сведения. Оно было написано верно и не работало: признак запрета клался в соседнее поле, не то, из которого правило читает. Всё сходилось по типам, ошибок не было, а на живом ходу с двадцатью двумя запретами решение всё равно принималось как будто запретов нет. Теперь признак лежит там, где его читают.",
+        en: "The rule that closes a turn with nowhere left to go finally gets the fact it needs. It was written correctly and did nothing: the refusal flag was placed in the field next to the one the rule reads. It type-checked, raised no error, and on a live turn with twenty-two refusals the decision was still made as though there had been none. The flag now sits where it is read.",
+      },
+    ],
+  },
   {
     version: "0.22.0",
     date: "2026-07-25",

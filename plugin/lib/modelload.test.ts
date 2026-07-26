@@ -5,8 +5,8 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
-import { rmSync } from "node:fs"
-import { ensureLoadedAtPlannedWindow, readServed, residentsOther } from "./modelload"
+import { rmSync, writeFileSync, readFileSync } from "node:fs"
+import { ensureLoadedAtPlannedWindow, readServed, residentsOther, syncEngineLimit } from "./modelload"
 
 const GIB = 1024 ** 3
 const STORE = join(tmpdir(), `kvcost-test-${process.pid}.json`)
@@ -123,5 +123,43 @@ describe("never throws", () => {
     server = Bun.serve({ port: 0, fetch: () => new Response("not json") })
     process.env.FABULA_MODEL_API = `http://127.0.0.1:${server.port}/x`
     await expect(ensureLoadedAtPlannedWindow("kat")).resolves.toBeTruthy()
+  })
+})
+
+describe("the engine's own limit follows the measured window", () => {
+  const CFG = join(tmpdir(), `cfg-${process.pid}.json`)
+  const write = (ctx: number) =>
+    writeFileSync(CFG, JSON.stringify({ provider: { lmstudio: { models: { kat: { limit: { context: ctx, output: 8000 } } } } } }))
+
+  afterEach(() => rmSync(CFG, { force: true }))
+
+  test("a config half the real window is corrected — measured live at 131072 against 262144", () => {
+    write(131072)
+    const r = syncEngineLimit(CFG, "kat", 262144)
+    expect(r.changed).toBe(true)
+    expect(r.from).toBe(131072)
+    expect(JSON.parse(readFileSync(CFG, "utf8")).provider.lmstudio.models.kat.limit.context).toBe(262144)
+  })
+
+  test("the output half of the limit is untouched — the engine refuses to start without both", () => {
+    write(131072)
+    syncEngineLimit(CFG, "kat", 262144)
+    expect(JSON.parse(readFileSync(CFG, "utf8")).provider.lmstudio.models.kat.limit.output).toBe(8000)
+  })
+
+  test("an already-correct config is not rewritten", () => {
+    write(262144)
+    expect(syncEngineLimit(CFG, "kat", 262144).changed).toBe(false)
+  })
+
+  test("no measured window → nothing is written; it can never invent a limit", () => {
+    write(131072)
+    expect(syncEngineLimit(CFG, "kat", 0).changed).toBe(false)
+    expect(JSON.parse(readFileSync(CFG, "utf8")).provider.lmstudio.models.kat.limit.context).toBe(131072)
+  })
+
+  test("a missing or broken config is reported, never thrown", () => {
+    expect(syncEngineLimit("/nope/nothing.json", "kat", 262144).changed).toBe(false)
+    expect(() => syncEngineLimit("/nope/nothing.json", "kat", 262144)).not.toThrow()
   })
 })

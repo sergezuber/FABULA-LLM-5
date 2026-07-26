@@ -14,7 +14,7 @@
 // number.
 
 import { gate } from "./lib/manage"
-import { ensureLoadedAtPlannedWindow } from "./lib/modelload"
+import { ensureLoadedAtPlannedWindow, syncEngineLimit } from "./lib/modelload"
 
 export const FabulaWindow = async () =>
   gate("window", {
@@ -31,6 +31,15 @@ export const FabulaWindow = async () =>
         const r = await ensureLoadedAtPlannedWindow(id)
         // The engine log is the channel a maintainer reads; the reader of the chat never sees this.
         console.error(`[fabula-window] ${id}: ${r.acted ? "LOADED" : "no action"} — ${r.reason}`)
+        // The engine keeps its OWN idea of the window in the launch config and prunes against it. That
+        // figure is typed too, and measured on this machine it was wrong by half — 131072 written down
+        // while the model served 262144, so the engine was discarding conversation at the midpoint of a
+        // window it actually had. Nothing warns about that: both numbers look reasonable alone.
+        const cfg = process.env.MIMOCODE_CONFIG
+        if (cfg && r.window > 0) {
+          const sync = syncEngineLimit(cfg, id, r.window)
+          if (sync.changed) console.error(`[fabula-window] ${sync.reason}; applies from the next engine start`)
+        }
       } catch (e) {
         console.error(`[fabula-window] skipped: ${String(e)}`)
       }

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.27.0"
+export const FABULA_VERSION = "0.28.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.28.0",
+    date: "2026-07-26",
+    items: [
+      {
+        ru: "FABULA больше не выбрасывает половину разговора раньше времени. В настройках отдельно хранилось её собственное представление о размере контекста, и оно тоже было вписано руками — на этой машине там стояло 131072, пока модель работала на 262144. То есть разговор сокращался на середине окна, которое было в наличии, и ни одно из двух чисел по отдельности не выглядело подозрительно. Теперь эта цифра приводится к измеренному окну при смене модели и применяется со следующего запуска.",
+        en: "FABULA no longer throws half a conversation away ahead of time. Its own idea of the context size was kept separately in the settings and was typed by hand as well — on this machine it said 131072 while the model was serving 262144. Conversations were being cut at the midpoint of a window that was actually there, and neither number looked wrong on its own. That figure is now brought into line with the measured window when you switch models, and applies from the next start.",
+      },
+    ],
+  },
   {
     version: "0.27.0",
     date: "2026-07-26",

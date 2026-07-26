@@ -246,3 +246,43 @@ export async function ensureLoadedAtPlannedWindow(
     inFlight.delete(modelId)
   }
 }
+
+/**
+ * Bring the engine's own idea of the window into line with what is actually loaded.
+ *
+ * The engine keeps a `limit.context` per model in its config and prunes and compacts against it. That
+ * figure is typed by hand, so it is the same defect one layer up — and measured on this machine it was
+ * WRONG BY HALF: the config said 131072 while the model was serving 262144, so the engine was throwing
+ * conversation away at the halfway mark of a window it actually had. Nothing warns about this: both
+ * numbers look reasonable on their own.
+ *
+ * Written by the machine from a live reading, never authored — and only ever to match the measured
+ * window, so it cannot invent a limit the model does not have. The engine reads its config at startup,
+ * so the corrected figure applies from the next start; a stale entry costs pruning headroom, never
+ * correctness, which is why this does not force a restart.
+ */
+export function syncEngineLimit(configPath: string, modelId: string, window: number): { changed: boolean; from?: number; reason: string } {
+  if (!(window > 0)) return { changed: false, reason: "no measured window to sync from" }
+  try {
+    const raw = readFileSync(configPath, "utf8")
+    const cfg = JSON.parse(raw)
+    const providers = cfg?.provider ?? {}
+    let from: number | undefined
+    let changed = false
+    for (const p of Object.values<any>(providers)) {
+      const m = p?.models?.[modelId]
+      if (!m?.limit) continue
+      if (Number(m.limit.context) === window) continue
+      from = Number(m.limit.context) || undefined
+      m.limit.context = window
+      changed = true
+    }
+    if (!changed) return { changed: false, reason: `engine limit for ${modelId} already ${window}` }
+    const tmp = `${configPath}.tmp`
+    writeFileSync(tmp, JSON.stringify(cfg, null, 2))
+    renameSync(tmp, configPath)
+    return { changed: true, from, reason: `engine limit for ${modelId}: ${from ?? "unset"} -> ${window} (measured)` }
+  } catch (e) {
+    return { changed: false, reason: `could not sync engine limit: ${String(e)}` }
+  }
+}

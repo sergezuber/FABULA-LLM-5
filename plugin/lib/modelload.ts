@@ -221,6 +221,15 @@ export async function calibrateCost(
 ): Promise<{ ok: boolean; sample?: KvSample; reason: string }> {
   // Below the floor the reading measures drift rather than cache — measured, see MIN_SIGNAL_TOKENS.
   // A caller asking for less gets the floor: a cheap wrong number is worse than a slower right one.
+  // A calibration is a REAL request to a REAL model. Under a test runner that is a live call from a
+  // suite that is supposed to be hermetic — the same rule `lib/moa.ts` applies to cloud endpoints, and
+  // wiring this into the cold-start path is exactly what surfaced it: two modelload tests began
+  // reaching localhost and timing out. Callers that mean to exercise it name their own endpoint.
+  const env = process.env
+  const underTest = env.NODE_ENV === "test" || !!env.BUN_TEST || !!env.FABULA_TEST
+  if (underTest && !opts.endpoint) {
+    return { ok: false, reason: "calibration skipped under a test runner (no endpoint named)" }
+  }
   const tokens = Math.max(MIN_SIGNAL_TOKENS, Math.floor(opts.tokens ?? MIN_SIGNAL_TOKENS))
   const url = (opts.endpoint || process.env.FABULA_GRAPH_URL || "http://localhost:1235/v1").replace(/\/+$/, "")
   // Measured on this machine: 5.306 characters per token for ordinary prose. The exact ratio does not
@@ -445,6 +454,20 @@ export async function ensureLoadedAtPlannedWindow(
       }
       if (opts.quiet && !(await opts.quiet())) {
         return { acted: false, window: me.loadedWindow, reason: `would measure at ${second}, but the machine is busy` }
+      }
+      // Ask the cache what it costs BEFORE spending a reload to find out. On a lazy-allocation runtime
+      // the load-time reading carries no window term at all (three sources agree — see calibrateCost),
+      // so a request-time sample is both cheaper and the only one that measures the right quantity: it
+      // costs one prefill instead of an unload-plus-load, and it leaves the serving cache warm.
+      if (me.state === "loaded") {
+        const cal = await calibrateCost(modelId)
+        if (cal.ok) {
+          return {
+            acted: false,
+            window: me.loadedWindow,
+            reason: `measured the cache cost from a real request (${cal.reason}); the next switch can plan the full window`,
+          }
+        }
       }
       const probe = await lmsLoad(modelId, second, opts.loadTimeoutMs ?? 180_000)
       const measured = probe.ok ? (await readServed()).find((m) => m.id === modelId) : undefined

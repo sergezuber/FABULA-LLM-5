@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.40.0"
+export const FABULA_VERSION = "0.41.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.41.0",
+    date: "2026-07-26",
+    items: [
+      {
+        ru: "Обвязка сама измеряет, во что ей обходится память под контекст, вместо того чтобы ждать повторной загрузки ради этого замера. Раньше единственный путь узнать эту величину стоил выгрузки и загрузки модели заново; теперь достаточно одного обычного запроса, и рабочий кэш остаётся тёплым. Под тестами замер не производится — иначе набор, обязанный быть замкнутым, обращался бы к настоящей модели.",
+        en: "The harness now measures what context memory costs it from an ordinary request, instead of paying for a reload to find out. The only way to learn that figure used to be unloading and loading the model again; one real request is enough, and the working cache stays warm. Under a test run the measurement is skipped — otherwise a suite that must be self-contained would reach a real model.",
+      },
+      {
+        ru: "Убран список инструментов, который ничего не делал и вводил в заблуждение: его пояснение описывало правило, противоположное действующему. Ни один читатель кода не должен узнавать политику из комментария, который её искажает.",
+        en: "Removed a tool list that did nothing and misled: its comment described the opposite of the rule actually in force. No reader should learn a policy from a comment that misstates it.",
+      },
+    ],
+  },
   {
     version: "0.40.0",
     date: "2026-07-26",

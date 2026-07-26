@@ -54,17 +54,6 @@ export const DEFAULT_GUARD_CONFIG: GuardConfig = {
   maxSessions: 256,
 }
 
-// Read-only tools — our plugin tools + native engine tools. Only these get "no-progress"
-// (identical-result-repeated) detection; repeating a read with the same result is wasteful.
-export const IDEMPOTENT_TOOLS = new Set<string>([
-  // our plugin tools
-  "view", "web_search", "web_fetch", "image_search", "places_search", "weather_fetch",
-  "search_mcp_registry", "fetch_sports_data", "present_files", "places_map_display_v0",
-  "recipe_display_v0", "recommend_LLM_apps", "suggest_connectors",
-  // native engine read tools (names as the engine exposes them)
-  "read", "grep", "glob", "list", "webfetch",
-])
-
 // Mutating tools — never treated as no-progress (a repeat may legitimately do new work).
 export const MUTATING_TOOLS = new Set<string>([
   "create_file", "str_replace", "bash_tool", "ask_user_input_v0", "message_compose_v1",

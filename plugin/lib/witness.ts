@@ -166,3 +166,100 @@ export function attested(entries: WitnessEntry[]): boolean {
   if (list.some((e) => e.verdict === "disputed")) return false
   return new Set(list.filter((e) => e.verdict === "confirmed").map((e) => e.model)).size >= 1
 }
+
+/** A model the serving runtime is offering, as much of it as choosing a reviewer needs. */
+export interface LocalCandidate {
+  id: string
+  /** Weights, so the caller can price a second resident before asking for one. */
+  bytes?: number
+  /** Already in memory? A loaded second family costs nothing extra to consult. */
+  loaded?: boolean
+}
+
+export interface LocalWitnessChoice {
+  target: WitnessTarget | null
+  /** Plain words. A reviewer chosen silently is a reviewer nobody can audit — and if none is available,
+   *  the reason has to say so rather than leaving a caller to guess. */
+  reason: string
+  /** True when consulting it needs a model loaded that is not loaded now — the caller must price that
+   *  against the machine before proceeding (lib/windowplan.ts). */
+  needsLoad: boolean
+}
+
+/**
+ * Choose a reviewer from what is served LOCALLY, on a different model family from the author.
+ *
+ * WHY LOCAL IS ENOUGH, and it was measured rather than assumed: the two families on this machine are
+ * `kat-coder-…` → "kat" and `qwen3.6-…` → "qwen", which `modelFamily` already separates. Cross-family
+ * review is the whole point — twenty agents on one base model reading one flawed context agree with each
+ * other, and a model measurably prefers its own output — so the independence has to be real, not a second
+ * instance of the same weights wearing a different name.
+ *
+ * DELIBERATE, NOT SILENT: the choice and its reason come back together, and a caller that gets `null`
+ * gets the reason why. Preference goes to a family that is ALREADY loaded, because a second resident is
+ * paid for in the same budget the window comes out of — the solver prices it, this function only reports
+ * that a load would be required.
+ */
+export function pickLocalWitness(
+  candidates: readonly LocalCandidate[],
+  authorModelId: string | undefined,
+  baseURL: string,
+): LocalWitnessChoice {
+  const author = modelFamily(String(authorModelId ?? ""))
+  // An unknown author has no family to differ from, so nothing can be shown to be independent of it.
+  // Picking anyway would produce a reviewer that LOOKS independent and might be the same weights.
+  if (!author) {
+    return {
+      target: null,
+      needsLoad: false,
+      reason: "the author's model is unknown, so independence cannot be established",
+    }
+  }
+  const usable = (candidates ?? []).filter((c) => c?.id && modelFamily(c.id) !== author)
+  if (!usable.length) {
+    return {
+      target: null,
+      needsLoad: false,
+      reason: `nothing served here is independent of the author's family "${author}"; a same-family reviewer would agree with it, not check it`,
+    }
+  }
+  // A loaded family first: consulting it costs a call, not a load.
+  const loaded = usable.find((c) => c.loaded)
+  const chosen = loaded ?? usable[0]
+  return {
+    target: { providerId: "lmstudio", model: chosen.id, baseURL },
+    needsLoad: !chosen.loaded,
+    reason: loaded
+      ? `${chosen.id} (family "${modelFamily(chosen.id)}") is already resident and independent of "${author}"`
+      : `${chosen.id} (family "${modelFamily(chosen.id)}") is independent of "${author}" but not loaded; price the second resident before consulting it`,
+  }
+}
+
+/**
+ * The evidence a verdict must rest on.
+ *
+ * A reviewer reading a diff can only ever have an opinion about it. What it cannot fabricate is whether
+ * the tests RAN and whether the code COMPILED — those happened outside the conversation. So the prompt
+ * carries them, and a verdict offered without any is marked as opinion, which is what it is.
+ */
+export interface GroundingEvidence {
+  /** Exit status and output of the project's own verify command, if it was run. */
+  verify?: { ran: boolean; passed: boolean; output?: string }
+  /** Whether the change compiles / typechecks, if that was established. */
+  compiled?: boolean
+}
+
+export function groundingBlock(e: GroundingEvidence | undefined): string {
+  const bits: string[] = []
+  if (e?.verify?.ran) {
+    bits.push(`- the project's own tests were RUN and ${e.verify.passed ? "PASSED" : "FAILED"}${e.verify.output ? `:\n${e.verify.output.slice(0, 1200)}` : ""}`)
+  }
+  if (typeof e?.compiled === "boolean") bits.push(`- the change ${e.compiled ? "compiles" : "does NOT compile"}`)
+  if (!bits.length) {
+    return (
+      "EVIDENCE: none was supplied. Nothing here was executed, so anything you conclude is an OPINION " +
+      "about the diff, not a finding about the change. Say so explicitly in your verdict."
+    )
+  }
+  return `EVIDENCE the graph cannot fabricate (this happened outside the conversation):\n${bits.join("\n")}`
+}

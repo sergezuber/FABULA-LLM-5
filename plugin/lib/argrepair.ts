@@ -19,6 +19,12 @@
 export const STRICT_TOOL_KEYS: Record<string, string[]> = {
   actor: ["operation"],
   task: ["operation"],
+  // Same single-key discriminated-union shape as the two above, and the same failure without this
+  // entry. MEASURED 2026-07-26: told to orchestrate with a workflow, the model in the socket picked the
+  // right tool four times and every call died on `Invalid input → at operation`, because it sent the
+  // flat `{action:"run", script:"…"}` the schema's own discriminator describes. A tool nobody can call
+  // is a tool nobody has — and the repair for it already existed one line above.
+  workflow: ["operation"],
 }
 
 /** Remove lone surrogates (unpaired \uD800-\uDFFF) which break JSON re-encode / many providers. */

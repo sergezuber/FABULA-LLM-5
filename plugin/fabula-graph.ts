@@ -17,6 +17,8 @@ const BASE = (process.env.FABULA_GRAPH_URL || "http://localhost:1235/v1").replac
 // Per-call timeout — generous by default: a local REASONING model (some uncensored builds ignore /no_think) can
 // take >120s on a 700-token planner call. Env-tunable.
 const TIMEOUT_MS = Number(process.env.FABULA_GRAPH_TIMEOUT_MS || 240000)
+// One retry: a single unusable reply is usually noise; a second one is a step that cannot do its job.
+const STEP_RETRIES = 1
 
 let cachedModel: string | null = null
 async function localModel(): Promise<string> {
@@ -61,27 +63,46 @@ export const FabulaGraph: Plugin = async () => gate("graph", ({
         let { graph } = parseGraph(raw)
         if (!graph) graph = { steps: [{ id: "s1", role: "build", description: task, needs: [] }] } // graceful single-step fallback
 
-        const outputs: Record<string, string> = {}
+        // A step's output is null when it did not produce one — never a string that reads like content.
+        const outputs: Record<string, string | null> = {}
+        const degraded: Record<string, string> = {}
         const trace: string[] = []
         for (const level of execLevels(graph)) {
           await Promise.all(level.map(async (step) => {
-            const deps: Record<string, string> = {}
-            for (const n of step.needs) deps[n] = outputs[n] || ""
+            const deps: Record<string, string | null> = {}
+            for (const n of step.needs) deps[n] = outputs[n] ?? null
             const route = routeStep(step, { routerOn, cloudAvailable: !!cloud })
             const prov = route === "cloud" && cloud ? cloud : local
-            let out: string
-            try { out = await callProv(prov, stepPrompt(step, deps), 800) } catch (e: any) { out = `(step failed: ${e.message})` }
-            const scan = scanThreats(out)
-            if (scan.injection) out = wrapUntrusted(scan.cleaned, "workflow-step", undefined)
+
+            // The verdict GATES the output. It used to be written into a trace string while the output
+            // flowed downstream regardless — a check with no consequence. One retry, because a single
+            // bad reply is often just a bad reply; after that the step is honestly marked as having
+            // produced nothing, and the synthesiser is told.
+            let out: string | null = null
+            let note = ""
+            for (let attempt = 0; attempt <= STEP_RETRIES; attempt++) {
+              let text: string | null
+              try { text = await callProv(prov, stepPrompt(step, deps), 800) } catch (e: any) { text = null; note = e.message }
+              if (text !== null) {
+                const scan = scanThreats(text)
+                if (scan.injection) text = wrapUntrusted(scan.cleaned, "workflow-step", undefined)
+                const v = verifyStep(step, text)
+                if (v.ok) { out = text; note = ""; break }
+                note = v.note
+              }
+            }
             outputs[step.id] = out
-            const v = verifyStep(step, out)
-            trace.push(`${step.id}(${step.role}, ${route}, needs:[${step.needs.join(",")}]): ${v.ok ? "✓" : "⚠ " + v.note} [${out.length}c]`)
+            if (out === null) degraded[step.id] = note || "no usable output"
+            trace.push(
+              `${step.id}(${step.role}, ${route}, needs:[${step.needs.join(",")}]): ` +
+              (out === null ? `✗ ${degraded[step.id]}` : `✓ [${out.length}c]`),
+            )
           }))
         }
 
         let final: string
-        try { final = cleanAnswer(await callProv(local, synthesizePrompt(task, graph.steps.map((s) => ({ id: s.id, role: s.role, text: outputs[s.id] || "" }))), 1200)) }
-        catch (e: any) { final = `(synthesis failed: ${e.message})\n\n` + Object.values(outputs).join("\n\n") }
+        try { final = cleanAnswer(await callProv(local, synthesizePrompt(task, graph.steps.map((s) => ({ id: s.id, role: s.role, text: outputs[s.id] ?? null, degraded: degraded[s.id] }))), 1200)) }
+        catch (e: any) { final = `(synthesis failed: ${e.message})\n\n` + Object.values(outputs).filter((v): v is string => typeof v === "string").join("\n\n") }
         return { output: `${final}\n\n---\nworkflow: ${graph.steps.length} step(s)${routerOn ? " · router ON" : ""}\n${trace.join("\n")}`, metadata: { steps: graph.steps.length, router: routerOn } }
       },
     }),

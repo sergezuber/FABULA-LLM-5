@@ -8,7 +8,7 @@
 // All args are strings; taskText is passed base64-encoded by the spawner to survive shell quoting.
 // The worker is fully self-contained: it imports only the pure core (corpus.ts) + node:fetch.
 
-import { discoverCorpus, planBatches, chapterSummaryPrompt, synthesizeReportPrompt, cleanAnswer, accumulatorKey, seedAccumulator, markDone, pendingBatches, doneSummaries, clearAccumulator, synthTokensFor } from "./corpus"
+import { discoverCorpus, planBatches, chapterSummaryPrompt, synthesizeReportPrompt, cleanAnswer, accumulatorKey, seedAccumulator, markDone, pendingBatches, doneSummaries, emptyBatchCount, clearAccumulator, synthTokensFor } from "./corpus"
 import { writeFileSync, readFileSync, existsSync } from "node:fs"
 import { join } from "node:path"
 
@@ -248,7 +248,10 @@ async function main(): Promise<number> {
       markDone(key, batch, out)
       done++; doneFiles += batch.length
     } catch (e: any) {
-      markDone(key, batch, `(batch failed: ${e?.message || "unknown"})`)
+      // Nothing usable came back. Record the ABSENCE — a fabricated "(batch failed: …)" string would
+      // be quoted into the synthesise prompt as if it were a chapter summary. Same rule as the graph's
+      // edge: a fan-in must be able to tell "nothing came back" from "this came back".
+      markDone(key, batch, null)
       done++; doneFiles += batch.length
     }
   }
@@ -256,6 +259,10 @@ async function main(): Promise<number> {
   // REDUCE — synthesize the full report from the per-batch summaries.
   hb("reduce", { summaries: doneSummaries(key).length })
   const summaries = doneSummaries(key)
+  // Batches that produced nothing are a hole in the coverage, and a report that does not say so
+  // presents a partial corpus as a whole one.
+  const missing = emptyBatchCount(key)
+  if (missing > 0) hb("reduce-gaps", { missing })
   if (summaries.length === 0) { markHandback(); await reInject(taskText, false); clearAccumulator(key); hb("fallback-no-summaries"); return 0 }
   let report: string
   try {

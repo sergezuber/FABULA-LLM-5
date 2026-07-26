@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.30.0"
+export const FABULA_VERSION = "0.37.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,108 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.37.0",
+    date: "2026-07-26",
+    items: [
+      {
+        ru: "Документация приведена в соответствие с тем, что код делает на самом деле. Число установленных расширений было записано устаревшим в трёх разных местах, настройки окна и памяти отсутствовали в примере конфигурации, а описания рабочего процесса не упоминали ни договор между шагами, ни то, что для настоящей многоагентной работы есть более сильный инструмент.",
+        en: "Documentation now matches what the code actually does. The number of installed extensions was recorded out of date in three separate places, the window and memory settings were missing from the example configuration, and the workflow descriptions mentioned neither the contract between steps nor the stronger tool available for genuinely multi-agent work.",
+      },
+    ],
+  },
+  {
+    version: "0.36.0",
+    date: "2026-07-26",
+    items: [
+      {
+        ru: "Проверяющий выбирается из моделей другого происхождения, и выбор объявляется. Две сборки одной модели — это одна и та же слепая зона в двух экземплярах, а не второе мнение, поэтому такой проверяющий отклоняется. Если происхождение автора неизвестно, независимость подтвердить нечем — и выбор не делается вовсе.",
+        en: "A reviewer is chosen from a different model lineage, and the choice is stated out loud. Two builds of one model are the same blind spot twice over rather than a second opinion, so such a reviewer is refused. When the author's lineage is unknown there is nothing to establish independence against, and no choice is made at all.",
+      },
+      {
+        ru: "Память под второго проверяющего считается тем же решателем, что и окно. На этой машине ответ — не помещается: обвязка узнаёт это заранее и не пытается загрузить, вместо того чтобы загрузить и утопить систему.",
+        en: "Memory for a second reviewer is priced by the same solver that sizes the window. On this machine the answer is that it does not fit: the harness learns this in advance and does not attempt the load, rather than loading and drowning the system.",
+      },
+      {
+        ru: "Вердикт опирается на то, что действительно исполнялось — прогнанные тесты, скомпилированный код. Если ничего не исполнялось, вердикт помечается как мнение о правке, а не вывод о ней.",
+        en: "A verdict rests on what was actually executed — tests that ran, code that compiled. When nothing was executed the verdict is labelled an opinion about the change rather than a finding about it.",
+      },
+    ],
+  },
+  {
+    version: "0.35.0",
+    date: "2026-07-26",
+    items: [
+      {
+        ru: "Шаги рабочего процесса и разбора корпуса перестали начинаться каждый по-своему. Раньше первым в запросе шёл текст роли, а он у каждого шага свой — расхождение с самого начала обесценивало всё, что за ним, и модели приходилось заново перечитывать почти весь запрос на каждом шаге. Теперь неизменная часть идёт первой, а меняющееся — в хвосте: после правки шаги делят не менее 98% начала запроса.",
+        en: "Workflow steps and corpus batches no longer each begin differently. The role text used to come first and it differs per step, so the divergence started at the very beginning and made everything after it worthless — the model re-read almost the whole request on every step. The unchanging part now comes first and what varies goes at the tail: after the change, steps share at least 98% of the request's opening.",
+      },
+    ],
+  },
+  {
+    version: "0.34.0",
+    date: "2026-07-26",
+    items: [
+      {
+        ru: "Модель узнала про настоящую многоагентную оркестрацию. Схемы этих инструментов уходили в каждый запрос и оплачивались, а подсказка вела к более слабому однопроходному варианту — теперь описаны оба, с правилом «начинай одним проходом, разделяй только когда работа этого требует»: шаг, который можно было сделать внутри, никогда не был отдельным шагом.",
+        en: "The model now knows about real multi-agent orchestration. The schemas for those tools were sent and paid for on every request while the guidance pointed at a weaker single-pass one — both are now described, with the rule \"start in one pass, split only when the work demands it\": a step you could have done inline was never a separate step.",
+      },
+      {
+        ru: "Вызов оркестратора теперь чинится так же, как вызовы двух его соседей. Замерено: получив задачу на разделение, модель выбрала верный инструмент четыре раза подряд и все четыре раза не смогла попасть в форму аргументов. Инструмент, в который никто не может попасть, — это инструмент, которого нет.",
+        en: "A call to the orchestrator is now repaired the same way calls to its two neighbours already were. Measured: given work that splits, the model picked the right tool four times running and missed the argument shape all four times. A tool nobody can call is a tool nobody has.",
+      },
+    ],
+  },
+  {
+    version: "0.33.0",
+    date: "2026-07-26",
+    items: [
+      {
+        ru: "Шаг рабочего процесса, который ничего не выдал, больше не превращается в текст, похожий на результат. Раньше сбой записывался строкой вида «(шаг упал: таймаут)», она передавалась следующим шагам как их входные данные и попадала в итоговую сводку — и отчёт писался вокруг неё. Теперь отсутствие названо отсутствием, а тот, кто собирает итог, получает указание не выдумывать пропущенное. То же правило применено к разбору корпуса текстов.",
+        en: "A workflow step that produced nothing no longer turns into text that reads like a result. A failure used to be recorded as a string like \"(step failed: timeout)\", which was then handed to later steps as their input and reached the final synthesis — and the report was written around it. An absence is now named as one, and whoever assembles the result is told not to invent what is missing. The same rule now applies to corpus analysis.",
+      },
+      {
+        ru: "Обрезка на передаче между шагами объявляется. Шаг пишет до ~3200 символов, а на вход следующему проходило 2000 — около 40% исчезало молча, и короткий ответ было не отличить от урезанного. Теперь на месте среза стоит пометка, сколько символов снято и сколько было.",
+        en: "Truncation between steps is now declared. A step writes up to ~3,200 characters while 2,000 were passed on — roughly 40% used to disappear silently, and a short answer was indistinguishable from a cut one. The cut now carries a note saying how much was removed and of what.",
+      },
+      {
+        ru: "Проверка результата шага получила последствия. Её вердикт раньше уходил только в служебную строку, а вывод шёл дальше в любом случае. Теперь неудачная проверка даёт одну повторную попытку, после чего шаг честно помечается как не давший результата. Сам критерий больше не ищет слова «проверил», «тест», «прошло» в собственном тексте шага — фраза «я ничего не проверял» проходила эту проверку, потому что содержит слово «проверял».",
+        en: "The per-step check now has consequences. Its verdict used to go only into a trace line while the output flowed on regardless. A failed check now gets one retry, after which the step is honestly marked as having produced no result. The criterion no longer searches the step's own text for words like \"checked\", \"test\" or \"passed\" — the sentence \"I did not check anything\" passed that check, because it contains the word \"check\".",
+      },
+    ],
+  },
+  {
+    version: "0.32.0",
+    date: "2026-07-26",
+    items: [
+      {
+        ru: "Сколько запросов пускать к модели одновременно — теперь решение по замеру, а не значение по умолчанию. На этой машине открытие ворот с одного до двух замедлило работу на 15%: конкурентный разбор промптов тормозит оба запроса сразу, а не ускоряет второй. Вдобавок второй слот стоит половины контекста. Ворота остаются на единице, и число слотов при загрузке следует за ними само.",
+        en: "How many requests reach the model at once is now a decision from measurement rather than a default. On this machine opening the gate from one to two made the work 15% slower: concurrent prompt processing slows both requests instead of speeding up the second. A second slot also costs half the context. The gate stays at one, and the slot count at load time follows it on its own.",
+      },
+      {
+        ru: "Потолок одновременных агентов в рабочих процессах приведён к той же величине. Шестнадцать агентов в ворота на один — это очередь, а не параллельная работа.",
+        en: "The concurrent-agent ceiling for workflows now matches the same figure. Sixteen agents through a gate of one is a queue, not parallel work.",
+      },
+    ],
+  },
+  {
+    version: "0.31.0",
+    date: "2026-07-26",
+    items: [
+      {
+        ru: "Ширина окна теперь считается на цене, снятой во время запроса, а не после загрузки. Три источника — размер в lms ps, память после загрузки и собственная оценка рантайма — не меняются с окном, потому что кэш возникает только когда приходят токены; расчёт на них не сходился и молча отказывал. Замер берётся там, где кэш действительно появляется.",
+        en: "The context window is now sized from a cost measured during a request, not after a load. Three sources — the size in lms ps, machine memory after a load, and the runtime's own estimate — do not move with the window at all, because the cache only appears when tokens do; a fit built on them could not converge and quietly refused. The reading is taken where the cache actually exists.",
+      },
+      {
+        ru: "Число одновременных слотов вошло в расчёт памяти. Один запрос на 131 021 токен прошёл через модель, загруженную на 262144 с четырьмя слотами — значит слот не делит окно, а способен занять его целиком, и провизия стоит вчетверо. Раньше это число доставалось от предыдущей сессии и в расчёт не входило; теперь оно следует за пропускной способностью очереди и передаётся команде загрузки явно.",
+        en: "Concurrent slots are now part of the memory arithmetic. A single 131,021-token request went through a model loaded at 262144 with four slots — so a slot does not divide the window, it can fill the whole of it, and provisioning four costs four times the cache. That count used to be inherited from an earlier session and left out of the sum; it now follows the admission ceiling and is passed to the load command explicitly.",
+      },
+      {
+        ru: "Замер цены отвергается, когда он взят на слишком коротком контексте или на непрогретой модели: в первом случае дрейф памяти перекрывает полезный сигнал, во втором возврат весов из сжатия читается как рост кэша. Оба случая давали число вчетверо больше настоящего.",
+        en: "A cost reading is refused when it was taken over too short a context or against a cold model: in the first case memory drift outweighs the signal, in the second the weights coming back from compression read as cache growth. Both produced a figure four times the truth.",
+      },
+    ],
+  },
   {
     version: "0.30.0",
     date: "2026-07-26",

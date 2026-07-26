@@ -69,6 +69,24 @@ export interface WindowPlanInput {
    *  can both be loaded, and a ceiling that ignores them is a ceiling that is wrong exactly when it
    *  matters. */
   residents?: readonly Resident[]
+  /**
+   * Concurrent request slots the runtime is serving with (`parallel N`). Defaults to 1.
+   *
+   * MEASURED 2026-07-26, and it is why this field exists: `parallel N` does NOT divide the window
+   * between slots. A model loaded at 262144 with `parallel 4` accepted a single request of 131 021
+   * tokens — twice the 65 536 that a divided window would have allowed — and answered from the far end
+   * of it. So every slot can independently fill the whole window, and the memory a provisioning must
+   * cover is `slots × window × bytesPerToken`, not `window × bytesPerToken`.
+   *
+   * A ceiling computed for one slot while the runtime serves four is wrong by that factor exactly when
+   * it matters — when several long conversations run at once. On this machine that gap was real: the
+   * planner sized 262144 for one slot, the runtime was serving four, and the Mac sat in swap.
+   *
+   * NOTE this bounds PROVISIONING, not a live run. The cache is allocated lazily per request, so a
+   * ceiling chosen here is a promise about the worst case, not a guarantee about the current moment;
+   * the runtime guarantee belongs where in-flight contexts are actually known.
+   */
+  slots?: number
   policy?: WindowPolicy
 }
 
@@ -105,6 +123,9 @@ export function planWindow(input: WindowPlanInput): WindowPlan {
   const total = Math.max(0, Number(input.totalBytes) || 0)
   const weights = Math.max(0, Number(input.weightsBytes) || 0)
   const perToken = Number(input.bytesPerToken) || 0
+  // At least one slot always exists; a caller passing 0 or nonsense means "I did not measure this",
+  // and the safe reading of that is the single slot every runtime has.
+  const slots = Math.max(1, Math.floor(Number(input.slots) || 1))
   const residents = input.residents ?? []
   const residentBytes = residents.reduce((sum, r) => sum + Math.max(0, Number(r.bytes) || 0), 0)
 
@@ -129,7 +150,10 @@ export function planWindow(input: WindowPlanInput): WindowPlan {
     }
   }
 
-  const ceiling = quantise(budgetBytes / perToken, policy.quantumTokens)
+  // Every slot can fill the window independently (measured — see `slots`), so the budget has to cover
+  // all of them at once.
+  const ceiling = quantise(budgetBytes / (perToken * slots), policy.quantumTokens)
+  const perSlot = slots > 1 ? ` across ${slots} concurrent slots` : ""
 
   if (ceiling < policy.floorTokens) {
     const others = residents.length ? `, ${residents.length} other model(s) holding ${gib(residentBytes)} GiB` : ""
@@ -144,7 +168,7 @@ export function planWindow(input: WindowPlanInput): WindowPlan {
   if (passport <= ceiling) {
     return {
       tokens: passport, cappedByMachine: false, fits: true, budgetBytes, ceilingTokens: ceiling,
-      reason: `the model's full window of ${passport} fits: this machine holds up to ${ceiling}`,
+      reason: `the model's full window of ${passport} fits: this machine holds up to ${ceiling}${perSlot}`,
     }
   }
 
@@ -154,6 +178,6 @@ export function planWindow(input: WindowPlanInput): WindowPlan {
     reason:
       `capped at ${ceiling} by memory, not by the model — its passport says ${passport}, but after ` +
       `${gib(policy.systemReserveBytes)} GiB reserved for the system, ${gib(weights)} GiB of weights${others}, ` +
-      `${gib(budgetBytes)} GiB remains for cache at ${perToken} bytes per token`,
+      `${gib(budgetBytes)} GiB remains for cache at ${perToken} bytes per token${perSlot}`,
   }
 }

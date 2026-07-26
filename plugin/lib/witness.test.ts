@@ -8,8 +8,7 @@ import {
   witnessEntry,
   upsertWitness,
   attested,
-  type WitnessTarget,
-} from "./witness"
+  type WitnessTarget, pickLocalWitness, groundingBlock } from "./witness"
 
 const T: WitnessTarget = { providerId: "nvidia", model: "qwen3.6-70b", baseURL: "https://api.x/v1", apiKeyRef: "k" }
 
@@ -137,5 +136,70 @@ describe("witness ledger", () => {
     expect(attested([witnessEntry(T, "confirmed", 1), witnessEntry({ ...T, model: "gpt" }, "disputed", 2)])).toBe(false)
     expect(attested([witnessEntry(T, "unclear", 1)])).toBe(false)
     expect(attested([])).toBe(false)
+  })
+})
+
+// ── A reviewer with teeth, chosen locally and deliberately ──────────────
+describe("pickLocalWitness", () => {
+  // The two families actually served on this machine.
+  const KAT = { id: "kat-coder-v2.5-dev-optiq", loaded: true }
+  const QWEN = { id: "qwen3.6-35b-a3b-ud-mlx", loaded: false }
+  const QWEN_LOADED = { id: "qwen3.6-35b-a3b-ud-mlx", loaded: true }
+  const URL = "http://localhost:1235/v1"
+
+  test("a different family is chosen, and named", () => {
+    const c = pickLocalWitness([KAT, QWEN], "kat-coder-v2.5-dev-optiq", URL)
+    expect(c.target?.model).toBe(QWEN.id)
+    expect(c.reason).toContain("independent")
+  })
+
+  test("a same-family candidate is never accepted as a reviewer", () => {
+    // Two Qwen builds are two instances of the same blind spot, not a second opinion.
+    const c = pickLocalWitness(
+      [{ id: "qwen3.6-35b-a3b-uncensored-heretic-mlx", loaded: true }],
+      "qwen3.6-35b-a3b-ud-mlx",
+      URL,
+    )
+    expect(c.target).toBeNull()
+    expect(c.reason).toContain("agree with it, not check it")
+  })
+
+  test("an already-resident family wins, because consulting it costs a call and not a load", () => {
+    const c = pickLocalWitness([QWEN, QWEN_LOADED], "kat-coder-v2.5-dev-optiq", URL)
+    expect(c.needsLoad).toBe(false)
+    expect(c.reason).toContain("already resident")
+  })
+
+  test("choosing an unloaded family says so, so the second resident can be priced first", () => {
+    const c = pickLocalWitness([QWEN], "kat-coder-v2.5-dev-optiq", URL)
+    expect(c.needsLoad).toBe(true)
+    expect(c.reason).toContain("price the second resident")
+  })
+
+  test("an unknown author cannot be reviewed independently, and it refuses rather than guessing", () => {
+    expect(pickLocalWitness([KAT, QWEN], undefined, URL).target).toBeNull()
+  })
+})
+
+describe("groundingBlock — a verdict rests on what was executed", () => {
+  test("a run test suite is carried verbatim as evidence", () => {
+    const b = groundingBlock({ verify: { ran: true, passed: true, output: "2239 pass 0 fail" } })
+    expect(b).toContain("cannot fabricate")
+    expect(b).toContain("PASSED")
+    expect(b).toContain("2239 pass")
+  })
+
+  test("a failing suite is evidence too, and is not softened", () => {
+    expect(groundingBlock({ verify: { ran: true, passed: false } })).toContain("FAILED")
+  })
+
+  test("with nothing executed, the verdict is labelled an opinion", () => {
+    const b = groundingBlock(undefined)
+    expect(b).toContain("OPINION")
+    expect(b).toContain("Say so explicitly")
+  })
+
+  test("a suite that was never run is not presented as if it had been", () => {
+    expect(groundingBlock({ verify: { ran: false, passed: false } })).toContain("OPINION")
   })
 })

@@ -28,6 +28,23 @@ Ending the turn is not the model's decision. Before any stop is honored, an inde
 
 Most agents ship the same giant system prompt and every tool schema on every step. FABULA compiles the **minimal sufficient context per task**: a deterministic router picks the profile's tools (the committed demo receipt records 64 tools on the coding profile; a masked tool called by name still executes — a router miss costs one roundtrip, never a blocked task), the kernel prompt carries only load-bearing contracts (28.8k → 4.9k tokens), and verbose tool prose went on a measured diet. From the wire: the request prefix dropped **72.3k → 43.5k tokens (−40%)** — and it stays **byte-stable within a task**, so the local model's KV-cache survives across steps. That's why a 35B on a laptop keeps up. Every cut was gated: a tool-use golden-eval (right tool, right arguments) and behavioral gate probes ran before and after each step — zero regressions.
 
+## One pass by default, a graph when the work forces it
+
+Most work is one loop with tools, and FABULA keeps it there — a multi-agent run burns many times the
+tokens of a single pass, and a step you could have done inline was never a step. When the work genuinely
+splits, the engine runs a **deterministic orchestration script**: nodes are subagents, each with its own
+model, its own toolset and an optional output schema; `parallel` gathers results that are needed
+together, `pipeline` streams items through stages independently, plain `if`/`while` route the edges, and
+a node that fails resolves to nothing rather than taking the run with it. Agents that write in parallel
+each get their own git worktree. Runs are journalled, so a resumed workflow replays what already
+finished instead of paying for it twice.
+
+The lighter `workflow_graph` covers the small case in one pass. Its edges are contracts either way: a
+step that produced nothing is passed on as an **absence**, never as text that reads like an answer; a cut
+says how much it removed; and a step whose output is unusable is retried once and then honestly marked
+empty, so whatever merges the results is told where the holes are.
+
+
 ## Proof
 
 The scheme above is not a promise — a real captured run walked that exact path: the model fixed the bug, the tests went green, and the machine still answered NOT YET DONE until the proof existed. The run left a receipt. It is committed verbatim — replay it:

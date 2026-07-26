@@ -56,6 +56,63 @@ export interface CostFit {
 export const MIN_WINDOW_SPREAD = 1024
 
 /**
+ * A reading taken DURING a request, which is where the cache actually appears.
+ *
+ * WHY THIS EXISTS — measured 2026-07-26, and it refutes the assumption the load-time `Observation`
+ * above rests on. That model says machine memory after a load is `weights + W · bytesPerToken`, with
+ * everything else entering as a constant the slope is blind to. On a runtime that allocates the cache
+ * LAZILY, there is no `W` term in that number at all: loading at a larger window allocates nothing extra,
+ * because the cache is created per request as tokens arrive. The fit is then regressing drift against W,
+ * and the slope it returns is noise — on this machine it came out NEGATIVE (-54 203 B/token across three
+ * readings), which `fitCost` correctly refused, and would have gone on refusing forever.
+ *
+ * The evidence, from one model on one machine, watching wired memory across a prefill of known size:
+ *
+ *     idle after load        26.92 GiB      (weights, wired)
+ *      60 332 prompt tokens  +5.42 GiB      →  96 461 B/token
+ *     131 021 prompt tokens +12.59 GiB      → 103 177 B/token   (marginal between them: 108 910)
+ *     request finished       cache released, wired falls back
+ *
+ * Rising, consistent, and physically meaningful — because it samples the quantity being governed rather
+ * than a quantity that merely correlates with it when the runtime happens to pre-allocate.
+ *
+ * It also dissolves the cold-start deadlock the load-time path needs `safeSecondWindow` to escape: the
+ * baseline is subtracted by construction, so the line passes through the origin and ONE sample already
+ * determines it. And the sample comes from ordinary traffic — every response reports its own
+ * `prompt_tokens` — so nothing has to be probed.
+ *
+ * The load-time path is kept, not deleted: a runtime that really does pre-allocate its cache at load
+ * WOULD put the signal there, and refusing to model that would hardcode this file to one serving stack.
+ * Callers prefer samples when they have them.
+ */
+export interface KvSample {
+  /** Tokens the request actually asked the model to hold — its own `prompt_tokens`, as reported. */
+  contextTokens: number
+  /** Bytes the cache grew by while that request was in flight: memory at peak minus memory at idle. */
+  kvBytes: number
+}
+
+/** Slopes further apart than this factor are not measuring the same thing; the fit says so out loud. */
+export const SAMPLE_DISPERSION_LIMIT = 2
+
+/**
+ * The smallest context a reading may be taken at.
+ *
+ * MEASURED, by getting it wrong first. A calibration at 8 207 tokens reported 470 013 bytes per token —
+ * four times the truth — because the cache it allocated (~0.85 GiB at the real cost) was smaller than
+ * the memory the rest of the machine moved while the request ran (~2.7 GiB). The reading was not noisy
+ * around the right answer; it was dominated by something else entirely.
+ *
+ * The two readings that DID agree were taken at 60 332 and 131 021 tokens, where the cache is 5–13 GiB
+ * and nothing else on the machine moves that much in a minute. So a reading has to be big enough that
+ * the signal dwarfs ordinary drift, and below this floor it is discarded rather than believed.
+ *
+ * This is POLICY, not physics — a judgement about how much drift a desktop can produce — so it is named
+ * here in one place instead of dissolved into the arithmetic.
+ */
+export const MIN_SIGNAL_TOKENS = 32_768
+
+/**
  * Fit the line through the observations. PURE.
  *
  * Returns a zero cost — not a guess — when the readings cannot determine one. A caller that receives zero
@@ -114,6 +171,76 @@ export function fitCost(observations: readonly Observation[]): CostFit {
     weightsBytes: Math.round(intercept),
     points: n,
     reason: `learned from ${n} reading(s) across a ${spread}-token spread: ${Math.round(slope)} bytes per token, ${(intercept / 1024 ** 3).toFixed(2)} GiB of weights`,
+  }
+}
+
+/**
+ * Fit the per-token cost from request-time samples. PURE.
+ *
+ * THROUGH THE ORIGIN, deliberately. The baseline is already subtracted when the sample is taken
+ * (`kvBytes` is peak minus idle), so a cache of nothing costs nothing and there is no constant to
+ * recover. Fitting an intercept anyway would let two noisy points invent a large negative one and drag
+ * the slope with it — the exact failure the load-time path hit.
+ *
+ * Returns zero rather than a guess when the readings cannot determine a cost, same contract as `fitCost`:
+ * a caller receiving zero must not put a number into a load command.
+ */
+export function fitCostFromSamples(samples: readonly KvSample[]): CostFit {
+  const usable = (samples ?? [])
+    .map((s) => ({ x: Number(s?.contextTokens) || 0, y: Number(s?.kvBytes) || 0 }))
+    .filter((p) => p.x > 0 && p.y > 0)
+  // A reading taken over too small a context measures the machine's drift, not the cache — see
+  // MIN_SIGNAL_TOKENS. Dropping it is the difference between refusing and being confidently wrong.
+  const pts = usable.filter((p) => p.x >= MIN_SIGNAL_TOKENS)
+  const dropped = usable.length - pts.length
+
+  if (pts.length === 0) {
+    return {
+      bytesPerToken: 0,
+      weightsBytes: 0,
+      points: 0,
+      reason: dropped
+        ? `${dropped} cache reading(s) were taken over fewer than ${MIN_SIGNAL_TOKENS} tokens, where machine drift outweighs the cache; measure over a longer context`
+        : "no request-time cache readings yet for this model — one real request is enough to learn it",
+    }
+  }
+
+  // Least squares through the origin: the slope that best explains every sample at once.
+  const sxy = pts.reduce((s, p) => s + p.x * p.y, 0)
+  const sxx = pts.reduce((s, p) => s + p.x * p.x, 0)
+  const slope = sxx > 0 ? sxy / sxx : 0
+  if (!(slope > 0)) {
+    return {
+      bytesPerToken: 0,
+      weightsBytes: 0,
+      points: pts.length,
+      reason: `${pts.length} cache reading(s) do not describe a positive cost; something else was moving memory`,
+    }
+  }
+
+  // Per-sample slopes that disagree badly are not one measurement repeated — say so instead of averaging
+  // the disagreement away into a confident-looking number.
+  const each = pts.map((p) => p.y / p.x)
+  const spread = Math.max(...each) / Math.min(...each)
+  if (pts.length > 1 && spread > SAMPLE_DISPERSION_LIMIT) {
+    return {
+      bytesPerToken: 0,
+      weightsBytes: 0,
+      points: pts.length,
+      reason:
+        `${pts.length} cache readings disagree by ${spread.toFixed(1)}× ` +
+        `(${Math.round(Math.min(...each))}–${Math.round(Math.max(...each))} bytes per token); ` +
+        `they were probably taken while memory was moving`,
+    }
+  }
+
+  const agreement =
+    pts.length > 1 ? `${pts.length} readings agreeing within ${spread.toFixed(2)}×` : "1 reading"
+  return {
+    bytesPerToken: Math.round(slope),
+    weightsBytes: 0,
+    points: pts.length,
+    reason: `learned from ${agreement}: ${Math.round(slope)} bytes per token of context`,
   }
 }
 

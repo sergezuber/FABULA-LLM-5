@@ -21,6 +21,9 @@ import {
   doneSummaries,
   clearAccumulator,
   type CorpusFile,
+  emptyBatchCount,
+  chapterSummaryPrompt,
+  MAP_PREAMBLE,
 } from "./corpus"
 
 // ── test workspace helpers ─────────────────────────────────────────────────
@@ -313,5 +316,49 @@ describe("accumulator", () => {
     const k2 = accumulatorKey("ses_abc", "/Users/x/BOOK NII-TRED FINAL")
     expect(k1).toBe(k2)
     expect(k1).toMatch(/^[a-z0-9-]+$/i)
+  })
+})
+
+// ── The edge is a contract here too ─────────────────────────────────────
+describe("a batch that produced nothing is an absence, not a summary", () => {
+  test("markDone(null) marks it done but stores no text, so a resume does not retry forever", () => {
+    const key = accumulatorKey("sess-gap", "/tmp/x")
+    const files = [{ name: "ch1", path: "/tmp/x/ch1.md", chars: 10 }, { name: "ch2", path: "/tmp/x/ch2.md", chars: 10 }]
+    seedAccumulator(key, "read it all", [[files[0]], [files[1]]])
+    markDone(key, [files[0]], "a real summary of chapter one")
+    markDone(key, [files[1]], null)
+    expect(pendingBatches(key, [[files[0]], [files[1]]])).toHaveLength(0)
+    const texts = doneSummaries(key).map((s) => s.text)
+    expect(texts).toContain("a real summary of chapter one")
+    // The failed batch contributes NO text — nothing that reads like a chapter summary.
+    expect(texts.some((t) => /fail|error|unknown/i.test(t))).toBe(false)
+    expect(emptyBatchCount(key)).toBe(1)
+    clearAccumulator(key)
+  })
+
+  test("a fully successful run reports no gaps", () => {
+    const key = accumulatorKey("sess-ok", "/tmp/y")
+    const f = [{ name: "ch1", path: "/tmp/y/ch1.md", chars: 10 }]
+    seedAccumulator(key, "read it all", [f])
+    markDone(key, f, "summary")
+    expect(emptyBatchCount(key)).toBe(0)
+    clearAccumulator(key)
+  })
+})
+
+describe("prefix-cache layout in the corpus MAP", () => {
+  test("every batch opens with the same bytes", () => {
+    const a = chapterSummaryPrompt([{ name: "ch1", path: "/nope/a.md", chars: 5 }], "разбери всю книгу")
+    const b = chapterSummaryPrompt([{ name: "ch2", path: "/nope/b.md", chars: 5 }], "разбери всю книгу")
+    expect(a.startsWith(MAP_PREAMBLE)).toBe(true)
+    expect(b.startsWith(MAP_PREAMBLE)).toBe(true)
+    let i = 0
+    while (i < a.length && i < b.length && a[i] === b[i]) i++
+    expect(i).toBeGreaterThanOrEqual(MAP_PREAMBLE.length)
+  })
+
+  test("the batch-specific part stays behind the constant block", () => {
+    const p = chapterSummaryPrompt([{ name: "UNIQUECHAP", path: "/nope/x.md", chars: 5 }], "разбери всю книгу")
+    expect(p.indexOf("UNIQUECHAP")).toBeGreaterThan(MAP_PREAMBLE.length)
   })
 })

@@ -31,7 +31,7 @@ The system is composed of four cooperating layers.
                           │                                           │
                           │   ┌─────────────────────────────────┐    │
                           │   │ PLUGIN LAYER (plugin/fabula-*.ts) │   │
-                          │   │ 33 plugins · shared plugin/lib/   │   │
+                          │   │ 38 plugins · shared plugin/lib/   │   │
                           │   └─────────────────────────────────┘    │
                           └───────┬───────────────────────┬──────────┘
                                   │ chat + structured     │ MCP
@@ -175,7 +175,7 @@ Therefore:
 
 ## 3. The Plugins
 
-There are 33 plugins. Each file exports one `Fabula*` factory. The table below is a representative
+There are 38 plugins. Each file exports one `Fabula*` factory. The table below is a representative
 subset (the always-on core); the full, current map of every plugin and tool — including the six
 off-by-default **proof-economy** plugins (`registry`, `witness`, `daemon`, `relay`, `coordinator`,
 `buddy`) — lives in [`docs/PLUGINS.md`](PLUGINS.md), generated against the manifest.
@@ -183,7 +183,7 @@ off-by-default **proof-economy** plugins (`registry`, `witness`, `daemon`, `rela
 | Plugin (file)              | Factory             | Responsibility |
 |----------------------------|---------------------|----------------|
 | `fabula-tools.ts`          | `FabulaTools`       | The **core tool belt**: `web_fetch` (URL→markdown, incl. PDF), `web_search` + `image_search` (via SearXNG MCP), `bash_tool` / `execute_code` (sandboxed shell), `view` / `str_replace` / `create_file` / `note_append` (file ops), `present_files`, `verify_done`, `weather_fetch`, `places_search`, `mixture_of_agents` (fan out to N models + synthesize), `session_search`, `save_skill`, `cost_report`, `batch_run`, `search_mcp_registry`, `suggest_connectors`, `recommend_LLM_apps`, `fetch_sports_data`. |
-| `fabula-graph.ts`          | `FabulaGraph`       | The **`workflow_graph`** orchestrator: planner → ≤5 isolated subtasks → synthesize, with an opt-in local→cloud router. See §4. |
+| `fabula-graph.ts`          | `FabulaGraph`       | The **`workflow_graph`** orchestrator: planner → ≤5 isolated subtasks → synthesize, with an opt-in local→cloud router. The edge between steps is a contract — a step that produced nothing arrives as an absence, a cut declares itself, an unusable output is retried once then marked empty — and every step shares one opening block so the serving cache is reused. For genuinely multi-agent work the engine's own `workflow` tool is stronger. See §4. |
 | `fabula-handoff.ts`        | `FabulaHandoff`     | Durable structured **handoff artifacts** between steps/sessions: `save_handoff` / `read_handoff` / `list_handoffs`. Threat-scanned and size-capped. |
 | `fabula-reliability.ts`    | `FabulaReliability` | **Loop-guard** that hard-stops repeated no-progress tool calls (throws in `tool.execute.before`), tool-arg **repair**, outbound **push notifications via ntfy**, and optional terse role preambles for actor subagents (`FABULA_SOULS=1`). |
 | `fabula-security.ts`       | `FabulaSecurity`    | **SSRF guards**, **secret redaction**, **untrusted-result wrapping** (prompt-injection defense, via `tool.execute.after`), and command/approval guards (via `tool.execute.before`). |

@@ -24,8 +24,8 @@ export const PLUGIN_I18N: Record<string, PluginI18n> = {
   graph: {
     tags: ["graph"],
     nameRu: "Граф рабочего процесса",
-    descEn: "Breaks a big task into up to 5 isolated sub-steps, runs the independent ones in parallel, then merges the results. Can optionally escalate heavy steps to a cloud model.",
-    descRu: "Разбивает крупную задачу на ≤5 изолированных под-шагов, независимые выполняет параллельно и собирает результат. Опционально отправляет тяжёлые шаги в облако.",
+    descEn: "Breaks a big task into up to 5 isolated sub-steps, runs the independent ones in parallel, then merges the results. A step that produces nothing is passed on as an ABSENCE rather than as text that reads like a result; truncation on the edge is declared rather than silent; a step whose output is unusable is retried once and then honestly marked as empty. Every step opens with the same block so the serving cache can reuse it. Can optionally escalate heavy steps to a cloud model. For real multi-agent work prefer the engine's own workflow tool.",
+    descRu: "Разбивает крупную задачу на ≤5 изолированных под-шагов, независимые выполняет параллельно и собирает результат. Шаг, не давший результата, передаётся дальше как ОТСУТСТВИЕ, а не как текст, похожий на ответ; обрезка на передаче объявляется; шаг с негодным выводом получает одну повторную попытку и затем честно помечается как пустой. Все шаги начинаются одинаково, чтобы кэш сервера переиспользовался. Опционально отправляет тяжёлые шаги в облако. Для настоящей многоагентной работы предпочтительнее движковый workflow.",
   },
   handoff: {
     tags: ["handoff"],

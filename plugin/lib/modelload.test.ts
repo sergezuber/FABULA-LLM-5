@@ -6,7 +6,7 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 import { rmSync, writeFileSync, readFileSync } from "node:fs"
-import { ensureLoadedAtPlannedWindow, readServed, residentsOther, syncEngineLimit } from "./modelload"
+import { ensureLoadedAtPlannedWindow, readServed, residentsOther, syncEngineLimit, plannedSlots, recordKvSample, readSamples } from "./modelload"
 
 const GIB = 1024 ** 3
 const STORE = join(tmpdir(), `kvcost-test-${process.pid}.json`)
@@ -163,5 +163,160 @@ describe("the engine's own limit follows the measured window", () => {
   test("a missing or broken config is reported, never thrown", () => {
     expect(syncEngineLimit("/nope/nothing.json", "kat", 262144).changed).toBe(false)
     expect(() => syncEngineLimit("/nope/nothing.json", "kat", 262144)).not.toThrow()
+  })
+})
+
+// ── Slot provisioning (measured 2026-07-26) ──────────────────────────────────
+describe("plannedSlots", () => {
+  test("follows the admission gate, so the two numbers cannot drift apart", () => {
+    expect(plannedSlots({ FABULA_MAX_CONCURRENT_UPSTREAM: "1" })).toBe(1)
+    expect(plannedSlots({ FABULA_MAX_CONCURRENT_UPSTREAM: "3" })).toBe(3)
+  })
+
+  test("an unset gate provisions one slot rather than inheriting whatever was set last", () => {
+    // The live runtime had `parallel 4` from an earlier session — a number nothing in the harness chose,
+    // and the one that made 262144 unaffordable.
+    expect(plannedSlots({})).toBe(1)
+  })
+
+  test("unlimited at the gate is not a provisioning; it reads as one slot", () => {
+    // 0 means "no ceiling" for admission. A machine cannot be sized for unlimited, and the cache grows
+    // lazily anyway, so the honest provisioning is the single slot.
+    expect(plannedSlots({ FABULA_MAX_CONCURRENT_UPSTREAM: "0" })).toBe(1)
+  })
+
+  test("nonsense never yields a zero or negative slot count", () => {
+    for (const bad of ["-2", "abc", ""]) {
+      expect(plannedSlots({ FABULA_MAX_CONCURRENT_UPSTREAM: bad })).toBeGreaterThanOrEqual(1)
+    }
+  })
+})
+
+// ── The load command itself (the wiring, not the decision) ───────────────────
+// A marker script stands in for `lms` and records its argv, because an argument dropped from the load
+// command is invisible to every other test here: the decision would still be right and the machine
+// would still be provisioned wrong. Same shape as the corpus worker's FABULA_BUN_BIN probe.
+describe("what actually reaches `lms load`", () => {
+  const ARGV = join(tmpdir(), `lms-argv-${process.pid}.txt`)
+  const MARKER = join(tmpdir(), `lms-marker-${process.pid}.sh`)
+
+  beforeEach(() => {
+    rmSync(ARGV, { force: true })
+    writeFileSync(MARKER, `#!/bin/sh\nprintf '%s\\n' "$@" >> ${ARGV}\nexit 0\n`)
+    require("node:fs").chmodSync(MARKER, 0o755)
+    process.env.FABULA_LMS_BIN = MARKER
+  })
+  afterEach(() => {
+    delete process.env.FABULA_LMS_BIN
+    rmSync(ARGV, { force: true })
+    rmSync(MARKER, { force: true })
+  })
+
+  test("the slot count reaches the command, so provisioning is chosen and never inherited", async () => {
+    // Two readings so a cost is learnable and the planner produces a real window.
+    writeFileSync(STORE, JSON.stringify({ kat: [
+      { windowTokens: 32768, totalBytes: 24 * GIB },
+      { windowTokens: 131072, totalBytes: 30 * GIB },
+    ] }))
+    serve([KAT("loaded", 32768, 22 * GIB)])
+    process.env.FABULA_MAX_CONCURRENT_UPSTREAM = "2"
+    await ensureLoadedAtPlannedWindow("kat", { loadTimeoutMs: 8000 })
+    delete process.env.FABULA_MAX_CONCURRENT_UPSTREAM
+
+    const argv = readFileSync(ARGV, "utf8").split("\n").filter(Boolean)
+    expect(argv).toContain("load")
+    // The flag AND its value: a flag with the wrong count is the same defect wearing a passing test.
+    const at = argv.indexOf("--parallel")
+    expect(at).toBeGreaterThan(-1)
+    expect(argv[at + 1]).toBe("2")
+    // And the window is still passed, so this test cannot pass by the command being empty.
+    expect(argv).toContain("--context-length")
+  })
+})
+
+// ── Request-time cost readings ───────────────────────────────────────────────
+// The load-time fit cannot see the cache on a lazy runtime (three sources agree — see calibrateCost).
+// These check that the request-time path is reached and preferred, not merely declared.
+describe("request-time cache cost", () => {
+  const SAMPLES = join(tmpdir(), `kvsamples-test-${process.pid}.json`)
+  beforeEach(() => {
+    process.env.FABULA_KVSAMPLE_FILE = SAMPLES
+    rmSync(SAMPLES, { force: true })
+  })
+  afterEach(() => {
+    delete process.env.FABULA_KVSAMPLE_FILE
+    rmSync(SAMPLES, { force: true })
+  })
+
+  test("a reading is folded in and read back", () => {
+    recordKvSample("kat", { contextTokens: 131021, kvBytes: 13 * GIB })
+    expect(readSamples()["kat"]?.[0]?.contextTokens).toBe(131021)
+  })
+
+  test("junk readings are refused rather than stored", () => {
+    recordKvSample("kat", { contextTokens: 0, kvBytes: GIB })
+    recordKvSample("kat", { contextTokens: 100, kvBytes: 0 })
+    expect(readSamples()["kat"] ?? []).toHaveLength(0)
+  })
+
+  test("a request-time reading OVERRIDES a load-time fit, because it measures the real quantity", async () => {
+    // Load-time readings that DO fit a rising line — so the old path would happily produce a cost, and
+    // this test can only pass if the sampled one is genuinely preferred.
+    writeFileSync(STORE, JSON.stringify({ kat: [
+      { windowTokens: 32768, totalBytes: 24 * GIB },
+      { windowTokens: 131072, totalBytes: 26 * GIB },   // a cheap ~20k B/token line
+    ] }))
+    // The measured truth on this machine is ~5× that, which must cap the window far lower.
+    recordKvSample("kat", { contextTokens: 131021, kvBytes: Math.round(12.59 * GIB) })
+    serve([KAT("loaded", 32768, 22 * GIB)])
+    const r = await ensureLoadedAtPlannedWindow("kat", { loadTimeoutMs: 3000 })
+    expect(r.plan).toBeDefined()
+    // At ~108 900 B/token the ceiling cannot reach the passport; at the load-time line it easily would.
+    expect(r.plan!.ceilingTokens).toBeLessThan(262144)
+  })
+})
+
+describe("a window above the ceiling is corrected, not respected", () => {
+  test("an over-sized loaded window is brought down to the plan", async () => {
+    const SAMPLES = join(tmpdir(), `kvs-over-${process.pid}.json`)
+    process.env.FABULA_KVSAMPLE_FILE = SAMPLES
+    rmSync(SAMPLES, { force: true })
+    writeFileSync(SAMPLES, JSON.stringify({ kat: [{ contextTokens: 131021, kvBytes: Math.round(12.59 * GIB) }] }))
+    const ARGV = join(tmpdir(), `lms-over-${process.pid}.txt`)
+    const MARKER = join(tmpdir(), `lms-over-${process.pid}.sh`)
+    // `ps` has to answer with a weight, because a plan cannot be sized without one.
+    writeFileSync(MARKER, `#!/bin/sh\nprintf '%s\\n' "$@" >> ${ARGV}\n[ "$1" = ps ] && echo "kat  kat  LOADED  22.00 GB  262144  1  Local"\nexit 0\n`)
+    require("node:fs").chmodSync(MARKER, 0o755)
+    process.env.FABULA_LMS_BIN = MARKER
+    // Loaded at the passport while the machine can only pay for a fraction of it — the live 2026-07-26 state.
+    serve([KAT("loaded", 262144, 22 * GIB)])
+    const r = await ensureLoadedAtPlannedWindow("kat", { loadTimeoutMs: 8000 })
+    expect(r.plan!.tokens).toBeLessThan(262144)
+    expect(r.acted).toBe(true)
+    const argv = readFileSync(ARGV, "utf8")
+    expect(argv).toContain(String(r.plan!.tokens))
+    for (const f of [SAMPLES, ARGV, MARKER]) rmSync(f, { force: true })
+    delete process.env.FABULA_LMS_BIN
+    delete process.env.FABULA_KVSAMPLE_FILE
+  })
+
+  test("refuses to plan when the weights are unknown, instead of treating them as free memory", async () => {
+    const SAMPLES = join(tmpdir(), `kvs-nw-${process.pid}.json`)
+    const MARKER = join(tmpdir(), `lms-nw-${process.pid}.sh`)
+    process.env.FABULA_KVSAMPLE_FILE = SAMPLES
+    // A learnable cost, so the run reaches the planning step and can only be stopped by the weights.
+    writeFileSync(SAMPLES, JSON.stringify({ kat: [{ contextTokens: 131021, kvBytes: Math.round(12.59 * GIB) }] }))
+    // `ps` says nothing — the case where the runtime reports no size.
+    writeFileSync(MARKER, `#!/bin/sh\nexit 0\n`)
+    require("node:fs").chmodSync(MARKER, 0o755)
+    process.env.FABULA_LMS_BIN = MARKER
+    serve([KAT("loaded", 262144, 0)])
+    const r = await ensureLoadedAtPlannedWindow("kat", { loadTimeoutMs: 5000 })
+    expect(r.acted).toBe(false)
+    expect(r.plan).toBeUndefined()
+    expect(r.reason).toContain("weights")
+    for (const f of [SAMPLES, MARKER]) rmSync(f, { force: true })
+    delete process.env.FABULA_LMS_BIN
+    delete process.env.FABULA_KVSAMPLE_FILE
   })
 })

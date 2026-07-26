@@ -131,3 +131,51 @@ describe("policy is visible as policy", () => {
     expect(p.reason).toContain(String(p.tokens))
   })
 })
+
+// ── Concurrent slots (measured 2026-07-26) ───────────────────────────────────
+// `parallel N` does not divide the window: a model at 262144 with parallel 4 took a single request of
+// 131 021 tokens and answered from the far end of it. So each slot can fill the window on its own and
+// the provisioning has to cover all of them.
+describe("planWindow — concurrent slots", () => {
+  // The cost this machine actually charges, from the wired-memory delta across a prefill of known size.
+  const MEASURED_PER_TOKEN = 108_910
+
+  test("omitting slots keeps the previous one-slot answer", () => {
+    const one = planWindow({ ...base, bytesPerToken: MEASURED_PER_TOKEN })
+    const explicit = planWindow({ ...base, bytesPerToken: MEASURED_PER_TOKEN, slots: 1 })
+    expect(explicit.tokens).toBe(one.tokens)
+    expect(explicit.ceilingTokens).toBe(one.ceilingTokens)
+  })
+
+  test("more slots divide the ceiling, because each can fill the window", () => {
+    const one = planWindow({ ...base, bytesPerToken: MEASURED_PER_TOKEN, slots: 1 })
+    const four = planWindow({ ...base, bytesPerToken: MEASURED_PER_TOKEN, slots: 4 })
+    expect(four.ceilingTokens).toBeLessThan(one.ceilingTokens)
+    // Four slots cost four times the cache, so the ceiling lands near a quarter (quantised down).
+    expect(four.ceilingTokens).toBeLessThanOrEqual(Math.floor(one.ceilingTokens / 4) + DEFAULT_POLICY.quantumTokens)
+  })
+
+  test("the live provisioning is over budget once its own slots are counted", () => {
+    // 262144 / parallel 4 is what the runtime was actually serving on 2026-07-26.
+    const plan = planWindow({ ...base, bytesPerToken: MEASURED_PER_TOKEN, slots: 4 })
+    expect(plan.tokens).toBeLessThan(262144)
+    expect(plan.cappedByMachine).toBe(true)
+  })
+
+  test("nonsense slot counts read as the single slot every runtime has", () => {
+    const one = planWindow({ ...base, bytesPerToken: MEASURED_PER_TOKEN, slots: 1 })
+    for (const bad of [0, -3, Number.NaN]) {
+      expect(planWindow({ ...base, bytesPerToken: MEASURED_PER_TOKEN, slots: bad }).tokens).toBe(one.tokens)
+    }
+  })
+
+  test("the reason names the slot count so a surprising ceiling can be understood", () => {
+    expect(planWindow({ ...base, bytesPerToken: MEASURED_PER_TOKEN, slots: 4 }).reason).toContain("4 concurrent slots")
+  })
+
+  test("enough slots put even the floor out of reach, and it says so", () => {
+    const plan = planWindow({ ...base, bytesPerToken: MEASURED_PER_TOKEN, slots: 64 })
+    expect(plan.fits).toBe(false)
+    expect(plan.tokens).toBe(0)
+  })
+})

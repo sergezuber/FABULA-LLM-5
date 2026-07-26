@@ -22,7 +22,7 @@ import { readFileSync, writeFileSync, mkdirSync, renameSync } from "node:fs"
 import { join, dirname } from "node:path"
 import { homedir, totalmem } from "node:os"
 import { planWindow, DEFAULT_POLICY, type Resident, type WindowPlan } from "./windowplan"
-import { fitCost, addObservation, safeSecondWindow, type Observation } from "./kvcost"
+import { fitCost, fitCostFromSamples, addObservation, safeSecondWindow, MIN_SIGNAL_TOKENS, type Observation, type KvSample } from "./kvcost"
 
 /** GUI-launched apps do not inherit the shell PATH, so a bare `lms` is not found — the same trap the
  *  other shell-outs in this project already carry a prefix for. */
@@ -40,6 +40,18 @@ const PATH_PREFIX = [
  *  talking to the real serving API instead of its own stand-in. */
 function modelApi(): string {
   return process.env.FABULA_MODEL_API || "http://localhost:1234/api/v0/models"
+}
+
+/**
+ * The `lms` binary. Read at CALL time — a path captured at import is a snapshot, the shape that has
+ * already bitten this file once (see modelApi above).
+ *
+ * `FABULA_LMS_BIN` exists so a test can point at a marker script and READ THE COMMAND. Without it the
+ * load command is unobservable, and an argument silently dropped from it would pass every test — the
+ * "pure core green, wiring dead" trap this project keeps finding. It is not a production knob.
+ */
+function lmsBin(): string {
+  return process.env.FABULA_LMS_BIN || "lms"
 }
 
 function storePath(): string {
@@ -95,7 +107,7 @@ export function usedBytes(): number {
  */
 export function weightsBytesOf(modelId: string): number {
   try {
-    const out = execFileSync("lms", ["ps"], {
+    const out = execFileSync(lmsBin(), ["ps"], {
       encoding: "utf8",
       timeout: 8000,
       env: { ...process.env, PATH: `${PATH_PREFIX}:${process.env.PATH ?? ""}` },
@@ -150,6 +162,133 @@ export function residentsOther(served: readonly ServedModel[], selfId: string): 
     .map((m) => ({ id: m.id, bytes: m.bytes }))
 }
 
+/** Where request-time cache readings live. Separate from the load-time store: they are different
+ *  measurements of different quantities and mixing them would average a real signal with a dead one. */
+function samplePath(): string {
+  const base = process.env.FABULA_KVSAMPLE_FILE
+  if (base) return base
+  const data = process.env.XDG_DATA_HOME || join(homedir(), ".local/share")
+  return join(data, "fabula", "kvsamples.json")
+}
+
+type SampleStore = Record<string, KvSample[]>
+
+export function readSamples(): SampleStore {
+  try {
+    return JSON.parse(readFileSync(samplePath(), "utf8")) as SampleStore
+  } catch {
+    return {}
+  }
+}
+
+function writeSamples(s: SampleStore): void {
+  try {
+    const p = samplePath()
+    mkdirSync(dirname(p), { recursive: true })
+    const tmp = `${p}.tmp`
+    writeFileSync(tmp, JSON.stringify(s, null, 2))
+    renameSync(tmp, p)
+  } catch {
+    /* a lost reading costs a measurement, never correctness */
+  }
+}
+
+/** Fold in one request-time reading, newest last, bounded. */
+export function recordKvSample(modelId: string, sample: KvSample, cap = 8): void {
+  if (!(sample?.contextTokens > 0 && sample?.kvBytes > 0)) return
+  const store = readSamples()
+  store[modelId] = [...(store[modelId] ?? []), sample].slice(-cap)
+  writeSamples(store)
+}
+
+/**
+ * Measure what a token of context actually costs, by asking for one and watching.
+ *
+ * This is where the cost is READABLE and the load-time path is not. Three independent sources agree
+ * that nothing at load time carries the signal on a lazy-cache runtime, all measured 2026-07-26:
+ * `lms ps` SIZE is identical at 32768 and 262144; machine memory after a load has no window term in it
+ * (three real readings fitted a NEGATIVE slope); and `lms load --estimate-only` returns the same
+ * 28.62 GiB whether asked for 32768, 131072 or 262144. The cache appears when tokens do.
+ *
+ * NOT the forbidden probe. That one loads a model bigger than the machine and finds out by drowning it.
+ * This asks for a SMALL, bounded context — a fraction of what the model is already provisioned to hold —
+ * and the runtime allocates exactly proportionally. It cannot overshoot, because the size is chosen, not
+ * discovered.
+ */
+export async function calibrateCost(
+  modelId: string,
+  opts: { tokens?: number; endpoint?: string; timeoutMs?: number } = {},
+): Promise<{ ok: boolean; sample?: KvSample; reason: string }> {
+  // Below the floor the reading measures drift rather than cache — measured, see MIN_SIGNAL_TOKENS.
+  // A caller asking for less gets the floor: a cheap wrong number is worse than a slower right one.
+  const tokens = Math.max(MIN_SIGNAL_TOKENS, Math.floor(opts.tokens ?? MIN_SIGNAL_TOKENS))
+  const url = (opts.endpoint || process.env.FABULA_GRAPH_URL || "http://localhost:1235/v1").replace(/\/+$/, "")
+  // Measured on this machine: 5.306 characters per token for ordinary prose. The exact ratio does not
+  // matter — the sample records the prompt_tokens the runtime ITSELF reports, not this estimate.
+  const filler = "the quarterly inventory audit completed without material discrepancy. ".repeat(
+    Math.ceil((tokens * 5.306) / 70),
+  )
+  // WARM FIRST, and this was learned by getting it wrong twice. A model sitting idle has its weights
+  // COMPRESSED; the first request forces them back to wired, and because compressed pages hold less than
+  // the pages they expand into, that transition reads as memory growth. Measured: a calibration whose
+  // baseline was taken while the model was idle reported 485 248 bytes per token — four and a half times
+  // the truth — because 22 GiB of weights coming back from compression landed in the number as if it
+  // were cache. The careful reading that gave the right answer took its baseline AFTER the model was
+  // already resident. So: one throwaway request to bring the weights in, then the baseline, then the
+  // measurement. The warm-up is deliberately tiny — it exists to move weights, not to allocate cache.
+  try {
+    await fetch(`${url}/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: modelId, messages: [{ role: "user", content: "hi" }], max_tokens: 1, temperature: 0, stream: false }),
+      signal: AbortSignal.timeout(opts.timeoutMs ?? 600_000),
+    })
+  } catch {
+    /* the warm-up is an optimisation of the baseline; a failure here just leaves it cold and the
+       dispersion guard will refuse the reading rather than trust it */
+  }
+  // Let the transition settle before reading: memory moves for a moment after a request finishes.
+  await new Promise((r) => setTimeout(r, 3000))
+
+  const before = usedBytes()
+  let peak = before
+  const ticker = setInterval(() => {
+    const now = usedBytes()
+    if (now > peak) peak = now
+  }, 1500)
+  try {
+    const res = await fetch(`${url}/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: modelId,
+        messages: [{ role: "user", content: `${filler}\n\nReply with one word: ok` }],
+        max_tokens: 8,
+        temperature: 0,
+        stream: false,
+      }),
+      signal: AbortSignal.timeout(opts.timeoutMs ?? 600_000),
+    })
+    if (!res.ok) return { ok: false, reason: `calibration request returned HTTP ${res.status}` }
+    const body: any = await res.json()
+    // The runtime's own count, never our estimate — the whole point is to measure, not to assume.
+    const measured = Number(body?.usage?.prompt_tokens) || 0
+    const now = usedBytes()
+    if (now > peak) peak = now
+    const grew = peak - before
+    if (!(measured > 0 && grew > 0)) {
+      return { ok: false, reason: `nothing measurable: ${measured} tokens, ${grew} bytes of growth` }
+    }
+    const sample: KvSample = { contextTokens: measured, kvBytes: grew }
+    recordKvSample(modelId, sample)
+    return { ok: true, sample, reason: `${measured} tokens allocated ${(grew / 1024 ** 3).toFixed(2)} GiB of cache` }
+  } catch (e: any) {
+    return { ok: false, reason: `calibration failed: ${String(e?.message ?? e).slice(0, 160)}` }
+  } finally {
+    clearInterval(ticker)
+  }
+}
+
 export interface EnsureResult {
   acted: boolean
   window: number
@@ -158,6 +297,35 @@ export interface EnsureResult {
 }
 
 const inFlight = new Map<string, Promise<EnsureResult>>()
+
+/** How far above the computed ceiling a loaded window may sit before it is worth a reload to correct.
+ *  POLICY: the ceiling moves as memory frees and fills, and a reload costs every live conversation its
+ *  prefix cache, so only a real over-shoot is acted on — not ordinary breathing. */
+export const OVERSHOOT_MARGIN = 0.15
+
+/**
+ * How many concurrent request slots to provision the runtime with.
+ *
+ * MEASURED 2026-07-26: `parallel N` does not divide the window — one request of 131 021 tokens went
+ * through a model loaded at 262144 with `parallel 4`, twice what a divided window would have allowed.
+ * Each slot can therefore fill the window on its own, and provisioning N of them costs N times the
+ * cache. On this machine the runtime had inherited `parallel 4` from whatever was set last — a number
+ * nothing in the harness chose — while the planner sized the window for one slot. 262144 × 4 needs
+ * 64 GiB of cache on a 48 GiB Mac, and the Mac sat in swap.
+ *
+ * The count is not a new policy knob, because a second knob would drift from the first. Slots beyond
+ * what the admission gate will ever let through are pure loss: they buy no concurrency and they take
+ * window away from the one request that IS running. So the provisioning simply follows the gate —
+ * `FABULA_MAX_CONCURRENT_UPSTREAM`, the same number that decides how many calls reach the model at
+ * once. Raise the gate and the provisioning follows on the next load; nothing has to be kept in sync
+ * by hand.
+ */
+export function plannedSlots(env: Record<string, string | undefined> = process.env): number {
+  const n = Math.floor(Number(env.FABULA_MAX_CONCURRENT_UPSTREAM))
+  // 0 means "unlimited" at the gate. Unlimited is not a provisioning a machine can be sized for, so the
+  // honest reading is one slot — the gate will still admit more, and the runtime grows its cache lazily.
+  return n > 0 ? n : 1
+}
 
 /** Memory in use with the model unloaded, captured by the most recent load. See lmsLoad. */
 let lastBaseline = 0
@@ -169,14 +337,14 @@ function footprintBytes(): number {
 }
 
 /** Run `lms load`. Resolves with the command's own words so a failure is reportable, not guessed at. */
-function lmsLoad(modelId: string, window: number, timeoutMs: number): Promise<{ ok: boolean; out: string }> {
+function lmsLoad(modelId: string, window: number, timeoutMs: number, slots = plannedSlots()): Promise<{ ok: boolean; out: string }> {
   // Unload first. Loading a model that is ALREADY resident asks the machine to hold two copies for the
   // moment of the swap, and the runtime's guardrail — rightly — refuses: measured live, a load at 65536
   // was rejected for "insufficient system resources" while the same model sat at 32768, and the very
   // same command succeeded once the old copy was gone. The guardrail was reading the true cost of what
   // it was asked to do; the request was the thing that was wrong.
   try {
-    execFileSync("lms", ["unload", modelId], {
+    execFileSync(lmsBin(), ["unload", modelId], {
       timeout: 30_000,
       env: { ...process.env, PATH: `${PATH_PREFIX}:${process.env.PATH ?? ""}` },
       stdio: "ignore",
@@ -190,8 +358,8 @@ function lmsLoad(modelId: string, window: number, timeoutMs: number): Promise<{ 
   // drift cancels: what is left is the model's own footprint and nothing else.
   lastBaseline = usedBytes()
   return new Promise((resolve) => {
-    const args = ["load", modelId, "--context-length", String(window), "-y"]
-    const child = spawn("lms", args, {
+    const args = ["load", modelId, "--context-length", String(window), "--parallel", String(slots), "-y"]
+    const child = spawn(lmsBin(), args, {
       env: { ...process.env, PATH: `${PATH_PREFIX}:${process.env.PATH ?? ""}` },
       stdio: ["ignore", "pipe", "pipe"],
     })
@@ -249,7 +417,11 @@ export async function ensureLoadedAtPlannedWindow(
       writeStore(store)
     }
 
-    const cost = fitCost(store[modelId] ?? [])
+    // Prefer the request-time readings: they measure the quantity being governed. The load-time fit is
+    // kept as the fallback for a runtime that really does pre-allocate its cache — refusing to model
+    // that would tie this file to one serving stack.
+    const sampled = fitCostFromSamples(readSamples()[modelId] ?? [])
+    const cost = sampled.bytesPerToken > 0 ? sampled : fitCost(store[modelId] ?? [])
     if (!(cost.bytesPerToken > 0)) {
       // Cold start. If it is already loaded, this reading plus the next one at a different window will
       // give us the line — so wait rather than load blind. If it is NOT loaded, letting the serving
@@ -290,16 +462,42 @@ export async function ensureLoadedAtPlannedWindow(
       }
     }
 
+    // Weights are the largest term in the budget, so an unknown one cannot be treated as zero — that
+    // hands the plan the model's entire footprint as if it were free memory. The request-time fit goes
+    // through the origin and reports no weights BY DESIGN (there is no constant to recover), so this
+    // fallback chain can genuinely arrive at zero, and the honest answer then is to refuse.
+    const weights = weightsBytesOf(modelId) || cost.weightsBytes
+    if (!(weights > 0)) {
+      return {
+        acted: false,
+        window: me.loadedWindow,
+        reason: `cannot size a window for ${modelId} without knowing its weights; the serving runtime reported none`,
+      }
+    }
+
     const plan = planWindow({
       passportTokens: me.passport,
       totalBytes: totalmem(),
-      weightsBytes: weightsBytesOf(modelId) || cost.weightsBytes,
+      weightsBytes: weights,
       bytesPerToken: cost.bytesPerToken,
       residents: residentsOther(served, modelId),
+      // Provision exactly the concurrency the gate will admit — see plannedSlots. A slot the gate never
+      // uses buys nothing and takes window away from the request that IS running.
+      slots: plannedSlots(),
     })
 
     if (!plan.fits) return { acted: false, window: me.loadedWindow, plan, reason: plan.reason }
-    if (me.state === "loaded" && me.loadedWindow >= plan.tokens) {
+    // A window ABOVE the ceiling is not a preference to respect, it is a provisioning the machine cannot
+    // pay for — and the damage is silent. MEASURED 2026-07-26: this model sat at 262144 against a
+    // computed ceiling of 135168, and the Mac lived at 0.6 GiB free with 18 GiB compressed and 8.8 GiB
+    // of swap while the model was IDLE. Raising only was written when the risk was believed to be a
+    // window loaded too SMALL; the opposite risk turned out to be the live one.
+    //
+    // The margin exists so a ceiling that breathes with free memory cannot cause a reload every time a
+    // browser tab opens — and every reload throws away the whole prefix cache. Only a window that
+    // over-shoots by more than the margin is worth the reload it costs.
+    const over = me.loadedWindow > plan.tokens * (1 + OVERSHOOT_MARGIN)
+    if (me.state === "loaded" && me.loadedWindow >= plan.tokens && !over) {
       return { acted: false, window: me.loadedWindow, plan, reason: `already at ${me.loadedWindow}; ${plan.reason}` }
     }
 
@@ -334,7 +532,7 @@ export async function ensureLoadedAtPlannedWindow(
       acted: true,
       window: after?.loadedWindow ?? plan.tokens,
       plan,
-      reason: `raised ${me.loadedWindow || "unloaded"} -> ${after?.loadedWindow ?? plan.tokens}: ${plan.reason}`,
+      reason: `${me.loadedWindow && plan.tokens < me.loadedWindow ? "lowered" : "raised"} ${me.loadedWindow || "unloaded"} -> ${after?.loadedWindow ?? plan.tokens}: ${plan.reason}`,
     }
   })()
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { fitCost, addObservation, safeSecondWindow, MIN_WINDOW_SPREAD, type Observation } from "./kvcost"
+import { fitCost, fitCostFromSamples, addObservation, safeSecondWindow, MIN_WINDOW_SPREAD, type Observation } from "./kvcost"
 
 const GIB = 1024 ** 3
 // The owner's real model. Measured live: 36.49 GiB at a 262144 window, 20.44 GiB of weights.
@@ -126,5 +126,87 @@ describe("breaking the cold-start deadlock", () => {
   test("malformed input never throws", () => {
     expect(() => safeSecondWindow(undefined as any, FREE, 262144)).not.toThrow()
     expect(safeSecondWindow({} as any, FREE, 262144)).toBe(0)
+  })
+})
+
+// ── Request-time cache readings (measured 2026-07-26) ────────────────────────
+// The load-time model assumes machine memory after a load carries a `W · bytesPerToken` term. On a
+// runtime that allocates the cache lazily it does not, which is why three real readings fitted a
+// NEGATIVE slope and the fit refused forever. These samples watch the cache where it actually appears.
+describe("fitCostFromSamples", () => {
+  // The two real readings from this machine: wired-memory delta across a prefill of known size.
+  const REAL = [
+    { contextTokens: 60_332, kvBytes: Math.round(5.42 * 1024 ** 3) },
+    { contextTokens: 131_021, kvBytes: Math.round(12.59 * 1024 ** 3) },
+  ]
+
+  test("no readings refuses, and says one request is enough", () => {
+    const fit = fitCostFromSamples([])
+    expect(fit.bytesPerToken).toBe(0)
+    expect(fit.reason).toContain("one real request")
+  })
+
+  test("ONE reading already determines the cost — no cold-start deadlock", () => {
+    const fit = fitCostFromSamples([REAL[1]])
+    expect(fit.points).toBe(1)
+    expect(fit.bytesPerToken).toBeGreaterThan(90_000)
+    expect(fit.bytesPerToken).toBeLessThan(120_000)
+  })
+
+  test("the real pair lands on the measured cost", () => {
+    const fit = fitCostFromSamples(REAL)
+    expect(fit.bytesPerToken).toBeGreaterThan(95_000)
+    expect(fit.bytesPerToken).toBeLessThan(115_000)
+    expect(fit.reason).toContain("bytes per token")
+  })
+
+  test("it fits through the origin — no invented intercept to drag the slope", () => {
+    expect(fitCostFromSamples(REAL).weightsBytes).toBe(0)
+  })
+
+  test("the learned cost is far above what the load-time path had recorded", () => {
+    // The store held 65 754 B/token; the machine actually charges ~40% more, which is why a window
+    // planned on the old figure did not fit.
+    expect(fitCostFromSamples(REAL).bytesPerToken).toBeGreaterThan(65_754 * 1.3)
+  })
+
+  test("readings that disagree badly are refused, not averaged into confidence", () => {
+    const fit = fitCostFromSamples([
+      { contextTokens: 60_000, kvBytes: 1024 ** 3 },
+      { contextTokens: 60_000, kvBytes: 8 * 1024 ** 3 },
+    ])
+    expect(fit.bytesPerToken).toBe(0)
+    expect(fit.reason).toContain("disagree")
+  })
+
+  test("a reading taken over too small a context is discarded, not believed", () => {
+    // The real defect: a calibration at 8 207 tokens reported 470 013 B/token because the cache it
+    // allocated was smaller than the memory the rest of the machine moved while it ran.
+    const fit = fitCostFromSamples([{ contextTokens: 8_207, kvBytes: Math.round(3.59 * 1024 ** 3) }])
+    expect(fit.bytesPerToken).toBe(0)
+    expect(fit.reason).toContain("drift")
+  })
+
+  test("a small reading cannot drag a good one off course", () => {
+    const good = { contextTokens: 131_021, kvBytes: Math.round(12.59 * 1024 ** 3) }
+    const alone = fitCostFromSamples([good]).bytesPerToken
+    const withNoise = fitCostFromSamples([{ contextTokens: 8_207, kvBytes: Math.round(3.59 * 1024 ** 3) }, good])
+    expect(withNoise.bytesPerToken).toBe(alone)
+  })
+
+  test("junk readings are dropped rather than fitted", () => {
+    expect(fitCostFromSamples([{ contextTokens: 0, kvBytes: 5 }] as any).bytesPerToken).toBe(0)
+    expect(fitCostFromSamples([{ contextTokens: 100, kvBytes: -5 }] as any).bytesPerToken).toBe(0)
+  })
+
+  test("the load-time path is untouched and still refuses the real falling readings", () => {
+    // Verbatim from ~/.local/share/fabula/kvcost.json on 2026-07-26.
+    const fit = fitCost([
+      { windowTokens: 65_536, totalBytes: 22_776_954_880 },
+      { windowTokens: 131_072, totalBytes: 17_828_118_528 },
+      { windowTokens: 262_144, totalBytes: 11_840_831_488 },
+    ])
+    expect(fit.bytesPerToken).toBe(0)
+    expect(fit.reason).toContain("rising line")
   })
 })

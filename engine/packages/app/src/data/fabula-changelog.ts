@@ -15,20 +15,6 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-07-26",
     items: [
       {
-        ru: "Свидетельство о выполненной работе больше не выдаётся, когда работы не было. Автоматическая выдача не проверяла, есть ли что заверять, — и фоновый служебный проход выписал документ со словом «ПРОВЕРЕНО» поверх показательного примера в самом хранилище, хотя не изменил ни одного файла. Теперь и автоматический, и ручной путь спрашивают одно и то же правило, а фоновые проходы не выписывают свидетельств вовсе.",
-        en: "A proof of completed work is no longer issued when there was no work. The automatic path never asked whether anything was there to attest, and a background housekeeping pass wrote a document reading VERIFIED over the showcase example in the repository itself, without changing a single file. Both the automatic and the manual path now ask the same rule, and background passes issue nothing at all.",
-      },
-      {
-        ru: "Две проверки одного свидетельства перестали расходиться. На документе без изменений одна печатала «проверено», а вторая — «заплатка не применяется»; обе теперь отказывают по одной и той же причине, названной словами: заверять нечего.",
-        en: "Two checks of the same proof no longer disagree. On a document recording no change, one printed VERIFIED while the other reported a broken patch; both now refuse for the same stated reason — there is nothing to attest.",
-      },
-    ],
-  },
-  {
-    version: "0.38.0",
-    date: "2026-07-26",
-    items: [
-      {
         ru: "Свидетельство о выполненной работе больше не выдаётся, когда работы не было. Автоматическая выдача не проверяла, есть ли что заверять, — и фоновый служебный проход выписал документ со словом «ПРОВЕРЕНО» поверх показательного примера в самом хранилище, не изменив ни одного файла. Теперь оба пути спрашивают одно правило, а фоновые проходы не выписывают свидетельств вовсе.",
         en: "A proof of completed work is no longer issued when there was no work. The automatic path never asked whether anything was there to attest, and a background housekeeping pass wrote a document reading VERIFIED over the showcase example in the repository itself, without changing a single file. Both paths now ask the same rule, and background passes issue nothing at all.",
       },

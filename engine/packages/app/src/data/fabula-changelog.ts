@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.42.0"
+export const FABULA_VERSION = "0.43.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,24 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.43.0",
+    date: "2026-07-27",
+    items: [
+      {
+        ru: "Две внутренние заметки о состоянии памяти не могли быть записаны вообще: они обращались к средству вывода, которого в этом файле нет, и ошибка тут же поглощалась. Одна из них считалась работающей с момента выпуска и не выдала ни одной строки — наблюдение, неспособное заговорить, выглядит точно как спокойная машина.",
+        en: "Two internal notes about memory state could not be written at all: they called an output helper that does not exist in that file, and the error was swallowed on the spot. One of them had counted as working since release and had never produced a single line — an observation that cannot speak looks exactly like a quiet machine.",
+      },
+      {
+        ru: "Добавлено предупреждение о запросе, который просит больше контекста, чем модель загружена держать. Раньше такой запрос уходил без единой проверки, а отказ приходил не сообщением, а гибелью процесса на середине ответа. Это наблюдение, а не запрет: оценка идёт от символов, и отказ с такой погрешностью срабатывал бы на длинных текстах, ради которых всё и делается.",
+        en: "Added a warning for a request asking for more context than the model was loaded to hold. Such a request used to go through unchecked, and the refusal arrived not as a message but as the process dying mid-answer. It observes rather than blocks: the estimate comes from characters, and a refusal with that margin would fire on exactly the long texts this exists to support.",
+      },
+      {
+        ru: "Одна измеренная величина вместо трёх расходящихся: сколько символов приходится на единицу текста при подсчёте. Три места хранили три разных числа для одного и того же, расходясь между собой в полтора раза, и одно из них заставляло сжимать контекст раньше необходимого.",
+        en: "One measured figure instead of three that disagreed: how many characters a unit of text holds when counting. Three places held three different numbers for the same thing, half again apart, and one of them made the context be compacted earlier than needed.",
+      },
+    ],
+  },
   {
     version: "0.42.0",
     date: "2026-07-27",

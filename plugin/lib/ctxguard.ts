@@ -19,7 +19,12 @@
 
 export const DEFAULT_CONTEXT_WINDOW = 131072
 export const DEFAULT_HIGH_WATER = 0.75
-export const DEFAULT_CHARS_PER_TOKEN = 3.5
+// MEASURED on this machine, 2026-07-26: 320 134 characters of ordinary prose came back from the
+// runtime as 60 332 tokens. This value was 3.5 — a 52% spread against the adapter's 4 and the loader's
+// measured figure, for the same quantity. Three constants for one number cannot all be right, and this
+// one made the guard believe the context was half again as full as it was, so it consolidated early.
+// The adapter carries the twin (adapter_util.py CHARS_PER_TOKEN); separate languages, one measurement.
+export const DEFAULT_CHARS_PER_TOKEN = 5.306
 
 /** The per-CALL ceiling. Shares FABULA_CONTEXT_WINDOW with the adapter's overflow telemetry — one source
  *  of truth for "how big is one request" — and defaults to the local build's usual value.

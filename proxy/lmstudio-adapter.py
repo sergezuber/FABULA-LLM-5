@@ -75,7 +75,7 @@ _load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir,
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from adapter_util import (
     stable_prefix, shared_prefix_len, classify_overflow, clamp_max_tokens, drain_with_idle_split,
-    update_prefix_and_check, compare_and_store, dump_last_request,
+    update_prefix_and_check, compare_and_store, dump_last_request, estimate_tokens,
     classify_break, injection_order_report, AdmissionGate, IdleBaseline,
     DegenerationDetector, sse_delta_content,
 )
@@ -120,9 +120,60 @@ def note_window_shortfall(model_id):
         if _t.time() - last < 3600:
             return
         _WINDOW_NOTED[model_id] = _t.time()
-        log("WINDOW-SHORTFALL model=%s loaded=%d supports=%d "
-            "(observed only; the app's model switch is what sets windows)"
+        sys.stderr.write(
+            "[fabula-adapter] WINDOW-SHORTFALL model=%s loaded=%d supports=%d "
+            "(observed only; the app's model switch is what sets windows)\n"
             % (model_id, loaded, passport))
+    except Exception:
+        pass
+
+
+_CEILING_NOTED = {}
+
+
+def note_context_near_ceiling(model_id, est_tokens):
+    """OBSERVE ONLY — a request that is about to ask for more context than the model was loaded to hold.
+
+    THE GAP THIS FILLS, and why it is a log rather than a refusal. Nothing anywhere checks a request's
+    SIZE against the window: `derived_output_cap` clamps how much may be GENERATED, never how much
+    arrives. So a prompt larger than the loaded window goes upstream unchallenged, and the recorded
+    failure mode is not a clean rejection — it is the serving process dying mid-generation, which the
+    caller sees as a connection reset and reads as a hang.
+
+    It stays an observation on purpose. Refusing needs a number to refuse against, and the number here
+    is an ESTIMATE from characters; the measured spread between this project's own char-per-token
+    figures was 52%, which at this window is several gigabytes of cache either way. A refusal with that
+    error bar would fire on exactly the long-corpus turns this project exists to make work, and a turn
+    killed by a guard is worse than the thing being guarded. First the evidence, then — if the evidence
+    says so — the gate.
+
+    Rate-limited to once an hour per model, like the shortfall note beside it: a line printed on every
+    request is a line nobody reads.
+    """
+    import time as _t
+    try:
+        if not (est_tokens > 0):
+            return
+        # The CACHED accessor, not a fresh lookup. This runs inside the request handler, and a
+        # synchronous call out to the serving API from there is a network round trip on the hot path —
+        # measured: the note never appeared on a real oversized request, because the lookup did not
+        # return in time and the guard's own except-pass hid it. `loaded_window` answers from a TTL
+        # cache and reports 0 for "unknown", which this treats as nothing to say.
+        loaded = loaded_window(model_id)
+        if not (loaded > 0) or est_tokens < loaded * 0.9:
+            return
+        last = _CEILING_NOTED.get(model_id, 0)
+        if _t.time() - last < 3600:
+            return
+        _CEILING_NOTED[model_id] = _t.time()
+        # sys.stderr, like every other line this adapter emits. It was `log(...)` — a name that does
+        # not exist in this module, so the call raised NameError straight into the surrounding
+        # `except: pass`. The sibling note below had the same line and has therefore never printed
+        # once since it shipped: a telemetry that cannot speak looks exactly like a quiet machine.
+        sys.stderr.write(
+            "[fabula-adapter] CONTEXT-NEAR-CEILING model=%s estimated=%d loaded_window=%d "
+            "(estimate from characters; observed only, the request was not touched)\n"
+            % (model_id, est_tokens, loaded))
     except Exception:
         pass
 
@@ -470,10 +521,14 @@ class Handler(BaseHTTPRequestHandler):
                         if cur != newv:
                             j["max_tokens"] = newv
                             changed = True
+                    # The near-ceiling note asks the SERVER what window is loaded, so it needs no
+                    # configured value and must not sit behind one — put inside the branch below it
+                    # simply never ran, which the first live oversized request revealed.
+                    note_context_near_ceiling(j.get("model"), estimate_tokens(body) if body else 0)
                     # §3p2 prevention: fit max_tokens to the remaining window so a tool call can't
-                    # truncate mid-arguments. Estimate prompt tokens as chars/4 of the serialized body.
+                    # truncate mid-arguments. Prompt tokens estimated with the one measured ratio.
                     if CONTEXT_WINDOW > 0:
-                        est = len(body) // 4 if body else 0
+                        est = estimate_tokens(body) if body else 0
                         fitted = clamp_max_tokens(j.get("max_tokens"), CONTEXT_WINDOW, est)
                         if fitted is not None and j.get("max_tokens") != fitted:
                             j["max_tokens"] = fitted

@@ -218,6 +218,25 @@ def sse_delta_content(frame):
     return content if isinstance(content, str) else ""
 
 
+
+# ── One estimate of how many characters a token holds ────────────────────────
+# MEASURED on this machine, 2026-07-26: 320 134 characters of ordinary prose came back from the
+# runtime as 60 332 tokens — 5.306 characters per token. Three different figures had grown up in this
+# project for the same quantity (3.5 in the context guard, 4 here, 5.306 in the loader), a 52% spread
+# between our own constants. Whichever of them is right, they cannot all be, and a budget built on the
+# wrong one is wrong by that margin exactly where it is being trusted.
+#
+# It is only ever used BEFORE the runtime can count. Every path that has a real `prompt_tokens` uses
+# that instead — an estimate is what you reach for when the measurement does not exist yet.
+CHARS_PER_TOKEN = 5.306
+
+
+def estimate_tokens(text_or_len):
+    """Characters to tokens, using the one measured ratio. Accepts a string or a length."""
+    n = text_or_len if isinstance(text_or_len, (int, float)) else len(text_or_len or "")
+    return int(max(0, n) / CHARS_PER_TOKEN)
+
+
 def dump_last_request(obj, path):
     """Phase-0 context audit tap (Context OS design, section 9): atomically write the
     LAST chat-completions request body to `path` so `context_audit.py analyze` can produce the

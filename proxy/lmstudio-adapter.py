@@ -94,6 +94,53 @@ CONTEXT_WINDOW = int(os.environ.get("FABULA_CONTEXT_WINDOW", "0"))
 # was. LM Studio publishes it per loaded model; asking costs one cached call per model id.
 _WINDOW_CACHE = {}
 
+_WINDOW_NOTED = {}
+
+def note_window_shortfall(model_id):
+    """OBSERVE ONLY — the adapter never reloads a model, and that restraint is the design.
+
+    It sees every request, so it is the natural place to notice "loaded below what this model supports".
+    Acting on it here would be wrong twice over. The ceiling moves as memory frees and fills, so a
+    per-request comparison would reload, and reload again — and each reload throws away the whole prefix
+    cache, costing every live conversation a full re-prefill measured in minutes. And the owner may have
+    chosen that smaller window deliberately; a background actor silently overruling an owner's setting is
+    the exact class of defect this project already closed in its supervision stores.
+
+    So: one line in the log, at most once an hour per model, and nothing else.
+    """
+    import time as _t
+    try:
+        info = _model_info(model_id)
+        if not info:
+            return
+        loaded, passport = info
+        if not (loaded > 0 and passport > loaded):
+            return
+        last = _WINDOW_NOTED.get(model_id, 0)
+        if _t.time() - last < 3600:
+            return
+        _WINDOW_NOTED[model_id] = _t.time()
+        log("WINDOW-SHORTFALL model=%s loaded=%d supports=%d "
+            "(observed only; the app's model switch is what sets windows)"
+            % (model_id, loaded, passport))
+    except Exception:
+        pass
+
+
+def _model_info(model_id):
+    """(loaded_window, passport) for a model, or None. Read fresh — never a remembered figure."""
+    import urllib.request as _u, json as _j
+    api = os.environ.get("FABULA_MODEL_API", "http://localhost:1234/api/v0/models")
+    try:
+        with _u.urlopen(api, timeout=1.5) as r:
+            for m in (_j.loads(r.read().decode()) or {}).get("data", []):
+                if m.get("id") == model_id:
+                    return int(m.get("loaded_context_length") or 0), int(m.get("max_context_length") or 0)
+    except Exception:
+        return None
+    return None
+
+
 def loaded_window(model_id, timeout=1.5):
     """The serving window of `model_id` as the server itself reports it. 0 when it cannot be learned —
     every caller must treat 0 as "unknown" and fall back, never as "no room"."""
@@ -123,6 +170,7 @@ def loaded_window(model_id, timeout=1.5):
 
 def effective_window(model_id):
     """An explicit override still wins — someone pinning it knows something we do not. Otherwise ask."""
+    note_window_shortfall(model_id)  # observe only; this function never reloads anything
     return CONTEXT_WINDOW if CONTEXT_WINDOW > 0 else loaded_window(model_id)
 
 def derived_output_cap(model_id):

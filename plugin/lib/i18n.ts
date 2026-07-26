@@ -62,7 +62,14 @@ export const PLUGIN_I18N: Record<string, PluginI18n> = {
     nameRu: "Защита бюджета контекста",
     descEn: "Stops a single turn from outgrowing the model's context window. A 'read every chapter / all files' task loads the whole corpus into one context, and past the device's memory budget the model server crashes mid-answer ('the model has crashed … Exit code: null'). Near the window it tells the agent to summarise what it has read and drop the raw text; on a bulk-read request it steers to reading in batches with a running summary. Idle on normal turns, so it costs nothing until the context is genuinely large.",
     descRu: "Не даёт одному ходу перерасти контекстное окно модели. Задача «прочти все главы / все файлы» грузит весь корпус в один контекст, и за пределом памяти устройства сервер модели падает посреди ответа («модель упала … Exit code: null»). У границы окна велит агенту сжать прочитанное в сводку и выкинуть сырой текст; на запрос «прочитать всё» направляет читать порциями с накопительной сводкой. На обычных ходах бездействует — ничего не стоит, пока контекст не стал по-настоящему большим.",
+  },  window: {
+    name: "Context-window autoloader",
+    nameRu: "Автоподбор окна контекста",
+    descEn: "Loads the model at the widest context window it and this machine can hold — read from the model and measured on this Mac, never typed into a config. Switch models and the new one comes up at its own full size if it fits, or at the largest size your memory can hold if it does not.",
+    descRu: "Загружает модель с самым широким окном контекста, какое выдержат и она сама, и эта машина: предел модели читается у неё, цена памяти измеряется на вашем Mac, ничего не вписано в настройки. Переключили модель — новая поднимется на свой полный размер, если он помещается, или на наибольший, который держит память.",
+    tags: ["files"],
   },
+
   ops: {
     tags: ["ops"],
     nameRu: "Планировщик и операции",

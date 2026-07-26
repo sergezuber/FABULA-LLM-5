@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.26.0"
+export const FABULA_VERSION = "0.27.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.27.0",
+    date: "2026-07-26",
+    items: [
+      {
+        ru: "Размер контекста больше никто не вписывает руками — он вычисляется при смене модели. Раньше это было число, которое кто-то однажды напечатал: модель, умеющая 262144, была загружена на 65536, и каждый запрос приходил вшестеро больше, чем помещалось в вызов, — половина работы переделывалась на каждом шаге, а приложение выглядело зависшим, хотя просто стояло в очереди. Теперь предел читается у самой модели, цена памяти за один токен окна измеряется на вашей машине по настоящим загрузкам, и берётся то из двух, что помещается рядом с системой и другими загруженными моделями. Незнакомая модель сначала поднимается маленькой, замеряется и поднимается заново — вслепую на максимум никогда, потому что на Mac такая загрузка не падает, а утаскивает в своп весь компьютер.",
+        en: "Nobody types the context size by hand any more — it is worked out when you switch models. It used to be a number someone entered once: a model capable of 262144 was loaded at 65536, so every request arrived six times larger than the call could hold, half the work was redone on every step, and the app looked frozen when it was only queueing. Now the limit is read from the model itself, the memory price of one token of window is measured on your machine from real loads, and whichever of the two fits alongside the system and any other loaded model is the one used. An unfamiliar model is brought up small, measured, and raised — never straight to the maximum, because on a Mac a load like that does not fail, it drags the whole computer into swap.",
+      },
+    ],
+  },
   {
     version: "0.26.0",
     date: "2026-07-25",

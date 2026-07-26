@@ -1,0 +1,43 @@
+[fabula-adapter] CACHE-BREAK model=kat-coder-v2.5-dev-optiq cause=content-break shared=0/184497 (0%) queue_depth=0 active=1
+[fabula-adapter] ADMISSION waited=69.73s queue_depth=0 active=1
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 62668)
+Traceback (most recent call last):
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/socketserver.py", line 683, in process_request_thread
+    self.finish_request(request, client_address)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/socketserver.py", line 360, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/socketserver.py", line 747, in __init__
+    self.handle()
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/http/server.py", line 436, in handle
+    self.handle_one_request()
+  File "/Users/SISTEMMA/GitHub/FABULA-LLM-5/proxy/lmstudio-adapter.py", line 818, in handle_one_request
+    return BaseHTTPRequestHandler.handle_one_request(self)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/http/server.py", line 402, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/socket.py", line 704, in readinto
+    return self._sock.recv_into(b)
+ConnectionResetError: [Errno 54] Connection reset by peer
+----------------------------------------
+[fabula-adapter] CACHE-BREAK model=kat-coder-v2.5-dev-optiq cause=content-break shared=180531/359001 (51%) queue_depth=0 active=0
+[fabula-adapter] CACHE-BREAK model=kat-coder-v2.5-dev-optiq cause=content-break shared=184655/362402 (51%) queue_depth=0 active=0
+[fabula-adapter] CACHE-BREAK model=kat-coder-v2.5-dev-optiq cause=content-break shared=184655/365904 (51%) queue_depth=0 active=0
+[fabula-adapter] CACHE-BREAK model=kat-coder-v2.5-dev-optiq cause=content-break shared=184654/369887 (50%) queue_depth=0 active=0
+[fabula-adapter] CACHE-BREAK model=kat-coder-v2.5-dev-optiq cause=content-break shared=184655/371213 (50%) queue_depth=0 active=0
+[fabula-adapter] CACHE-BREAK model=kat-coder-v2.5-dev-optiq cause=content-break shared=184655/374042 (50%) queue_depth=0 active=0
+[fabula-adapter] CACHE-BREAK model=kat-coder-v2.5-dev-optiq cause=content-break shared=184655/376876 (49%) queue_depth=0 active=0
+[fabula-adapter] CACHE-BREAK model=kat-coder-v2.5-dev-optiq cause=content-break shared=184655/379673 (49%) queue_depth=0 active=0
+[fabula-adapter] CACHE-BREAK model=kat-coder-v2.5-dev-optiq cause=content-break shared=184655/385117 (49%) queue_depth=0 active=0
+[fabula-adapter] CACHE-BREAK model=kat-coder-v2.5-dev-optiq cause=content-break shared=184655/386707 (48%) queue_depth=0 active=0
+[fabula-adapter] CACHE-BREAK model=kat-coder-v2.5-dev-optiq cause=content-break shared=184655/389267 (48%) queue_depth=0 active=0
+[fabula-adapter] CACHE-BREAK model=kat-coder-v2.5-dev-optiq cause=content-break shared=184654/394024 (47%) queue_depth=0 active=0
+[fabula-adapter] CACHE-BREAK model=kat-coder-v2.5-dev-optiq cause=content-break shared=184655/396800 (47%) queue_depth=0 active=0
+[fabula-adapter] CACHE-BREAK model=kat-coder-v2.5-dev-optiq cause=content-break shared=184655/401154 (47%) queue_depth=0 active=0
+[fabula-adapter] CACHE-BREAK model=kat-coder-v2.5-dev-optiq cause=content-break shared=184655/404631 (46%) queue_depth=0 active=0
+[fabula-adapter] CACHE-BREAK model=kat-coder-v2.5-dev-optiq cause=content-break shared=184655/409906 (45%) queue_depth=0 active=0
+[fabula-adapter] CACHE-BREAK model=kat-coder-v2.5-dev-optiq cause=content-break shared=184655/413281 (45%) queue_depth=0 active=0
+[fabula-adapter] CACHE-BREAK model=kat-coder-v2.5-dev-optiq cause=content-break shared=184655/418389 (45%) queue_depth=0 active=0
+[fabula-adapter] CACHE-BREAK model=kat-coder-v2.5-dev-optiq cause=content-break shared=184654/421823 (44%) queue_depth=0 active=0
+[fabula-adapter] CACHE-BREAK model=kat-coder-v2.5-dev-optiq cause=content-break shared=184656/425300 (44%) queue_depth=0 active=0
+[fabula-adapter] CACHE-BREAK model=kat-coder-v2.5-dev-optiq cause=content-break shared=184656/429001 (43%) queue_depth=0 active=0
+[fabula-adapter] CACHE-BREAK model=kat-coder-v2.5-dev-optiq cause=content-break shared=184656/432417 (43%) queue_depth=0 active=0

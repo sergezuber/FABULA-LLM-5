@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.39.0"
+export const FABULA_VERSION = "0.40.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.40.0",
+    date: "2026-07-26",
+    items: [
+      {
+        ru: "Добавлена проверка, которая ищет написанный, но никем не вызываемый код. Это самый частый способ, которым правка выглядит сделанной и не работает: механизм есть, тесты на него зелёные, а из рабочего пути его никто не зовёт. Проверка требует, чтобы у каждого исключения была причина, которую человек может взвесить, — иначе список исключений становится местом, куда прячут ту же проблему.",
+        en: "Added a check that hunts for code which was written but is called from nowhere. That is the most common way a change looks finished and is not: the mechanism exists, its own tests pass, and no working path ever reaches it. The check insists every exception carry a reason a reader can weigh — otherwise the exception list becomes the place the same problem hides.",
+      },
+    ],
+  },
   {
     version: "0.39.0",
     date: "2026-07-26",

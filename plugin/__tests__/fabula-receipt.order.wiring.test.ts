@@ -147,3 +147,71 @@ test("change-quiz runs BEFORE the receipt: a steered green still mints on the qu
 
   rmSync(ws, { recursive: true, force: true })
 })
+
+// ── The zero-artifact rule (measured defect, 2026-07-26) ─────────────────────
+// A background checkpoint-writer minted a receipt reading "VERIFIED" over the tracked public demo:
+// artifact 0 files / 0 bytes, a 0-byte patch, and its `task` was the writer's own system-reminder.
+// The manual `mint_receipt` had refused an empty diff since the beginning; the AUTO path never asked,
+// and nothing anywhere looked at which agent was driving.
+test("a green verify with NOTHING changed mints no receipt", async () => {
+  const ws = repo()
+  const receipt = (await FabulaReceipt({ directory: ws } as any)) as any
+  const sid = "s-empty"
+  await receipt["chat.message"](
+    { sessionID: sid, messageID: "m", model: "qwen-test-35b", agent: "build" },
+    { message: { id: "m", sessionID: sid, role: "user" }, parts: [{ type: "text", text: "run the suite" }] },
+  )
+  // No edit at all — the tree is exactly the base commit, so `git diff HEAD` is empty.
+  const out = await receipt["tool.execute.after"](
+    { tool: "verify_done", sessionID: sid, args: {} },
+    { output: GREEN, metadata: { passed: true, exitCode: 0, cmd: "bun test" } },
+  )
+  void out
+  expect(existsSync(path.join(ws, ".fabula", "receipts", "latest.json"))).toBe(false)
+})
+
+test("a background writer's session mints no receipt, even with a real change", async () => {
+  const ws = repo()
+  const receipt = (await FabulaReceipt({ directory: ws } as any)) as any
+  const sid = "s-writer"
+  // The engine hands the driving agent to chat.message; a checkpoint-writer is housekeeping, not work.
+  await receipt["chat.message"](
+    { sessionID: sid, messageID: "m", model: "qwen-test-35b", agent: "checkpoint-writer" },
+    { message: { id: "m", sessionID: sid, role: "user" }, parts: [{ type: "text", text: "<system-reminder> checkpoint-writer mode" }] },
+  )
+  // A REAL diff, so the empty-artifact rule alone cannot explain a refusal — only the agent can.
+  writeFileSync(path.join(ws, "export.ts"), "export const ok = 3\n")
+  await receipt["tool.execute.after"](
+    { tool: "verify_done", sessionID: sid, args: {} },
+    { output: GREEN, metadata: { passed: true, exitCode: 0, cmd: "bun test" } },
+  )
+  expect(existsSync(path.join(ws, ".fabula", "receipts", "latest.json"))).toBe(false)
+})
+
+test("the main agent with a real change still mints — the guard is not a blanket off switch", async () => {
+  // The comprehension and reproduce gates have their own coverage above; switch them off so this case
+  // isolates the rule under test. Without this the control passes for the WRONG reason — a refusal by a
+  // different gate would look exactly like the new one working.
+  const quiz = process.env.FABULA_CHANGE_QUIZ, repro2 = process.env.FABULA_REPRODUCE_GATE
+  process.env.FABULA_CHANGE_QUIZ = "0"
+  process.env.FABULA_REPRODUCE_GATE = "0"
+  const ws = repo()
+  const receipt = (await FabulaReceipt({ directory: ws } as any)) as any
+  const sid = "s-main"
+  await receipt["chat.message"](
+    { sessionID: sid, messageID: "m", model: "qwen-test-35b", agent: "build" },
+    { message: { id: "m", sessionID: sid, role: "user" }, parts: [{ type: "text", text: "Fix the export bug" }] },
+  )
+  writeFileSync(path.join(ws, "export.ts"), "export const ok = 4\n")
+  writeFileSync(path.join(ws, "export.test.ts"), "test('x',()=>{})\n")
+  await receipt["tool.execute.after"]({ tool: "str_replace", sessionID: sid, args: { file_path: path.join(ws, "export.ts") } }, { output: "ok", metadata: {} })
+  await receipt["tool.execute.after"]({ tool: "create_file", sessionID: sid, args: { file_path: path.join(ws, "export.test.ts") } }, { output: "ok", metadata: {} })
+  await receipt["tool.execute.after"](
+    { tool: "verify_done", sessionID: sid, args: {} },
+    { output: GREEN, metadata: { passed: true, exitCode: 0, cmd: "bun test" } },
+  )
+  const minted = existsSync(path.join(ws, ".fabula", "receipts", "latest.json"))
+  if (quiz === undefined) delete process.env.FABULA_CHANGE_QUIZ; else process.env.FABULA_CHANGE_QUIZ = quiz
+  if (repro2 === undefined) delete process.env.FABULA_REPRODUCE_GATE; else process.env.FABULA_REPRODUCE_GATE = repro2
+  expect(minted).toBe(true)
+})

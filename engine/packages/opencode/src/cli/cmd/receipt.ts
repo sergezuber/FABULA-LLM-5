@@ -206,7 +206,16 @@ function verifyReceipt(dir: string, file: string): number {
         console.error(`NOT DONE — the receipt claims ${r.artifact!.files} changed file(s) but the recorded patch is empty; the artifact is incomplete or tampered.`)
         return 1
       }
-      console.log(`Patch:    empty diff (receipt records no file edits) — running the verification on the bare base`)
+      // THE ONE RULE — the twin of `receiptRefusal` in the plugin's lib/receipt.ts. This branch used to
+      // run the verification on the bare base and then print "base + patch → passed", which is false
+      // when there is no patch: it is a statement about the repository BEFORE the work. Measured
+      // 2026-07-26 on the tracked demo artifact, where it printed VERIFIED for a 0-byte patch while the
+      // plugin-side replay called the same document a broken patch. Fail closed, and say why.
+      console.error(
+        `NOT DONE — the receipt records no change: the artifact is empty, and a replay of "run the ` +
+          `tests on the bare base" proves nothing about the work.`,
+      )
+      return 1
     } else {
       const ap = sh(`git apply ${shq(patchAbs)}`, tmp, 60_000)
       if (ap.code !== 0) {

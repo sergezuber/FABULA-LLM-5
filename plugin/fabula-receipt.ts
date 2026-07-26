@@ -19,8 +19,10 @@ import { gate, isEnabled } from "./lib/manage"
 import {
   newReceiptState, recordModel, recordTask, recordEdit, recordGate, buildReceipt,
   renderReceiptMarkdown, renderReceiptJSON, receiptSummary, reproPending,
+  receiptRefusal,
   type ReceiptState, type ReceiptVerification,
 } from "./lib/receipt"
+import { recordSessionAgent, agentForSession } from "./lib/roles"
 import { contextProvenanceFor, engineModelIDFor } from "./lib/provenance"
 import { pickDescriptor, descriptorHash, weightsDigestForDir, resolveModelDir, loadWeightsCache, saveWeightsCache } from "./lib/modeldigest"
 import { homedir } from "node:os"
@@ -228,6 +230,9 @@ export const FabulaReceipt: Plugin = async (input: any) =>
         const s = newReceiptState() as ReceiptState & { _userKey?: string }
         s._userKey = userKey
         recordTask(s, taskText)
+        // Record who is driving this session. The receipt must know: a background writer's session is
+        // not the owner's work, and until now nothing here looked at the agent at all.
+        recordSessionAgent(sid, hookInput?.agent)
         const m = hookInput?.model
         if (m) recordModel(s, typeof m === "string" ? { modelID: m } : { providerID: m?.providerID, modelID: m?.modelID ?? m?.id })
         states.set(sid, s)
@@ -317,6 +322,11 @@ export const FabulaReceipt: Plugin = async (input: any) =>
           // other gate, respect it (don't mint VERIFIED over a "NOT DONE" verdict) rather than override.
           if (!isTrueGreen(output)) return
           const dir = input?.directory || hookInput?.directory || process.cwd()
+          // THE ONE RULE — the same predicate the manual tool and the replay use. The manual path had
+          // refused an empty artifact since the beginning; this path never asked, which is how a
+          // background session minted a VERIFIED receipt over zero work.
+          const { diff: autoDiff } = await gitDiff(dir)
+          if (receiptRefusal({ diff: autoDiff, agent: agentForSession(sid) })) return
           const res = await mint(dir, s, output, sid)
           if (typeof output.output === "string") {
             if (res) {
@@ -343,7 +353,8 @@ export const FabulaReceipt: Plugin = async (input: any) =>
           const sid = ctx?.sessionID || "?"
           const s = stateFor(sid)
           const { diff, truncated } = await gitDiff(dir)
-          if (!diff.trim()) return "mint_receipt: no uncommitted change (git diff HEAD is empty) — nothing to attest yet. Make and verify a change first."
+          const refusal = receiptRefusal({ diff, agent: agentForSession(sid) })
+          if (refusal) return `mint_receipt: ${refusal}.`
           // Manual mint: no verify_done event to read, so record the artifact honestly as unverified-at-mint.
           const verify: ReceiptVerification = { cmd: process.env.FABULA_VERIFY_CMD || "(run verify_done)", exitCode: null, passed: false, outputTail: "(manual mint — run verify_done for a captured green verification)" }
           if (truncated) verify.outputTail += "\n[diff exceeded the capture cap — receipt minted without a patch file]"

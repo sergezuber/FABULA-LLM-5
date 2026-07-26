@@ -100,6 +100,14 @@ function replay(repoDir: string, r: ReceiptV0, patch: string): { status: "VERIFI
   if (!cmd) return { error: "receipt has no verification command" }
   const base = r.base
   if (!base) return { error: "receipt has no base commit — cannot replay deterministically" }
+  // THE ONE RULE, verbatim from the mint side (lib/receipt.ts receiptRefusal): a receipt with no patch
+  // has nothing for a stranger to replay, so it is refused rather than reported as a broken patch.
+  // Measured 2026-07-26: this path used to hand the empty patch to `git apply`, which exits 128 with
+  // "No valid patches in input", so the same document read as a corrupt artifact here and as a clean
+  // VERIFIED in the engine CLI. Naming the real reason is what stops the two verdicts from diverging.
+  if (!patch.trim()) {
+    return { error: 'receipt records no change: the artifact is empty, and a replay of "run the tests on the bare base" proves nothing about the work' }
+  }
   try {
     execFileSync("git", ["-C", repoDir, "cat-file", "-e", `${base}^{commit}`], { stdio: "ignore" })
   } catch {

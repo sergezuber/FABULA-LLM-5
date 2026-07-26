@@ -216,6 +216,53 @@ export interface BuildInput {
 }
 
 /** Assemble the immutable receipt. The verify gate is always present when a verify ran. */
+/**
+ * Agents whose work is never the owner's deliverable, and therefore never a receipt.
+ *
+ * MEASURED 2026-07-26: a background checkpoint-writer session minted a receipt over the tracked public
+ * demo artifact. Its `task` field was the writer's own system-reminder prompt and its artifact was
+ * empty, so the repository shipped a document reading "FABULA receipt — VERIFIED" for work nobody did
+ * and nobody asked for. The text-deliverable gate already excludes these roles; the receipt did not
+ * look at the agent at all.
+ */
+export const NON_MINTING_AGENTS = new Set<string>([
+  "checkpoint-writer",
+  "compaction",
+  "summarizer",
+  "summary",
+  "dream",
+  "distill",
+  "title",
+])
+
+/**
+ * THE ONE RULE for whether a receipt may exist. Returns the refusal in plain words, or null to proceed.
+ *
+ * A receipt is a claim a stranger can falsify: they take the base commit, apply the recorded patch, run
+ * the recorded command, and see the same result. Remove the patch and nothing of that survives — the
+ * replay degenerates into "run the tests on the base commit", which is a statement about the repository
+ * before the work, not about the work. Such a document cannot be wrong, and a claim that cannot be wrong
+ * is not a proof.
+ *
+ * So the rule is REFUSAL, not a softer verdict: an empty artifact means there is nothing to attest, and
+ * the honest output is no receipt rather than a receipt with a caveat nobody reads.
+ *
+ * ONE PLACE, THREE CALLERS — the mint hook, the manual mint tool, and the plugin-side replay. The engine
+ * CLI is a separate build graph and cannot import this, so it carries the twin of this rule and its own
+ * test; that pairing is the same shape as `lib/steer.ts` and its UI twin, and it is why the wording here
+ * is duplicated verbatim rather than paraphrased.
+ */
+export function receiptRefusal(input: { diff?: string; agent?: string }): string | null {
+  const agent = String(input.agent ?? "").trim()
+  if (agent && NON_MINTING_AGENTS.has(agent)) {
+    return `a ${agent} session does background housekeeping, not the owner's work — nothing here is a deliverable to attest`
+  }
+  if (!String(input.diff ?? "").trim()) {
+    return "no change to attest: the recorded artifact would be empty, and a receipt whose replay is \"run the tests on the bare base\" proves nothing about the work"
+  }
+  return null
+}
+
 export function buildReceipt(inp: BuildInput): Receipt {
   const { state, verify, diff, workdir, mintedAt, patchPath, base, truncated, provenance } = inp
   // Verify gate is implicit: a receipt only mints on a real verify_done, so it always fired.

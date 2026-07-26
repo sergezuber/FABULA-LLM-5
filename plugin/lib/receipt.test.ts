@@ -1,6 +1,6 @@
-import { test, expect } from "bun:test"
+import { describe, test, expect } from "bun:test"
 import {
-  newReceiptState, classifyHost, gateFromMarker, recordGate, recordEdit, recordModel, recordTask,
+  newReceiptState, receiptRefusal, classifyHost, gateFromMarker, recordGate, recordEdit, recordModel, recordTask,
   buildReceipt, buildReplay, countDiffFiles, scrubProse, renderReceiptMarkdown, renderReceiptJSON,
   receiptSummary,
 } from "./receipt"
@@ -162,4 +162,39 @@ test("receiptSummary: one-liner reflects verdict + counts", () => {
   expect(sum).toContain("VERIFIED")
   expect(sum).toContain("qwen")
   expect(sum).toContain("2 file(s)")
+})
+
+// ── receiptRefusal — THE ONE RULE (measured defect 2026-07-26) ───────────────
+describe("receiptRefusal", () => {
+  const DIFF = "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b\n"
+
+  test("real work by the main agent is allowed through", () => {
+    expect(receiptRefusal({ diff: DIFF, agent: "build" })).toBeNull()
+  })
+
+  test("an empty artifact is refused, and the reason names what a replay would prove", () => {
+    const r = receiptRefusal({ diff: "", agent: "build" })
+    expect(r).toContain("bare base")
+  })
+
+  test("whitespace is not a change", () => {
+    expect(receiptRefusal({ diff: "   \n\t\n", agent: "build" })).not.toBeNull()
+  })
+
+  test("a background writer is refused even with a real change", () => {
+    // The exact shape of the live defect: a checkpoint-writer session, a green verify, a receipt.
+    expect(receiptRefusal({ diff: DIFF, agent: "checkpoint-writer" })).toContain("housekeeping")
+  })
+
+  test("every housekeeping role is covered, not just the one that was caught", () => {
+    for (const a of ["compaction", "summarizer", "summary", "dream", "distill", "title"]) {
+      expect(receiptRefusal({ diff: DIFF, agent: a })).not.toBeNull()
+    }
+  })
+
+  test("an unknown agent is NOT refused — the list is exceptions, not an allowlist", () => {
+    // A user-defined agent doing real work must still get its proof.
+    expect(receiptRefusal({ diff: DIFF, agent: "my-custom-agent" })).toBeNull()
+    expect(receiptRefusal({ diff: DIFF })).toBeNull()
+  })
 })

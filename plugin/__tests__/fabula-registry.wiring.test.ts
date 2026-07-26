@@ -173,3 +173,20 @@ test("the two cases are DISTINGUISHABLE — the absent one is not just the prese
   expect(withGate).not.toBe(without)
   expect(withGate.toLowerCase()).not.toContain("no reproduce-probe verdict")
 })
+
+// A receipt whose artifact is empty (measured 2026-07-26 on the tracked demo). This path used to hand
+// the empty patch straight to `git apply`, which exits 128 with "No valid patches in input" — so the
+// same document read as a CORRUPT artifact here and as a clean VERIFIED in the engine CLI. Both sides
+// now refuse it for the same stated reason, which is what stops the two verdicts from drifting apart.
+test("a receipt with no change is refused by name, not reported as a broken patch", async () => {
+  mintReceipt()
+  // Blank the artifact, exactly as the background writer's receipt had it.
+  writeFileSync(path.join(repo, ".fabula", "receipts", "receipt-1.patch"), "")
+  const t = await tools()
+  await t.publish_receipt.execute({}, {} as any)
+  const fullId = JSON.parse(readFileSync(path.join(store, "proofs", "index.json"), "utf8"))[0].id
+  const ver = String(await t.verify_receipt.execute({ source: fullId }, {} as any))
+  expect(ver).not.toContain("✅ VERIFIED")
+  expect(ver).toContain("bare base")            // the real reason, shared verbatim with the mint side
+  expect(ver).not.toContain("did not apply")    // never again the misleading one
+})

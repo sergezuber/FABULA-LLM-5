@@ -394,8 +394,16 @@ export class LoopGuard {
     // Web/MCP search class: near-duplicate queries are blocked at the repeated PATH itself
     // (arXiv:2607.01641 — a bound is effective only when it constrains the repeated path), and a
     // distinct-query budget forces synthesis (tool-removal-style enforcement, arXiv:2603.08877).
-    if (isWebSearchTool(tool)) {
-      const q = searchQueryOf(args)
+    // RETRIEVAL, not just search — measured 2026-07-25 (session ses_065ee60bbffe…): a budget naming
+    // `web_search` bounded `web_search` and nothing else, so the model walked around it — search
+    // REFUSED, fetch ok, fetch ok, search REFUSED, round again, past step 33 and forty-two refusals
+    // with no gate involved at all. The correct classifier was written and tested the same day and
+    // never called; this line is what makes reaching outside for information cost the same whichever
+    // verb asks. `isRetrievalTool` is a strict superset of `isWebSearchTool` (both exclude the LOCAL
+    // code-search names, which the branch below owns), so nothing that was bounded stops being bounded.
+    if (isRetrievalTool(tool)) {
+      // A fetch's URL is its query: twenty pages read is twenty attempts on the same budget.
+      const q = retrievalTargetOf(args)
       if (q === undefined) return null
       const st = this.touch(sessionID)
       const extras = searchExtrasOf(args)
@@ -418,15 +426,20 @@ export class LoopGuard {
       if (!st.queryText.has(canonical)) st.queryText.set(canonical, String(q).trim())
       if (n >= this.cfg.webNearDupBlockAfter) {
         st.blockedCount++ // every stop this guard issues, counted where it is issued
+        // The steer names what the model ACTUALLY did. Once a fetch can trip this branch, a message
+        // that says "search" describes an action the model did not take, and a correction it cannot
+        // map onto its own last call is a correction it cannot act on.
+        const verb = isWebSearchTool(tool) ? "search" : "fetch"
         return mk("stop", "web_search_duplicate", n,
-          `LOOP BLOCKED: this is a repeat of a search you already ran this turn (same or near-identical query — ` +
-          `"${q.slice(0, 120)}"). Re-searching returns the SAME results and only floods context. Either use what the ` +
-          `earlier search already returned and write your answer, or search for something MATERIALLY different ` +
-          `(other entities, another angle, a different source). Do not re-issue paraphrases of this query.`)
+          `LOOP BLOCKED: this is a repeat of a ${verb} you already made this turn (same or near-identical ` +
+          `target — "${q.slice(0, 120)}"). Repeating it returns the SAME content and only floods context. Either ` +
+          `use what the earlier one already returned and write your answer, or reach for something MATERIALLY ` +
+          `different (other entities, another angle, a different source). Do not re-issue paraphrases of this.`)
       }
       if (st.webQueries.size > this.cfg.webSearchBudgetPerTurn) {
         return mk("stop", "web_search_budget_exceeded", st.webQueries.size,
-          `LOOP BLOCKED: ${st.webQueries.size} distinct web searches this turn — far past the point of diminishing ` +
+          `LOOP BLOCKED: ${st.webQueries.size} distinct outside lookups this turn (searches and page fetches share ` +
+          `one budget — reaching out is the same activity whichever verb asks) — far past the point of diminishing ` +
           `returns. STOP searching; synthesize what you have gathered and produce the answer now. If something truly ` +
           `essential is missing, name it explicitly in your answer instead of searching again.`)
       }

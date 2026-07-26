@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.38.0"
+export const FABULA_VERSION = "0.39.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.39.0",
+    date: "2026-07-26",
+    items: [
+      {
+        ru: "Ограничение на обращения наружу считает и загрузки страниц, а не только поиски. Предел, названный именем одного инструмента, ограничивал этот инструмент и ничего больше: поиск отказывали, а страницу загружали, и так по кругу мимо всякой границы. Теперь поиск и загрузка тратят один общий счёт, а замечание называет то действие, которое вы правда сделали.",
+        en: "The limit on reaching outside now counts page fetches as well as searches. A limit named after one tool bounded that tool and nothing else: a search would be refused, a page fetched instead, and round it went past any boundary at all. Search and fetch now spend one shared budget, and the note names the action actually taken.",
+      },
+    ],
+  },
   {
     version: "0.38.0",
     date: "2026-07-26",

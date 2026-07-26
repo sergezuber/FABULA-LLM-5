@@ -241,3 +241,63 @@ describe("the budget bounds the ACTIVITY, not one tool name", () => {
     expect(retrievalTargetOf({})).toBeUndefined() // unreadable schema → stay out of the way
   })
 })
+
+// ── The classifier reaching the GUARD (wiring, not the pure function) ────────
+// Everything above proves `isRetrievalTool` answers correctly. None of it proved the guard ASKS it —
+// and for months it did not: the hot path called `isWebSearchTool`, so a fetch loop walked past a
+// budget the tests asserted it shared. These drive the real controller.
+describe("a fetch loop is bounded by the same budget as a search loop", () => {
+  const SID = "s-retrieval"
+
+  test("distinct URLs consume the search budget and eventually stop the turn", () => {
+    const g = new LoopGuard()
+    let stopped = ""
+    for (let i = 0; i < 40 && !stopped; i++) {
+      const d = g.peekSearch(SID, "web_fetch", { url: `https://example.com/page-${i}` })
+      if (d?.action === "stop") stopped = d.code
+    }
+    expect(stopped).toBe("web_search_budget_exceeded")
+  })
+
+  test("re-fetching the SAME url is caught as a repeat, not waved through", () => {
+    const g = new LoopGuard()
+    const url = "https://example.com/same"
+    g.peekSearch(SID + "b", "web_fetch", { url })
+    const second = g.peekSearch(SID + "b", "web_fetch", { url })
+    expect(second?.action).toBe("stop")
+    expect(second?.code).toBe("web_search_duplicate")
+  })
+
+  test("the steer names the verb the model actually used", () => {
+    const g = new LoopGuard()
+    const url = "https://example.com/x"
+    g.peekSearch(SID + "c", "web_fetch", { url })
+    const d = g.peekSearch(SID + "c", "web_fetch", { url })
+    // A correction the model cannot map onto its own last call is one it cannot act on.
+    expect(d?.guidance).toContain("fetch")
+    expect(d?.guidance).not.toContain("a search you already made")
+  })
+
+  test("searches and fetches share ONE budget — the activity is what is bounded", () => {
+    const g = new LoopGuard()
+    const s = SID + "d"
+    // Genuinely unrelated queries: sharing a word makes them near-duplicates, and the guard would then
+    // (correctly) stop for repetition instead of the budget — a different mechanism than this asserts.
+    const WORDS = ["tectonic drift", "baroque counterpoint", "enzyme kinetics", "harbour dredging",
+      "monsoon onset", "alloy fatigue", "glacier calving", "typeface metrics", "reef bleaching",
+      "cargo manifest", "solar flare", "kiln firing", "loom weaving", "silt deposit", "moth migration",
+      "quarry blasting", "brine cooling", "vellum binding"]
+    let stopped = ""
+    // Alternate the two verbs, exactly the shape of the measured escape.
+    for (let i = 0; i < 40 && !stopped; i++) {
+      const d = i % 2
+        // The URLs must be as unrelated as the queries, for the same reason: `example.com/p0` and
+        // `example.com/p2` are near-duplicates of each other, so the repetition detector would fire
+        // first and this test would pass for the wrong mechanism.
+        ? g.peekSearch(s, "web_fetch", { url: `https://${WORDS[i % WORDS.length].replace(" ", ".")}/${i}` })
+        : g.peekSearch(s, "web_search", { query: WORDS[i % WORDS.length] })
+      if (d?.action === "stop") stopped = d.code
+    }
+    expect(stopped).toBe("web_search_budget_exceeded")
+  })
+})

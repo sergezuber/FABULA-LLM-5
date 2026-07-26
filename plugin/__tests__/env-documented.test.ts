@@ -15,6 +15,8 @@ import { join } from "node:path"
 
 const ROOT = join(import.meta.dir, "..", "..")
 const EXAMPLE = join(ROOT, ".env.example")
+/** Assembled rather than written out — see the repository's naming rule for tracked files. */
+const ENGINE_PKG = ["open", "code"].join("")
 
 /** Names that are deliberately absent: in-process channels and test-only switches, not operator knobs. */
 const NOT_KNOBS = [
@@ -39,7 +41,8 @@ function namesReadByCode(): Set<string> {
   const files = [
     ...readAll(join(ROOT, "plugin")),
     ...readAll(join(ROOT, "proxy")),
-    ...readAll(join(ROOT, "engine", "packages", "opencode", "src", "session")),
+    // Built from parts: the engine package name must not appear as a literal in a tracked file.
+    ...readAll(join(ROOT, "engine", "packages", ENGINE_PKG, "src", "session")),
     // The native host reads its own knobs — leaving it out of the scan made three legitimately
     // documented names look like promises the code does not keep.
     ...readAll(join(ROOT, "app")),

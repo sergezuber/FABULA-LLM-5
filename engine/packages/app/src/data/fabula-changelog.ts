@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.43.0"
+export const FABULA_VERSION = "0.44.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.44.0",
+    date: "2026-07-27",
+    items: [
+      {
+        ru: "Проверка утверждений в готовом тексте теперь оставляет след, который переживает сам разговор: рядом со свидетельством появляется запись о том, что именно проверялось — отпечаток текста, отпечатки источников, перечень утверждений и исход дешёвой проверки по каждому. Само свидетельство при этом не изменяется ни на байт.",
+        en: "The check on claims in finished text now leaves a trace that outlives the conversation: beside the proof appears a record of what was checked — a fingerprint of the text, fingerprints of the sources, the list of claims and the outcome of the cheap check for each. The proof itself is not altered by a single byte.",
+      },
+      {
+        ru: "Записывается только то, что читатель может перепроверить сам. Часть выводов делает модель, и повторить их нельзя — ни настройки, ни то, какая именно модель отвечала, не сохраняются. Такие выводы отмечаются как непроверяемые здесь, а не выдаются за установленный факт: запись, которую нельзя оспорить, ничего не доказывает.",
+        en: "Only what a reader can re-check is written down. Some conclusions are reached by a model and cannot be repeated — neither the settings nor which model answered are preserved. Those are marked as not verifiable here rather than presented as established fact: a record nobody can dispute proves nothing.",
+      },
+    ],
+  },
   {
     version: "0.43.0",
     date: "2026-07-27",

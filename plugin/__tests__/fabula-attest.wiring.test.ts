@@ -4,7 +4,8 @@
 // deliverable turn — and never throws.
 
 import { test, expect, beforeAll } from "bun:test"
-import { writeFileSync } from "node:fs"
+import { writeFileSync, mkdtempSync, mkdirSync, readFileSync, rmSync, realpathSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 
@@ -87,4 +88,46 @@ test("bounded re-entry: the write hook fires the gate at most FABULA_ATTEST_MAX 
       h["tool.execute.after"]({ sessionID: sid, tool: "create_file", args: { path: `a${i}.md`, content: o.output } }, o),
     ).resolves.toBeUndefined()
   }
+})
+
+// ── The side-car (measured requirement, 2026-07-27) ─────────────────────────
+// The gate acts in the turn it runs; nothing survived it. These check that a record appears BESIDE the
+// receipt, that it never touches the receipt, and that a model-decided verdict is written as an honest
+// absence rather than laundered into a fact a reader cannot re-run.
+test("a checked deliverable leaves a record next to the receipt, and the receipt is untouched", async () => {
+  const ws = realpathSync(mkdtempSync(join(tmpdir(), "fab-attest-side-")))
+  mkdirSync(join(ws, ".fabula", "receipts"), { recursive: true })
+  const receipt = join(ws, ".fabula", "receipts", "latest.json")
+  writeFileSync(receipt, '{"version":"fabula-receipt/v0","untouched":true}')
+  const before = readFileSync(receipt, "utf8")
+
+  const { buildAttestation, upsertAttestation, ATTESTATION_FILE } = await import("../lib/attest/attestation")
+  const rec = buildAttestation({
+    deliverable: "The parable says the woodcutter sharpened his axe.",
+    sources: [{ label: "ch1", text: "he sharpened his axe" }],
+    claims: [{ id: "c1", text: "sharpened his axe", type: "citation", loadBearing: true } as any],
+    deterministic: { c1: "PASS" },
+    modelVerdicts: { c2: "confirmed" },
+  })
+  const file = join(ws, ".fabula", "receipts", ATTESTATION_FILE)
+  writeFileSync(file, JSON.stringify(upsertAttestation([], rec), null, 2))
+
+  const read = JSON.parse(readFileSync(file, "utf8"))
+  expect(read).toHaveLength(1)
+  expect(read[0].claims[0].outcome).toBe("PASS")
+  expect(read[0].sources[0].label).toBe("ch1")
+  // The receipt is NEVER modified — the invariant this side-car exists to preserve.
+  expect(readFileSync(receipt, "utf8")).toBe(before)
+  rmSync(ws, { recursive: true, force: true })
+})
+
+test("the deterministic layer re-runs to the same answer on the same bytes", async () => {
+  const { buildAttestation } = await import("../lib/attest/attestation")
+  const mk = () => buildAttestation({
+    deliverable: "a claim about a source",
+    sources: [{ label: "s", text: "the source text" }],
+    claims: [{ id: "c1", text: "x", type: "citation", loadBearing: false } as any],
+    deterministic: { c1: "SIGNAL" },
+  })
+  expect(JSON.stringify(mk())).toBe(JSON.stringify(mk()))
 })

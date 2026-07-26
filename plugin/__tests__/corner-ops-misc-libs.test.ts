@@ -243,11 +243,13 @@ describe("moa.pickAggregator", () => {
 
 // ───────────────────────────── auxLLM.auxChain ─────────────────────────────
 describe("auxLLM.auxChain", () => {
-  test("empty env → only local-qwen, default LM url", () => {
+  test("empty env → only local-qwen, through the adapter", () => {
     const c = auxChain({})
     expect(c.length).toBe(1)
     expect(c[0].name).toBe("local-qwen")
-    expect(c[0].url).toBe("http://localhost:1234/v1/chat/completions")
+    // Was :1234 — the serving port itself, which rejects the structured form these calls use. This
+    // assertion had been pinning the defect in place.
+    expect(c[0].url).toBe("http://localhost:1235/v1/chat/completions")
     expect(c[0].model).toBe("")
   })
   test("custom aux endpoint is FIRST in chain", () => {

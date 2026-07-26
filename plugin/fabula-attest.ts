@@ -18,6 +18,9 @@ import { callAux } from "./lib/auxLLM"
 import { taskIsVerifiable } from "./lib/attest/arming"
 import { shouldArm, buildContract } from "./lib/attest/contract"
 import { runAttestGate } from "./lib/attest/gate"
+import { buildAttestation, upsertAttestation, ATTESTATION_FILE } from "./lib/attest/attestation"
+import { writeFileSync, mkdirSync, readFileSync } from "node:fs"
+import { join as joinPath } from "node:path"
 import { detectStripped } from "./lib/attest/remediation"
 import { isTextDeliverable, shouldRemark, SUBAGENT_ROLES } from "./lib/attest/textdeliverable"
 import type { Claim, Contract, SourceDoc, LedgerView } from "./lib/attest/types"
@@ -70,6 +73,41 @@ function readDeliverable(dir: string, path: string): string {
     return readFileSync(abs, "utf8")
   } catch {
     return ""
+  }
+}
+
+
+/**
+ * Record what was checked, beside the receipt and never inside it.
+ *
+ * The gate acts in the turn where it runs; this is what survives afterwards for someone who was not
+ * there. Only the deterministic outcomes are written as facts — the model-decided ones become
+ * `unverifiable-here`, because a verdict at temperature 0.4 from whichever model happened to be loaded
+ * is not something a reader can re-run. Writing it as a finding would weaken the guarantee for the code
+ * receipts too, which is the whole reason this is a companion file rather than a receipt field.
+ *
+ * Never throws: a record that fails to write must not take down the gate that produced it.
+ */
+function writeAttestation(dir: string, deliverable: string, sources: any[], out: any): string | null {
+  try {
+    const deterministic: Record<string, any> = {}
+    const modelVerdicts: Record<string, any> = {}
+    for (const r of out?.results ?? []) {
+      if (!r?.claim?.id) continue
+      // pass1 is the cheap deterministic sweep; NA means it had nothing to say about this claim.
+      if (r.pass1 && r.pass1 !== "NA") deterministic[r.claim.id] = r.pass1
+      if (r.verdict) modelVerdicts[r.claim.id] = r.verdict
+    }
+    const rec = buildAttestation({ deliverable, sources, claims: out?.claims ?? [], deterministic, modelVerdicts })
+    const recDir = joinPath(dir, ".fabula", "receipts")
+    mkdirSync(recDir, { recursive: true })
+    const file = joinPath(recDir, ATTESTATION_FILE)
+    let prev: unknown = []
+    try { prev = JSON.parse(readFileSync(file, "utf8")) } catch { prev = [] }
+    writeFileSync(file, JSON.stringify(upsertAttestation(prev, rec), null, 2))
+    return file
+  } catch {
+    return null
   }
 }
 
@@ -127,6 +165,10 @@ export const FabulaAttest: Plugin = async (pluginInput) =>
             contract: s.contract, callAux, budget: CALL_BUDGET, taskText: s.taskText,
             selfConsistency: SELF_CONSISTENCY, wallclockMs: WALLCLOCK_MS,
           })
+          writeAttestation(
+            input?.directory || process.cwd(), deliverable,
+            [...s.sources.entries()].map(([label, text]) => ({ label, text })), out,
+          )
           // Goodhart-by-deletion: a load-bearing claim present last round that vanished this round.
           const stripped = detectStripped(s.lastClaims, out.claims)
           s.lastClaims = out.claims

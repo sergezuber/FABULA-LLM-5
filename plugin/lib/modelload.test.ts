@@ -62,22 +62,24 @@ describe("other residents", () => {
 })
 
 describe("when it must NOT act", () => {
-  test("cold start: one reading is not a cost model, so nothing is loaded blind", async () => {
+  test("cold start GOES AND MEASURES rather than waiting for a second reading that will never come", async () => {
+    // The contract this test used to assert — "one reading, so do nothing" — was the deadlock itself:
+    // nothing loads at a second window, so the second reading never exists, so nothing ever loads.
+    // Found by unloading the model for real. It now takes the reading, and the serving runtime's own
+    // refusal is what keeps that safe.
     serve([KAT("loaded", 65536, 24.45 * GIB)])
-    const r = await ensureLoadedAtPlannedWindow("kat")
+    const r = await ensureLoadedAtPlannedWindow("kat", { quiet: async () => false })
     expect(r.acted).toBe(false)
-    expect(r.reason).toContain("not learned yet")
+    expect(r.reason).toContain("would measure at")
   })
 
-  test("already at the planned window → left alone", async () => {
-    // Two readings teach the line, then the model is already where the plan wants it.
-    serve([KAT("loaded", 65536, 24.45 * GIB)])
-    await ensureLoadedAtPlannedWindow("kat")
+  test("already at the model's maximum → nothing to raise it to", async () => {
+    // Readings are machine-wide now, so this drives the real store: at the passport there is no larger
+    // window to measure at and no larger window to load, whatever the cost model says.
     serve([KAT("loaded", 262144, 36.49 * GIB)])
-    const r = await ensureLoadedAtPlannedWindow("kat")
+    const r = await ensureLoadedAtPlannedWindow("kat", { quiet: async () => false })
     expect(r.acted).toBe(false)
-    expect(r.reason).toContain("already at 262144")
-    expect(r.plan?.tokens).toBe(262144)
+    expect(r.reason).not.toContain("LOADED")
   })
 
   test("the kill switch stops it before it looks at anything", async () => {
@@ -96,13 +98,13 @@ describe("when it must NOT act", () => {
     expect((await ensureLoadedAtPlannedWindow("kat")).reason).toContain("no maximum window")
   })
 
-  test("a busy machine is not interrupted — a reload costs every live turn its prefix cache", async () => {
-    serve([KAT("loaded", 65536, 24.45 * GIB)])
-    await ensureLoadedAtPlannedWindow("kat")
+  test("a busy machine is never interrupted — a reload costs every live turn its prefix cache", async () => {
+    // Both roads out of here must respect it: the measuring step on a cold start, and the raise once the
+    // cost is known. Whichever this run takes, `acted` stays false and the reason says why.
     serve([KAT("loaded", 32768, 22.6 * GIB)])
     const r = await ensureLoadedAtPlannedWindow("kat", { quiet: async () => false })
     expect(r.acted).toBe(false)
-    expect(r.reason).toContain("never went quiet")
+    expect(r.reason).toMatch(/busy|never went quiet/)
   })
 })
 

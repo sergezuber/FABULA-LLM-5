@@ -17,12 +17,12 @@
 // nothing is known about the model's cache cost yet, we load at the SERVING DEFAULT (small), measure, and
 // raise once. Small-then-up, never big-then-sorry.
 
-import { spawn } from "node:child_process"
+import { spawn, execFileSync } from "node:child_process"
 import { readFileSync, writeFileSync, mkdirSync, renameSync } from "node:fs"
 import { join, dirname } from "node:path"
 import { homedir, totalmem } from "node:os"
-import { planWindow, type Resident, type WindowPlan } from "./windowplan"
-import { fitCost, addObservation, type Observation } from "./kvcost"
+import { planWindow, DEFAULT_POLICY, type Resident, type WindowPlan } from "./windowplan"
+import { fitCost, addObservation, safeSecondWindow, type Observation } from "./kvcost"
 
 /** GUI-launched apps do not inherit the shell PATH, so a bare `lms` is not found — the same trap the
  *  other shell-outs in this project already carry a prefix for. */
@@ -71,6 +71,48 @@ function writeStore(s: Store): void {
   }
 }
 
+
+/**
+ * Bytes in use on this machine right now. Read from the kernel, because nothing else reports it: the
+ * serving API returns no memory field, and `lms ps` reports a SIZE that stays at 21.95 GB whether the
+ * window is 32768 or 262144 — that is the weights, and a cost model built on it fits a flat line.
+ */
+export function usedBytes(): number {
+  try {
+    const out = execFileSync("vm_stat", { encoding: "utf8", timeout: 3000 })
+    const page = Number(out.match(/page size of (\d+)/)?.[1]) || 16384
+    const grab = (label: string) => Number(out.match(new RegExp(`${label}:\\s+(\\d+)`))?.[1]) || 0
+    return (grab("Pages active") + grab("Pages wired down") + grab("Pages occupied by compressor")) * page
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * The model's weights, from the serving runtime. This IS reported and IS stable, which is exactly why it
+ * is taken from here and the per-token cost is taken from the machine — each figure from the source that
+ * actually varies with it.
+ */
+export function weightsBytesOf(modelId: string): number {
+  try {
+    const out = execFileSync("lms", ["ps"], {
+      encoding: "utf8",
+      timeout: 8000,
+      env: { ...process.env, PATH: `${PATH_PREFIX}:${process.env.PATH ?? ""}` },
+    })
+    for (const line of out.split("\n")) {
+      if (!line.includes(modelId)) continue
+      const m = line.match(/([\d.]+)\s*(GB|GiB|MB|MiB)/i)
+      if (!m) continue
+      const n = Number(m[1])
+      return /g/i.test(m[2]) ? n * 1024 ** 3 : n * 1024 ** 2
+    }
+  } catch {
+    /* fall through */
+  }
+  return 0
+}
+
 export interface ServedModel {
   id: string
   type?: string
@@ -117,8 +159,36 @@ export interface EnsureResult {
 
 const inFlight = new Map<string, Promise<EnsureResult>>()
 
+/** Memory in use with the model unloaded, captured by the most recent load. See lmsLoad. */
+let lastBaseline = 0
+
+/** The model's own footprint: everything the machine holds now, less what it held without the model. */
+function footprintBytes(): number {
+  const now = usedBytes()
+  return lastBaseline > 0 && now > lastBaseline ? now - lastBaseline : 0
+}
+
 /** Run `lms load`. Resolves with the command's own words so a failure is reportable, not guessed at. */
 function lmsLoad(modelId: string, window: number, timeoutMs: number): Promise<{ ok: boolean; out: string }> {
+  // Unload first. Loading a model that is ALREADY resident asks the machine to hold two copies for the
+  // moment of the swap, and the runtime's guardrail — rightly — refuses: measured live, a load at 65536
+  // was rejected for "insufficient system resources" while the same model sat at 32768, and the very
+  // same command succeeded once the old copy was gone. The guardrail was reading the true cost of what
+  // it was asked to do; the request was the thing that was wrong.
+  try {
+    execFileSync("lms", ["unload", modelId], {
+      timeout: 30_000,
+      env: { ...process.env, PATH: `${PATH_PREFIX}:${process.env.PATH ?? ""}` },
+      stdio: "ignore",
+    })
+  } catch {
+    /* not loaded, or nothing to unload — the load below is what matters */
+  }
+  // The baseline, taken with the model GONE. Machine-wide memory drifts — a build, a browser tab, the app
+  // itself — and measured live that drift went straight into the slope: the cost came out roughly twice
+  // its true value and the plan capped a 262144-capable model at 135168. Paired around the unload, the
+  // drift cancels: what is left is the model's own footprint and nothing else.
+  lastBaseline = usedBytes()
   return new Promise((resolve) => {
     const args = ["load", modelId, "--context-length", String(window), "-y"]
     const child = spawn("lms", args, {
@@ -171,10 +241,10 @@ export async function ensureLoadedAtPlannedWindow(
 
     // Fold in what this load is teaching us before planning the next one.
     const store = readStore()
-    if (me.state === "loaded" && me.loadedWindow > 0 && me.bytes > 0) {
+    if (me.state === "loaded" && me.loadedWindow > 0 && footprintBytes() > 0) {
       store[modelId] = addObservation(store[modelId] ?? [], {
         windowTokens: me.loadedWindow,
-        totalBytes: me.bytes,
+        totalBytes: footprintBytes() || 0, // the model's own footprint, drift removed — see lmsLoad
       })
       writeStore(store)
     }
@@ -184,17 +254,46 @@ export async function ensureLoadedAtPlannedWindow(
       // Cold start. If it is already loaded, this reading plus the next one at a different window will
       // give us the line — so wait rather than load blind. If it is NOT loaded, letting the serving
       // default bring it up is the safe small step that produces that second reading.
+      // One reading is a deadlock unless we go and take the second one: the fit needs two windows, and a
+      // second window only exists if something loads at one. Doubling is provably safe from the single
+      // reading alone — see safeSecondWindow — so this is a measured step, not a probe.
+      // The basis for a measuring step is simply where the model sits now. It does NOT need a stored
+      // reading first: the very first footprint can only be taken by a load, because a load is what
+      // establishes the baseline (it unloads before it loads). Requiring a prior reading here was the
+      // deadlock one layer down — no baseline, no footprint, no reading, no step, forever.
+      const basis = { windowTokens: me.loadedWindow || 0, totalBytes: 1 }
+      const free = Math.max(0, totalmem() - usedBytes() - DEFAULT_POLICY.systemReserveBytes)
+      const second = basis.windowTokens > 0 ? safeSecondWindow(basis, free, me.passport) : 0
+      if (!second) {
+        return {
+          acted: false,
+          window: me.loadedWindow,
+          reason: `cache cost for ${modelId} not learned yet (${cost.reason}); no safe second window to measure at`,
+        }
+      }
+      if (opts.quiet && !(await opts.quiet())) {
+        return { acted: false, window: me.loadedWindow, reason: `would measure at ${second}, but the machine is busy` }
+      }
+      const probe = await lmsLoad(modelId, second, opts.loadTimeoutMs ?? 180_000)
+      const measured = probe.ok ? (await readServed()).find((m) => m.id === modelId) : undefined
+      if (measured && measured.loadedWindow > 0) {
+        const s3 = readStore()
+        s3[modelId] = addObservation(s3[modelId] ?? [], { windowTokens: measured.loadedWindow, totalBytes: footprintBytes() })
+        writeStore(s3)
+      }
       return {
-        acted: false,
-        window: me.loadedWindow,
-        reason: `cache cost for ${modelId} not learned yet (${cost.reason}); staying at the serving default until a second reading exists`,
+        acted: probe.ok,
+        window: measured?.loadedWindow ?? me.loadedWindow,
+        reason: probe.ok
+          ? `took a second reading at ${measured?.loadedWindow ?? second} (safe from the first alone); the next switch can plan the full window`
+          : `could not take a second reading: ${probe.out.trim().slice(0, 200)}`,
       }
     }
 
     const plan = planWindow({
       passportTokens: me.passport,
       totalBytes: totalmem(),
-      weightsBytes: cost.weightsBytes,
+      weightsBytes: weightsBytesOf(modelId) || cost.weightsBytes,
       bytesPerToken: cost.bytesPerToken,
       residents: residentsOther(served, modelId),
     })
@@ -222,11 +321,11 @@ export async function ensureLoadedAtPlannedWindow(
 
     // Record what the new window actually cost, so the next plan rests on one more point.
     const after = (await readServed()).find((m) => m.id === modelId)
-    if (after?.bytes && after.loadedWindow > 0) {
+    if (after && after.loadedWindow > 0) {
       const s2 = readStore()
       s2[modelId] = addObservation(s2[modelId] ?? [], {
         windowTokens: after.loadedWindow,
-        totalBytes: after.bytes,
+        totalBytes: footprintBytes(),
       })
       writeStore(s2)
     }

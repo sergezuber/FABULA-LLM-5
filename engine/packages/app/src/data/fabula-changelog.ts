@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.28.0"
+export const FABULA_VERSION = "0.29.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.29.0",
+    date: "2026-07-26",
+    items: [
+      {
+        ru: "Модель сама доходит до своего полного окна, шаг за шагом. Раньше размер приходилось называть: кто-то печатал число в команду загрузки. Теперь FABULA удваивает окно от того, что есть, пока не упрётся либо в предел самой модели, либо в отказ LM Studio — у него есть собственная защита, он не даст перегрузить компьютер. На этой машине путь занял три шага: 32768, 65536, 131072 и полные 262144. Ни одного вписанного числа: предел прочитан у модели, а границу назвал тот, кто знает её точно, — сам загрузчик.",
+        en: "The model climbs to its own full window, one step at a time. The size used to be something you had to name: somebody typed a number into the load command. FABULA now doubles the window from wherever it is until it meets either the model's own limit or a refusal from LM Studio, which has its own protection and will not let the computer be overloaded. On this machine the climb took three steps: 32768, 65536, 131072 and the full 262144. No number is written anywhere: the limit is read from the model, and the boundary is named by the one thing that knows it exactly — the loader itself.",
+      },
+    ],
+  },
   {
     version: "0.28.0",
     date: "2026-07-26",

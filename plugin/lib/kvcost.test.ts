@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { fitCost, addObservation, MIN_WINDOW_SPREAD, type Observation } from "./kvcost"
+import { fitCost, addObservation, safeSecondWindow, MIN_WINDOW_SPREAD, type Observation } from "./kvcost"
 
 const GIB = 1024 ** 3
 // The owner's real model. Measured live: 36.49 GiB at a 262144 window, 20.44 GiB of weights.
@@ -93,5 +93,38 @@ describe("keeping the readings useful", () => {
 
   test("a junk reading is dropped, not stored", () => {
     expect(addObservation([], { windowTokens: 0, totalBytes: 5 } as any).length).toBe(0)
+  })
+})
+
+describe("breaking the cold-start deadlock", () => {
+  const FREE = 18 * GIB
+
+  test("one reading yields a second window to measure at — the deadlock is what this exists for", () => {
+    expect(safeSecondWindow(reading(32768), FREE, 262144)).toBe(65536)
+  })
+
+  test("no headroom → no step; the runtime would refuse anyway and a load costs seconds", () => {
+    expect(safeSecondWindow(reading(32768), 0, 262144)).toBe(0)
+  })
+
+  test("the step never exceeds the model's own maximum", () => {
+    expect(safeSecondWindow(reading(200000), FREE, 262144)).toBe(262144)
+  })
+
+  test("already at the maximum → no step, because there is nowhere to move to", () => {
+    expect(safeSecondWindow(reading(262144), FREE, 262144)).toBe(0)
+  })
+
+  test("the second reading completes the line — measured with a machine-wide baseline, which the slope ignores", () => {
+    const BASE = 9.4 * GIB // whatever else the Mac was holding; a constant, and a slope is blind to it
+    const first = { windowTokens: 32768, totalBytes: BASE + WEIGHTS + 32768 * PER_TOKEN }
+    const w2 = safeSecondWindow(first, FREE, 262144)
+    const second = { windowTokens: w2, totalBytes: BASE + WEIGHTS + w2 * PER_TOKEN }
+    expect(fitCost([first, second]).bytesPerToken).toBe(Math.round(PER_TOKEN))
+  })
+
+  test("malformed input never throws", () => {
+    expect(() => safeSecondWindow(undefined as any, FREE, 262144)).not.toThrow()
+    expect(safeSecondWindow({} as any, FREE, 262144)).toBe(0)
   })
 })

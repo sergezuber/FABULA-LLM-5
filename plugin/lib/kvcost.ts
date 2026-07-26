@@ -23,14 +23,28 @@
 export interface Observation {
   /** Context window the model was loaded at. */
   windowTokens: number
-  /** Total resident bytes reported for it at that window. */
+  /**
+   * Bytes in use on the MACHINE at that moment — not a figure from the serving API.
+   *
+   * MEASURED, and it is why this field is what it is: the serving API reports no memory at all
+   * (`max_context_length` and `loaded_context_length`, nothing else), and `lms ps` reports a SIZE that
+   * does NOT move with the window — 21.95 GB at 32768 and 21.95 GB at 262144, because it is the weights.
+   * A cost model reading either would fit a horizontal line and refuse forever, correctly and uselessly.
+   * The machine's own used memory does move, so that is what gets read.
+   *
+   * Whatever else the machine is doing sits in this number as a CONSTANT, and the slope of a line is
+   * blind to constants — so the per-token cost comes out right even though the baseline is unknown and
+   * drifting. The intercept, by the same token, is meaningless here and must not be used as weights;
+   * weights are read separately from the serving runtime, where they ARE reported.
+   */
   totalBytes: number
 }
 
 export interface CostFit {
   /** Bytes per token of window. 0 when not yet knowable. */
   bytesPerToken: number
-  /** Implied weights — the memory the model costs at a window of zero. */
+  /** The line's intercept. NOT the weights: the readings are machine-wide, so this carries whatever else
+   *  the machine was holding. Kept for diagnostics; the planner takes weights from the runtime instead. */
   weightsBytes: number
   /** How many observations the fit rests on. One is not enough and says so. */
   points: number
@@ -122,4 +136,35 @@ export function addObservation(
   if (out.length <= cap) return out
   const sorted = [...out].sort((a, b) => a.windowTokens - b.windowTokens)
   return [sorted[0], ...sorted.slice(-(cap - 1))]
+}
+
+/**
+ * The second reading has to come from somewhere.
+ *
+ * COLD START DEADLOCK, found by unloading the model for real: one reading cannot separate a slope from a
+ * constant, so the fit refuses; refusing means nothing ever loads at a second window; and without a
+ * second window the one reading stays one forever. Every part behaves exactly as designed and the whole
+ * stands still.
+ *
+ * WHAT MAKES A STEP SAFE — and this was measured, not assumed. The serving runtime has its OWN guardrail:
+ * asked to load a window this machine could not hold, LM Studio refused outright — "Model loading was
+ * stopped due to insufficient system resources… would likely overload your system" — rather than
+ * accepting it and driving the Mac into swap. That refusal is the protection, and it is stronger than any
+ * arithmetic here could be, because the runtime knows what it is about to allocate and we do not.
+ *
+ * So the step is a doubling, bounded by the model's own maximum, and taken only when the machine has
+ * headroom worth trying. A refusal costs seconds and teaches us the ceiling; it cannot hurt the machine.
+ */
+export function safeSecondWindow(
+  reading: Observation,
+  freeBytes: number,
+  passportTokens: number,
+): number {
+  const w = Number(reading?.windowTokens) || 0
+  if (!(w > 0)) return 0
+  // No headroom at all means not even the runtime would say yes; do not waste a load finding out.
+  if (!(Number(freeBytes) > 0)) return 0
+  const passport = Math.max(0, Math.floor(Number(passportTokens) || 0))
+  const next = Math.min(w * 2, passport)
+  return next > w ? next : 0
 }

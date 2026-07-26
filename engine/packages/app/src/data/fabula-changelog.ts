@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.29.0"
+export const FABULA_VERSION = "0.30.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.30.0",
+    date: "2026-07-26",
+    items: [
+      {
+        ru: "Проверено замером: полное окно модели ничего не стоит на коротких задачах. Была причина сомневаться — большое окно у этого класса моделей достигается растяжкой позиций, и авторы советуют включать её только когда длина действительно нужна, так что дефолт мог незаметно вредить обычным коротким запросам. Шесть задач по три повтора на каждом окне: верных 18 из 18 в обоих случаях, чистота языка одинаковая, задержка в пределах шума. Дефолт «грузить на максимум модели» остаётся — теперь по данным, а не по вкусу.",
+        en: "Measured: a model's full window costs nothing on short work. There was reason to doubt it — long context on this class of model is reached by interpolating positions, and the authors advise turning that on only when the length is genuinely needed, so the default could have been quietly hurting ordinary short requests. Six tasks, three repetitions at each window: 18 correct out of 18 in both, identical language purity, latency within noise. The default of loading at the model's maximum stands, now on evidence rather than taste.",
+      },
+    ],
+  },
   {
     version: "0.29.0",
     date: "2026-07-26",

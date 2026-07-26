@@ -25,7 +25,13 @@ export function auxChain(env: Record<string, string | undefined>): AuxEndpoint[]
   const explicitLm = (env.LMSTUDIO_URL || "").trim()
   const underTest = env.NODE_ENV === "test" || env.BUN_TEST || env.FABULA_TEST
   if (explicitLm || !underTest) {
-    const lm = explicitLm || "http://localhost:1234/v1"
+    // Through the ADAPTER, not straight at the serving port. Found by running the aux path exactly as
+    // a clean .env.example leaves it (2026-07-26): it resolved to :1234, which is the serving process
+    // itself. That port rejects the structured/JSON-schema form these calls use — and structured output
+    // is what the entailment path is FOR, so the default configuration pointed the gate at an endpoint
+    // that cannot answer it. :1235 is the adapter, which translates the request and is where every
+    // other inference path in this project already goes. An explicit LMSTUDIO_URL still wins.
+    const lm = explicitLm || "http://localhost:1235/v1"
     chain.push({ name: "local-qwen", url: `${lm}/chat/completions`, model: "", headers: {} })
   }
   // Cloud fallback — same test-runner discipline as the local default (RULE #18). A bare key must not

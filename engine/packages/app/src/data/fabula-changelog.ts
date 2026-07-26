@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.41.0"
+export const FABULA_VERSION = "0.42.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.42.0",
+    date: "2026-07-27",
+    items: [
+      {
+        ru: "Проверка утверждений в готовом тексте обращалась к модели по адресу, который не принимает нужную ей форму запроса — на чистой установке она была направлена туда, где не могла получить ответ. Теперь обращение идёт через тот же переходник, что и вся остальная работа с моделью.",
+        en: "The check that verifies claims in finished text was pointed at an address that does not accept the request form it needs — on a clean install it was aimed where it could not be answered. It now goes through the same adapter as every other call to the model.",
+      },
+      {
+        ru: "Шестьдесят настроек читались кодом и не были названы ни в одном примере конфигурации, включая те, что задают модель для этой проверки. Настроить то, чего файл не называет, невозможно. Все они описаны, и добавлена проверка в обе стороны: нельзя читать неописанное и нельзя описывать то, что не читается.",
+        en: "Sixty settings were read by the code and named in no example configuration, including the ones that point the check above at a model. What a file does not name cannot be configured. All are now described, with a check in both directions: nothing may be read undocumented, and nothing documented may go unread.",
+      },
+    ],
+  },
   {
     version: "0.41.0",
     date: "2026-07-26",

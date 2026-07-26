@@ -40,3 +40,17 @@ test.if(hasCloud)("callAux falls back to a reachable model and returns text", as
   expect(r.text.length).toBeGreaterThan(0)
   expect(typeof r.provider).toBe("string")
 }, 90000)
+
+test("the default aux endpoint goes through the adapter, not straight at the serving port", () => {
+  // Found by running the path as a clean .env.example leaves it: it resolved to the serving process
+  // itself, which rejects the structured form the entailment calls use — the gate was pointed at an
+  // endpoint that cannot answer the only question it asks.
+  const chain = auxChain({ NODE_ENV: "production" } as any)
+  expect(chain[0]?.url).toContain(":1235")
+  expect(chain[0]?.url).not.toContain(":1234")
+})
+
+test("an explicitly named endpoint still wins over the default", () => {
+  const chain = auxChain({ NODE_ENV: "production", LMSTUDIO_URL: "http://127.0.0.1:9999/v1" } as any)
+  expect(chain[0]?.url).toContain("9999")
+})

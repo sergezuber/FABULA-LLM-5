@@ -633,7 +633,15 @@ class Handler(BaseHTTPRequestHandler):
         # behind a long generation would break the app's health checks for nothing.
         _gated = method == "POST" and ("/chat/completions" in self.path or self.path.rstrip("/").endswith("/completions"))
         if _gated:
-            self._adm = _ADMISSION.acquire(timeout=admit_wait_max(is_stream), on_wait=_keepalive)
+            # WHO IS ASKING. The engine states it (session/llm.ts): a system-spawned actor is work nobody
+                # is watching. A request that says nothing counts as a live turn — the safe direction, and
+                # the reason every existing caller keeps exactly the treatment it had.
+                try:
+                    _prio = int(self.headers.get("x-fabula-priority", "0") or 0)
+                except (TypeError, ValueError):
+                    _prio = 0
+                self._adm = _ADMISSION.acquire(timeout=admit_wait_max(is_stream), on_wait=_keepalive,
+                                               priority=_prio)
         else:
             self._adm = None
         self._headers_committed = _ka

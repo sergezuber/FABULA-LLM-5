@@ -613,6 +613,16 @@ const live: Layer.Layer<
           })
       }
 
+      // Is this run something a person is waiting on? A system-spawned actor — the checkpoint writer
+      // and its kin — is by definition work nobody is watching, and that is the whole distinction the
+      // adapter's queue needs. Computed here rather than threaded in, so a new call site cannot forget
+      // it, and defaulting to foreground when it cannot be determined.
+      const isBackgroundRun = (input as any).agentID
+        ? yield* actorReg
+            .isSystemSpawned(SessionID.make(input.sessionID), (input as any).agentID)
+            .pipe(Effect.catch(() => Effect.succeed(false)))
+        : false
+      
       const streamStartTs = Date.now()
       l.debug("streamText starting", {
         messageID: input.user.id,
@@ -711,6 +721,15 @@ const live: Layer.Layer<
         maxOutputTokens: params.maxOutputTokens,
         abortSignal: input.abort,
         headers: {
+          // WHO IS ASKING. The adapter serves its single inference slot by rank, and without this it can
+          // only serve by arrival — the wrong question when background work asked first and a person is
+          // waiting. Measured 2026-07-27: ten messages from checkpoint writers against three from the user,
+          // every request averaging seventy-two seconds in that queue.
+          //
+          // The answer is already computed above for a different reason: a system-spawned actor is exactly
+          // the work nobody is watching. An unclassifiable caller sends 0 and is treated as a live turn,
+          // which is the safe direction to be wrong in.
+          "x-fabula-priority": isBackgroundRun ? "5" : "0",
           "x-session-affinity": input.sessionID,
           ...(input.parentSessionID ? { "x-parent-session-id": input.parentSessionID } : {}),
           ...input.model.headers,

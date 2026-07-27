@@ -101,3 +101,29 @@ def test_the_queue_empties_so_the_gate_keeps_admitting():
         with gate.acquire(timeout=5, priority=i % 3):
             pass
     assert gate._queue == [], gate._queue
+
+
+def test_the_adapter_reads_the_header_the_engine_sends():
+    """The wiring, not the logic.
+
+    The gate was correct and the engine declared itself, and neither fact mattered until the value
+    travelled between them. This project's recurring defect is exactly that gap: a mechanism whose own
+    tests pass while nothing calls it. Asserted on the source, because the alternative is a live run.
+    """
+    import pathlib, re
+    adapter = pathlib.Path(__file__).with_name("lmstudio-adapter.py").read_text()
+    engine = (pathlib.Path(__file__).parents[1] / "engine/packages/opencode/src/session/llm.ts").read_text()
+
+    assert "x-fabula-priority" in engine, "the engine must state who is asking"
+    assert "x-fabula-priority" in adapter, "the adapter must read it"
+    # and the value must actually reach acquire(), not merely be parsed into a dead variable
+    i = adapter.index("_ADMISSION.acquire(")
+    assert "priority=" in adapter[i:i + 300], "the parsed priority never reaches the gate"
+
+
+def test_a_missing_header_is_a_live_turn():
+    """An old engine, a curl by hand, anything at all: absence must mean foreground."""
+    import pathlib, re
+    adapter = pathlib.Path(__file__).with_name("lmstudio-adapter.py").read_text()
+    m = re.search(r'headers\.get\("x-fabula-priority",\s*"(\d+)"', adapter)
+    assert m and m.group(1) == "0", "the default must be the live-turn rank"

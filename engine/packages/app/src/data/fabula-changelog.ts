@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.44.0"
+export const FABULA_VERSION = "0.45.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.45.0",
+    date: "2026-07-27",
+    items: [
+      {
+        ru: "Ничто из запущенного FABULA больше не переживает FABULA. Долгую работу над книгой запускают отдельным процессом нарочно — иначе она погибнет вместе с ходом, который её попросил. Но такой процесс усыновляется системой и не попадал под уборку при выходе, которая доставала только прямых потомков: один такой, оставшийся от закрытой сессии, часами продолжал обращаться к модели и пережил несколько перезапусков. В ответ на его запросы поднималась вторая копия модели, две копии не поместились в память, и та, что обслуживала ваш ход, была убита — восемь с половиной минут работы пропали. Теперь каждый такой процесс записывается в момент рождения, гасится при выходе из приложения, а при старте гасятся те, чей движок уже мёртв. Признак — хозяин, а не возраст: книга законно читается долго.",
+        en: "Nothing FABULA starts outlives FABULA any more. Long work over a book runs as a separate process on purpose — otherwise it dies with the turn that asked for it. But such a process is adopted by the system and was missed by the shutdown, which reached only direct descendants: one left over from a closed session went on calling the model for hours and survived several restarts. A second copy of the model was loaded to answer it, two copies did not fit in memory, and the one serving your own turn was killed — eight and a half minutes of work lost. Every such process is now written down at birth, stopped when the app quits, and any whose engine is already gone are stopped at startup. The test is ownership, not age: a book legitimately takes a long time to read.",
+      },
+    ],
+  },
   {
     version: "0.44.0",
     date: "2026-07-27",

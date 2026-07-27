@@ -23,6 +23,7 @@ import { ProviderID, ModelID } from "../../src/provider/schema"
 import { ProviderTest } from "../fake/provider"
 import { testEffect } from "../lib/effect"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+import { SessionStatus } from "../../src/session/status"
 
 void Log.init({ print: false })
 
@@ -110,7 +111,7 @@ const env = Layer.mergeAll(
   checkpointLayer,
   // Prune depends on Checkpoint + Session + Config + ActorRegistry, all of
   // which are in the layers above. Used by T7 only.
-  SessionPrune.layer.pipe(Layer.provide(checkpointLayer), Layer.provide(SessionNs.defaultLayer), Layer.provideMerge(deps)),
+  SessionPrune.layer.pipe(Layer.provide(checkpointLayer), Layer.provide(SessionNs.defaultLayer), Layer.provide(SessionStatus.defaultLayer), Layer.provideMerge(deps)),
 )
 
 const it = testEffect(env)

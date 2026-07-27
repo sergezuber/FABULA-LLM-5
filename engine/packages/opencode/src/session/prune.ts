@@ -9,6 +9,8 @@ import { NotFoundError } from "@/storage"
 import { Effect, Layer, Context } from "effect"
 import { pressureLevel, usable } from "./overflow"
 import { trace } from "./trace"
+import { SessionStatus } from "./status"
+import { foregroundBusy, waitExpired, POLL_MS } from "./background-defer"
 import { SessionCheckpoint } from "./checkpoint"
 import { ActorRegistry } from "@/actor/registry"
 import type { ActorPromptOps } from "@/tool/actor"
@@ -196,7 +198,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Se
 export const layer: Layer.Layer<
   Service,
   never,
-  Config.Service | Session.Service | SessionCheckpoint.Service | ActorRegistry.Service
+  Config.Service | Session.Service | SessionCheckpoint.Service | ActorRegistry.Service | SessionStatus.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -204,6 +206,7 @@ export const layer: Layer.Layer<
     const session = yield* Session.Service
     const checkpoint = yield* SessionCheckpoint.Service
     const actorReg = yield* ActorRegistry.Service
+    const sessionStatus = yield* SessionStatus.Service
 
     // Per-session state: which checkpoint thresholds have already been crossed
     // (and had a checkpoint writer enqueued). Prevents re-firing on the same
@@ -355,6 +358,32 @@ export const layer: Layer.Layer<
         const key = resolved[i]
         if (currentTokens < t) break // sorted ascending; nothing more to trigger
         if (already.has(key)) continue
+
+        // WAIT FOR QUIET. The writer is a full model run and it was started from INSIDE the user's own
+        // turn, so it competed with that turn for the single inference slot. Measured 2026-07-27: over
+        // fifteen minutes the writers produced ten messages against the user's three, and every request
+        // to the model spent an average of 72 seconds queueing, the worst pinned at the 300-second
+        // ceiling. A request as small as "translate this" was not slow to compute — it was not being
+        // computed at all.
+        //
+        // Same rule the self-improvement passes were given in v0.17.0, decided by the same module. That
+        // entry said checkpoint writers still shared the slot and named it the next step; this is it.
+        //
+        // NOTHING IS EXCLUDED from the wait, and that is the load-bearing detail. The writer runs in its
+        // OWN CHILD session (checkpoint.ts sets `parentID`), and `busy` is only ever set for the main
+        // agent (prompt.ts) — so the writer's own session can never block it, while the PARENT session,
+        // the user's turn, is exactly what must. An earlier draft passed `[input.sessionID]` as excluded
+        // and would have skipped the only session worth waiting on: correct mechanism, wired to miss.
+        //
+        // Deferring is safe for the checkpoint: it summarises the conversation so far, so a later
+        // boundary carries MORE of it, never less, and `crossed` still prevents a second fire at the same
+        // threshold. The wait is bounded; if quiet never comes the checkpoint is skipped rather than
+        // forced, and the next threshold tries again.
+        if (!(yield* waitForQuiet(sessionStatus))) {
+          log.info("checkpoint writer deferred — foreground never went quiet", { sessionID: input.sessionID })
+          trace("ckpt.deferred", { sid: input.sessionID, threshold: key })
+          continue
+        }
 
         const outcome = yield* checkpoint
           .tryStartCheckpointWriter({
@@ -527,7 +556,25 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Config.defaultLayer),
     Layer.provide(SessionCheckpoint.defaultLayer),
     Layer.provide(ActorRegistry.defaultLayer),
+    Layer.provide(SessionStatus.defaultLayer),
   ),
 )
+
+/**
+ * Wait until no MAIN agent is generating anywhere.
+ *
+ * Deliberately excludes nothing: a checkpoint writer runs in its own child session, and `busy` is set
+ * only for main agents, so the writer cannot wait on itself — while the user's turn, which is the whole
+ * reason to wait, is precisely what it must see.
+ */
+const waitForQuiet = Effect.fn("SessionPrune.waitForQuiet")(function* (status: SessionStatus.Interface) {
+  let waited = 0
+  while (foregroundBusy(yield* status.list(), [])) {
+    if (waitExpired(waited)) return false
+    yield* Effect.sleep(POLL_MS)
+    waited += POLL_MS
+  }
+  return true
+})
 
 export * as SessionPrune from "./prune"

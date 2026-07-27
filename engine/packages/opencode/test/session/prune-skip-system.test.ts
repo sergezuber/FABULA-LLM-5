@@ -14,6 +14,7 @@ import type { Provider } from "../../src/provider"
 import { ProviderTest } from "../fake/provider"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { ActorRegistry } from "../../src/actor/registry"
+import { SessionStatus } from "../../src/session/status"
 
 void Log.init({ print: false })
 
@@ -81,6 +82,7 @@ describe("SessionPrune.fireCheckpoints — system-spawn skip", () => {
       ActorRegistry.defaultLayer,
       CrossSpawnSpawner.defaultLayer,
       SessionPrune.layer.pipe(
+        Layer.provide(SessionStatus.defaultLayer),
         Layer.provide(SessionNs.defaultLayer),
         Layer.provide(stubLayer),
         Layer.provide(ActorRegistry.defaultLayer),
@@ -158,6 +160,7 @@ describe("SessionPrune.fireCheckpoints — system-spawn skip", () => {
       ActorRegistry.defaultLayer,
       CrossSpawnSpawner.defaultLayer,
       SessionPrune.layer.pipe(
+        Layer.provide(SessionStatus.defaultLayer),
         Layer.provide(SessionNs.defaultLayer),
         Layer.provide(stubLayer),
         Layer.provide(ActorRegistry.defaultLayer),
@@ -235,6 +238,7 @@ describe("SessionPrune.fireCheckpoints — system-spawn skip", () => {
       ActorRegistry.defaultLayer,
       CrossSpawnSpawner.defaultLayer,
       SessionPrune.layer.pipe(
+        Layer.provide(SessionStatus.defaultLayer),
         Layer.provide(SessionNs.defaultLayer),
         Layer.provide(stubLayer),
         Layer.provide(ActorRegistry.defaultLayer),
@@ -297,6 +301,7 @@ describe("SessionPrune.fireCheckpoints — system-spawn skip", () => {
       ActorRegistry.defaultLayer,
       CrossSpawnSpawner.defaultLayer,
       SessionPrune.layer.pipe(
+        Layer.provide(SessionStatus.defaultLayer),
         Layer.provide(SessionNs.defaultLayer),
         Layer.provide(stubLayer),
         Layer.provide(ActorRegistry.defaultLayer),

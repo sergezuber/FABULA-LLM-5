@@ -16,6 +16,7 @@ import { Log } from "../../src/util"
 import { testEffect } from "../lib/effect"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+import { SessionStatus } from "../../src/session/status"
 
 void Log.init({ print: false })
 
@@ -35,6 +36,7 @@ const env = Layer.mergeAll(
   SessionNs.defaultLayer,
   CrossSpawnSpawner.defaultLayer,
   SessionPrune.layer.pipe(
+    Layer.provide(SessionStatus.defaultLayer),
     Layer.provide(SessionNs.defaultLayer),
     Layer.provide(SessionCheckpoint.defaultLayer),
     Layer.provide(ActorRegistry.defaultLayer),

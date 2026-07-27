@@ -17,6 +17,7 @@ import { ProviderTest } from "../fake/provider"
 import { testEffect } from "../lib/effect"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { ActorRegistry } from "../../src/actor/registry"
+import { SessionStatus } from "../../src/session/status"
 
 void Log.init({ print: false })
 
@@ -71,6 +72,7 @@ const env = Layer.mergeAll(
   SessionNs.defaultLayer,
   CrossSpawnSpawner.defaultLayer,
   SessionPrune.layer.pipe(
+    Layer.provide(SessionStatus.defaultLayer),
     Layer.provide(SessionNs.defaultLayer),
     Layer.provide(SessionCheckpoint.defaultLayer),
     Layer.provide(ActorRegistry.defaultLayer),
@@ -260,6 +262,7 @@ describe("SessionPrune.fireCheckpoints writer-failure retry", () => {
       SessionNs.defaultLayer,
       CrossSpawnSpawner.defaultLayer,
       SessionPrune.layer.pipe(
+        Layer.provide(SessionStatus.defaultLayer),
         Layer.provide(SessionNs.defaultLayer),
         Layer.provide(stubLayer),
         Layer.provide(ActorRegistry.defaultLayer),

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.46.0"
+export const FABULA_VERSION = "0.47.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.47.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Служебная запись состояния больше не отнимает у вас модель. Она запускалась прямо посреди вашего хода и вставала с ним в одну очередь: за пятнадцать минут такие записи выдали десять сообщений против ваших трёх, а каждый запрос к модели простаивал в очереди в среднем 72 секунды, худший — пять минут. Просьба вроде «переведи это» была не медленной — она просто не считалась. Теперь запись ждёт, пока вы освободитесь, и пропускается совсем, если тишины так и не наступило: она описывает разговор до этого момента, поэтому более поздний срез несёт больше, а не меньше.",
+        en: "The background state record no longer takes the model away from you. It started in the middle of your own turn and joined the same queue: over fifteen minutes such records produced ten messages against your three, while every request to the model spent an average of 72 seconds waiting, the worst of them five minutes. A request like 'translate this' was not slow — it simply was not being computed. It now waits until you are free, and is skipped altogether if quiet never comes: it describes the conversation up to that point, so a later cut carries more of it, never less.",
+      },
+    ],
+  },
   {
     version: "0.46.0",
     date: "2026-07-27",

@@ -46,3 +46,30 @@ describe("waitExpired", () => {
     expect(Number.isFinite(MAX_WAIT_MS)).toBe(true)
   })
 })
+
+// The checkpoint writer, and the mistake that nearly shipped with it.
+//
+// The writer runs in its OWN CHILD session, and `busy` is set only for main agents — so a wait that
+// excluded "its own session" would exclude the PARENT, which is the user's turn and the only thing worth
+// waiting for. The draft did exactly that. These pin the shape, not the intention.
+describe("waiting on behalf of the checkpoint writer", () => {
+  const busy = { type: "busy" }
+  const idle = { type: "idle" }
+
+  test("the user's turn is seen, because nothing is excluded", () => {
+    // parent = the user's session (busy); child = the writer's own (never marked busy)
+    expect(foregroundBusy([["ses_parent", busy], ["ses_writer_child", idle]], [])).toBe(true)
+  })
+
+  test("excluding the parent would blind it — the bug that was caught before it shipped", () => {
+    expect(foregroundBusy([["ses_parent", busy]], ["ses_parent"])).toBe(false)
+  })
+
+  test("once the user's turn ends the writer is free to run", () => {
+    expect(foregroundBusy([["ses_parent", idle], ["ses_writer_child", idle]], [])).toBe(false)
+  })
+
+  test("a second user session still generating also holds it back", () => {
+    expect(foregroundBusy([["ses_a", idle], ["ses_b", busy]], [])).toBe(true)
+  })
+})

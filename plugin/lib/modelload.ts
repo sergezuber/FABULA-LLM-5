@@ -346,6 +346,39 @@ function footprintBytes(): number {
 }
 
 /** Run `lms load`. Resolves with the command's own words so a failure is reportable, not guessed at. */
+
+/**
+ * Is any instance of this model still loaded? Asked of the runtime, not remembered — and matched on the
+ * MODEL name rather than the identifier, because a second copy is called `<id>:2` and an identifier check
+ * would miss precisely the thing this guards against.
+ */
+export function stillResident(modelId: string): boolean {
+  try {
+    const out = execFileSync(lmsBin(), ["ps"], {
+      encoding: "utf8",
+      timeout: 8000,
+      env: { ...process.env, PATH: `${PATH_PREFIX}:${process.env.PATH ?? ""}` },
+    })
+    return out.split("\n").some((l) => l.includes(modelId) && !/IDENTIFIER/.test(l))
+  } catch {
+    return false // cannot ask → do not block; the runtime's own guardrail is the backstop
+  }
+}
+
+/** Is the runtime generating right now? `lms ps` says PROCESSINGPROMPT / GENERATING while it works. */
+export async function anyModelBusy(): Promise<boolean> {
+  try {
+    const out = execFileSync(lmsBin(), ["ps"], {
+      encoding: "utf8",
+      timeout: 8000,
+      env: { ...process.env, PATH: `${PATH_PREFIX}:${process.env.PATH ?? ""}` },
+    })
+    return /PROCESSING|GENERATING/i.test(out)
+  } catch {
+    return true // cannot tell → assume busy: waiting costs a delay, guessing cost a crashed run
+  }
+}
+
 function lmsLoad(modelId: string, window: number, timeoutMs: number, slots = plannedSlots()): Promise<{ ok: boolean; out: string }> {
   // Unload first. Loading a model that is ALREADY resident asks the machine to hold two copies for the
   // moment of the swap, and the runtime's guardrail — rightly — refuses: measured live, a load at 65536
@@ -360,6 +393,20 @@ function lmsLoad(modelId: string, window: number, timeoutMs: number, slots = pla
     })
   } catch {
     /* not loaded, or nothing to unload — the load below is what matters */
+  }
+  // VERIFY the unload, never assume it. Swallowing its failure is what wrecked a live run: the model was
+  // BUSY serving an eight-minute turn, `lms unload` could not take it, the error was caught and ignored,
+  // and the load below brought up a SECOND copy — `kat-coder…:2`, two lots of 21.95 GB of weights on a
+  // 48 GB machine. It went into swap, the original instance was killed, and the user's work died with it
+  // as "the model has crashed (Exit code: null)". The planner even reported the second copy honestly,
+  // capping it at 135168 because it counted the first as a resident — every part behaved as written, on
+  // a premise that should never have existed.
+  if (stillResident(modelId)) {
+    return {
+      ok: false,
+      out: `refusing to load: ${modelId} is still resident and could not be unloaded (busy?). Loading now `
+        + `would start a SECOND copy and take the machine into swap.`,
+    }
   }
   // The baseline, taken with the model GONE. Machine-wide memory drifts — a build, a browser tab, the app
   // itself — and measured live that drift went straight into the slope: the cost came out roughly twice
@@ -489,7 +536,15 @@ export async function ensureLoadedAtPlannedWindow(
     // hands the plan the model's entire footprint as if it were free memory. The request-time fit goes
     // through the origin and reports no weights BY DESIGN (there is no constant to recover), so this
     // fallback chain can genuinely arrive at zero, and the honest answer then is to refuse.
-    const weights = weightsBytesOf(modelId) || cost.weightsBytes
+    // Weights, from whichever source actually has them. `lms ps` reports a SIZE that does not move with
+    // the window — that is the weights, and it is the best source. The through-origin request-time fit
+    // reports none by construction (there is no constant to recover when the baseline is subtracted), so
+    // it cannot stand in. The serving API's own figure is the last resort: on this runtime it is absent,
+    // but a runtime that does report it should not be refused for the sake of the one that does not.
+    //
+    // Zero still refuses rather than plans. A missing weight silently read as zero would hand the planner
+    // the model's entire footprint as free memory — the one arithmetic mistake here that ends in swap.
+    const weights = weightsBytesOf(modelId) || cost.weightsBytes || me.bytes
     if (!(weights > 0)) {
       return {
         acted: false,

@@ -25,7 +25,14 @@ const KAT = (state: string, loaded: number, bytes: number) => ({
   id: "kat", type: "llm", state, loaded_context_length: loaded, max_context_length: 262144, size_bytes: bytes,
 })
 
+// A stub `lms`, so the guard that asks "is anything still resident?" asks THIS and not the real machine.
+// Without it the tests read the developer's own loaded model and every load correctly refuses — the guard
+// working exactly as designed, on the wrong subject.
+const STUB = join(tmpdir(), `lms-stub-${process.pid}.sh`)
+writeFileSync(STUB, "#!/bin/sh\nif [ \"$1\" = ps ]; then echo IDENTIFIER; fi\nexit 0\n", { mode: 0o755 })
+
 beforeEach(() => {
+  process.env.FABULA_LMS_BIN = STUB
   process.env.FABULA_KVCOST_FILE = STORE
   delete process.env.FABULA_AUTO_WINDOW
   rmSync(STORE, { force: true })
@@ -202,7 +209,7 @@ describe("what actually reaches `lms load`", () => {
 
   beforeEach(() => {
     rmSync(ARGV, { force: true })
-    writeFileSync(MARKER, `#!/bin/sh\nprintf '%s\\n' "$@" >> ${ARGV}\nexit 0\n`)
+    writeFileSync(MARKER, `#!/bin/sh\n[ "$1" = load ] && printf '%s\\n' "$@" >> ${ARGV}\nexit 0\n`)
     require("node:fs").chmodSync(MARKER, 0o755)
     process.env.FABULA_LMS_BIN = MARKER
   })
@@ -285,7 +292,17 @@ describe("a window above the ceiling is corrected, not respected", () => {
     const ARGV = join(tmpdir(), `lms-over-${process.pid}.txt`)
     const MARKER = join(tmpdir(), `lms-over-${process.pid}.sh`)
     // `ps` has to answer with a weight, because a plan cannot be sized without one.
-    writeFileSync(MARKER, `#!/bin/sh\nprintf '%s\\n' "$@" >> ${ARGV}\n[ "$1" = ps ] && echo "kat  kat  LOADED  22.00 GB  262144  1  Local"\nexit 0\n`)
+    // The stub must model the runtime it stands in for: after an unload the model is GONE from `ps`.
+    // A stub that reports it forever makes the "already resident, refuse to load a second copy" guard
+    // fire on every test — which is the guard being right about a world that does not exist.
+    const STATE = join(tmpdir(), `lms-over-state-${process.pid}`)
+    writeFileSync(STATE, "loaded")
+    writeFileSync(MARKER, `#!/bin/sh
+[ "$1" = load ] && printf '%s\\n' "$@" >> ${ARGV} && echo loaded > ${STATE}
+[ "$1" = unload ] && rm -f ${STATE}
+[ "$1" = ps ] && [ -f ${STATE} ] && echo "kat  kat  LOADED  22.00 GB  262144  1  Local"
+exit 0
+`)
     require("node:fs").chmodSync(MARKER, 0o755)
     process.env.FABULA_LMS_BIN = MARKER
     // Loaded at the passport while the machine can only pay for a fraction of it — the live 2026-07-26 state.
@@ -318,5 +335,36 @@ describe("a window above the ceiling is corrected, not respected", () => {
     for (const f of [SAMPLES, MARKER]) rmSync(f, { force: true })
     delete process.env.FABULA_LMS_BIN
     delete process.env.FABULA_KVSAMPLE_FILE
+  })
+})
+
+describe("never a second copy", () => {
+  // The incident this guard exists for: an unload that could not take a BUSY model failed silently, the
+  // load went ahead anyway, and two lots of 21.95 GB of weights took a 48 GB machine into fifteen
+  // gigabytes of swap. The instance serving the user's own turn was killed for memory and eight and a
+  // half minutes of work went with it. Disabling the guard used to break no test at all.
+  test("a model that survives the unload is NOT loaded on top of", async () => {
+    const ARGV = join(tmpdir(), `lms-stuck-${process.pid}.txt`)
+    const MARKER = join(tmpdir(), `lms-stuck-${process.pid}.sh`)
+    rmSync(ARGV, { force: true })
+    // An unload that does nothing — the shape of a model too busy to be taken down.
+    writeFileSync(MARKER, `#!/bin/sh
+[ "$1" = load ] && printf '%s\\n' "$@" >> ${ARGV}
+[ "$1" = ps ] && echo "kat  kat  LOADED  22.00 GB  262144  1  Local"
+exit 0
+`)
+    require("node:fs").chmodSync(MARKER, 0o755)
+    process.env.FABULA_LMS_BIN = MARKER
+    writeFileSync(STORE, JSON.stringify({ kat: [
+      { windowTokens: 32768, totalBytes: 24 * GIB },
+      { windowTokens: 131072, totalBytes: 30 * GIB },
+    ] }))
+    serve([KAT("loaded", 32768, 22 * GIB)])
+    const r = await ensureLoadedAtPlannedWindow("kat", { loadTimeoutMs: 3000 })
+    expect(r.acted).toBe(false)
+    expect(r.reason).toContain("still resident")
+    // and the load command was never issued — the machine was never asked to hold two copies
+    expect(require("node:fs").existsSync(ARGV)).toBe(false)
+    rmSync(MARKER, { force: true })
   })
 })

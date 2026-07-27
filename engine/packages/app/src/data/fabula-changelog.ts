@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.49.0"
+export const FABULA_VERSION = "0.50.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.50.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Автоподбор окна контекста снова включён, и теперь он не может поднять вторую копию модели. Именно это однажды и случилось: выгрузка не смогла забрать занятую модель, ошибку проглотили, загрузка пошла всё равно — и два экземпляра весов не поместились в память, а тот, что обслуживал ваш ход, был убит. Теперь выгрузка проверяется, а не предполагается: если модель осталась в памяти, загрузка отменяется. Вес модели берётся из того источника, который его действительно сообщает, и при неизвестном весе окно не планируется вовсе.",
+        en: "The context-window autoloader is back on, and it can no longer bring up a second copy of the model. That is precisely what happened once: an unload could not take a busy model, the error was swallowed, the load went ahead anyway — and two sets of weights did not fit in memory, so the one serving your turn was killed. The unload is now verified rather than assumed: if the model is still resident, the load is called off. The model's weight is read from whichever source actually reports it, and with an unknown weight no window is planned at all.",
+      },
+    ],
+  },
   {
     version: "0.49.0",
     date: "2026-07-28",

@@ -25,6 +25,7 @@ import { spawn } from "node:child_process"
 import { fileURLToPath } from "node:url"
 import { dirname, join } from "node:path"
 import { gate } from "./lib/manage"
+import { registerChild, unregisterChild, reapOrphans } from "./lib/childreg"
 import { isCorpusAnalysisTask, accumulatorKey } from "./lib/corpus"
 import { existsSync } from "node:fs"
 
@@ -64,8 +65,22 @@ function spawnWorker(pluginInput: any, sessionID: string, taskText: string): voi
     env: { ...process.env },
   })
   child.on("error", () => {}) // never let a spawn failure crash the turn (fail-open)
+  // REGISTER IT. Detaching is what lets the work outlive the turn; it is also what puts the child beyond
+  // `pkill -P <engine>`, which reaches only DIRECT children. One worker left over from a closed session
+  // kept driving the model for hours and cost a live run — see lib/childreg.ts. Surviving the turn is the
+  // point; surviving the app never is.
+  if (child.pid) registerChild(child.pid, `corpus-worker ${sessionID}`)
+  child.on("exit", () => { if (child.pid) unregisterChild(child.pid) })
   try { child.unref() } catch {} // parent does not wait for the child
 }
+
+// A NEW engine is starting, so anything registered by a dead one is an orphan by definition. Reaping at
+// load is what would have prevented the incident: the leftover worker survived app restarts.
+try {
+  const r = reapOrphans()
+  if (r.reaped.length)
+    console.error(`[fabula-corpus] reaped ${r.reaped.length} orphaned worker(s): ${r.reaped.map((x) => x.label).join(", ")}`)
+} catch { /* a safety net must never stop the plugin loading */ }
 
 export const FabulaCorpus: Plugin = async (pluginInput) =>
   process.env.FABULA_CORPUS === "0" ? {} : gate("corpus", {

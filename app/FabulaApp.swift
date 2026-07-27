@@ -1156,6 +1156,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
             p.terminate()
         }
         shell("lsof -ti tcp:\(PORT) | xargs kill -9 >/dev/null 2>&1")
+        // 2b) Reap DETACHED children. `pkill -P` above reaches only DIRECT children, and a worker
+        // spawned detached is re-parented to the system the moment it starts — so it survives every line
+        // above. One left over from a closed session kept driving the model for hours: the serving
+        // runtime loaded a copy to answer it, the window autoloader loaded another, and two lots of
+        // weights took a 48 GB machine into fifteen gigabytes of swap, killing the model that was serving
+        // the user's own turn. Nothing FABULA starts may outlive FABULA. The registry
+        // (plugin/lib/childreg.ts) is the list; this is where it is honoured on the way out.
+        let childReg = "\(NSHomeDirectory())/.local/share/fabula/children.json"
+        if let data = FileManager.default.contents(atPath: childReg),
+           let recs = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]] {
+            for r in recs {
+                if let pid = r["pid"] as? Int, pid > 0 { shell("kill -9 \(pid) >/dev/null 2>&1") }
+            }
+            try? "[]".write(toFile: childReg, atomically: true, encoding: .utf8)
+        }
+        // Belt: kill by script name too, so a spawn that never reached the registry still dies here.
+        shell("pkill -9 -f 'plugin/lib/corpus-worker' >/dev/null 2>&1")
         // 3) We own the DB, so once it closes we securely erase any deleted-chat residue (orphan
         // rows, FTS segments, freed pages via secure_delete+VACUUM, session memory, logs). Run
         // detached so quitting stays responsive; it waits for the port to free first. Runs even if

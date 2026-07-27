@@ -489,6 +489,12 @@ class AdmissionGate:
         self._waiting = 0
         self._next_ticket = 0
         self._now_serving = 0
+        # (priority, ticket) of everyone currently queued. A plain FIFO serves whoever asked first, which
+        # is the wrong question when the asker is background work and a person is waiting: measured
+        # 2026-07-27, checkpoint writers produced ten messages against the user's three while every
+        # request averaged 72 seconds in this queue. Rank first, arrival second — so background work still
+        # runs, and still runs in order, but never ahead of a live turn.
+        self._queue = []           # cv-guarded
         self._depths = {}          # thread-id -> reentrancy depth (cv-guarded; threading.local cannot
                                    # be cleared cross-thread, which silently uncapped a released thread)
         self.admitted = 0
@@ -519,11 +525,14 @@ class AdmissionGate:
                     "max_queue_depth": self.max_depth, "total_wait_seconds": round(self.total_wait, 3)}
 
     # -- admission ----------------------------------------------------------------------------------
-    def acquire(self, timeout=None, on_wait=None):
+    def acquire(self, timeout=None, on_wait=None, priority=0):
         """Occupy a slot, queueing FIFO if the cap is reached. Returns an `Admission` (also a context
         manager). NEVER raises for capacity reasons and never returns None: the caller always proceeds.
         `on_wait(waited_seconds)` is called roughly once a second while queued, so a streaming caller
-        can emit keepalives instead of looking dead."""
+        can emit keepalives instead of looking dead.
+
+        `priority` ranks the wait: 0 is a live turn, higher numbers are background work. Equal priorities
+        keep their arrival order, so nothing starves within a class."""
         if self._limit <= 0:
             return Admission(self, 0.0, held=False)            # unlimited: degenerate setting is the safe one
         tid = threading.get_ident()
@@ -539,12 +548,18 @@ class AdmissionGate:
         with self._cv:
             ticket = self._next_ticket
             self._next_ticket += 1
+            try:
+                rank = int(priority)
+            except (TypeError, ValueError):
+                rank = 0
+            self._queue.append((rank, ticket))
+            self._queue.sort()
             self._waiting += 1
             self.max_depth = max(self.max_depth, self._waiting)
-            if ticket > self._now_serving or self._active >= self._limit:
+            if self._queue[0] != (rank, ticket) or self._active >= self._limit:
                 self.queued += 1
             try:
-                while self._active >= self._limit or ticket != self._now_serving:
+                while self._active >= self._limit or self._queue[0] != (rank, ticket):
                     waited = time.monotonic() - started
                     if budget is not None and waited >= budget:
                         # FAIL OPEN. Proceed WITHOUT a permit: releasing this admission must not add
@@ -568,6 +583,13 @@ class AdmissionGate:
                         finally:
                             self._cv.acquire()
             finally:
+                # Leave the queue on EVERY exit — admitted, failed open, or interrupted. A waiter left at
+                # the head is a ghost nobody can be, and the gate would stop admitting entirely.
+                try:
+                    self._queue.remove((rank, ticket))
+                except ValueError:
+                    pass
+                self._cv.notify_all()
                 self._waiting -= 1
             self._active += 1
             self._now_serving = max(self._now_serving, ticket + 1)
@@ -580,8 +602,8 @@ class AdmissionGate:
             return adm
 
     # alias so a caller can `with gate.slot():`
-    def slot(self, timeout=None, on_wait=None):
-        return self.acquire(timeout=timeout, on_wait=on_wait)
+    def slot(self, timeout=None, on_wait=None, priority=0):
+        return self.acquire(timeout=timeout, on_wait=on_wait, priority=priority)
 
     def _release(self, admission):
         tid = getattr(admission, "tid", None)

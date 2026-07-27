@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.47.0"
+export const FABULA_VERSION = "0.48.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.48.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Очередь к модели научилась различать, кто в ней стоит. Раньше она обслуживала строго по порядку прихода — а это неверный вопрос, когда первым попросила служебная работа, а ждёт человек. Теперь запрос живого хода проходит вперёд, служебный по-прежнему выполняется и по-прежнему в своём порядке, но никогда впереди вас. Тот, кто не назвал себя, считается живым ходом: ошибиться в эту сторону безопасно.",
+        en: "The queue to the model can now tell who is standing in it. It used to serve strictly by order of arrival — the wrong question when background work asked first and a person is waiting. A live turn now goes ahead; background work still runs, still in its own order, but never in front of you. A caller that does not identify itself counts as a live turn: that is the safe way to be wrong.",
+      },
+    ],
+  },
   {
     version: "0.47.0",
     date: "2026-07-28",

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.50.0"
+export const FABULA_VERSION = "0.51.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.51.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Остановка замечается сразу, а не после первого слова ответа. Пока модель читает ваш запрос, ей нечего вам отправить — а уход собеседника до сих пор обнаруживался только по неудачной отправке. Поэтому нажатие «Стоп» на длинном запросе не давало ничего: замерено 45 секунд и больше. Теперь за соединением следят отдельно и обрывают его через секунду. Оговорка, которую честнее назвать: уже начатое чтение запроса сервер модели доводит до конца, так что освободится она не мгновенно — но отвечать на отменённое уже не станет.",
+        en: "A stop is noticed at once, rather than after the answer's first word. While the model is reading your request there is nothing to send you, and until now a departed caller was only discovered by a failed send — so pressing Stop on a long request did nothing at all: measured at 45 seconds and counting. The connection is now watched separately and dropped within a second. The caveat is worth stating plainly: the model server finishes a read it has already begun, so it does not free up instantly — but it will not answer what was cancelled.",
+      },
+    ],
+  },
   {
     version: "0.50.0",
     date: "2026-07-28",

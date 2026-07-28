@@ -98,3 +98,30 @@ test("a model with no limit object never throws", async () => {
   const model: any = { id: "m5", providerID: "lmstudio" }
   await expect((await hook())({ model, provider: { id: "lmstudio" } })).resolves.toBeUndefined()
 })
+
+// The correction must reach the CONFIG FILE at the correction itself — not only after a successful
+// load. Measured 2026-07-28: the sync lived behind `r.window > 0`, the loader answered "no action"
+// (model already resident), and the file kept its typed 65536 while the runtime served 135168 — so
+// prune read 69% out of a 45k-token first step and auto-compaction churned an 84-second turn to death.
+test("the measured window is written into the launch config even when the loader takes no action", async () => {
+  clearLearnedWindow()
+  setLearnedWindow(135168)
+  const cfgPath = join(tmpdir(), `win-cfg-${process.pid}.json`)
+  writeFileSync(
+    cfgPath,
+    JSON.stringify({ provider: { lmstudio: { models: { m: { limit: { context: 65536, output: 32768 } } } } } }),
+  )
+  const prevCfg = process.env.MIMOCODE_CONFIG
+  process.env.MIMOCODE_CONFIG = cfgPath
+  try {
+    const model: any = { id: "m", providerID: "lmstudio", limit: { context: 65536, output: 32768 } }
+    await (await hook())({ model, provider: { id: "lmstudio" } })
+    expect(model.limit.context).toBe(135168) // the request object, as before
+    const written = JSON.parse(await Bun.file(cfgPath).text())
+    expect(written.provider.lmstudio.models.m.limit.context).toBe(135168) // and the FILE
+    expect(written.provider.lmstudio.models.m.limit.output).toBe(32768) // output untouched
+  } finally {
+    if (prevCfg === undefined) delete process.env.MIMOCODE_CONFIG
+    else process.env.MIMOCODE_CONFIG = prevCfg
+  }
+})

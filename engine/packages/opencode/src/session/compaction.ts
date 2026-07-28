@@ -17,6 +17,7 @@ import { detectRepeatedCharShingle } from "./prompt/text-ngram-detection"
 import { Effect, Layer, Context } from "effect"
 import { InstanceState } from "@/effect"
 import { isOverflow as overflow, usable } from "./overflow"
+import { mechanicalSummary } from "./compaction-fallback"
 import { planFold, foldContinuation } from "./compaction-fold"
 import { makeRuntime } from "@/effect/run-service"
 import { fn } from "@/util/fn"
@@ -484,12 +485,30 @@ export const layer: Layer.Layer<
         hijacked = attempt.result === "text-repeat" || summaryLooksHijacked(summaryText(msg.id))
         trace("compaction.retry", { sid: input.sessionID, hijacked })
         if (hijacked) {
-          attempt.processor.message.error = new MessageV2.AbortedError(
-            { message: "Compaction failed: the summarizer kept continuing the task instead of summarizing" },
-          ).toObject()
-          attempt.processor.message.finish = "error"
-          yield* session.updateMessage(attempt.processor.message)
-          return "stop"
+          // MECHANICAL FALLBACK, not a dead stop. Measured 2026-07-28 (twice in one 84-second turn):
+          // erroring out here inserted the deterministic rebuild boundary, the model lost its progress,
+          // re-explored from zero, crossed the threshold again, and the summarizer hijacked again — a
+          // churn loop with a bare markup tail as the visible "answer". A summary assembled from what
+          // the conversation VERIFIABLY contains is worse prose than a model's but loses nothing, ends
+          // the loop, and — since summary messages are no longer rendered (2026-07-28) — is INTERNAL:
+          // the reader can never see it, which is the sin the first version of this fallback committed.
+          const assembled = mechanicalSummary(modelMessages as never)
+          log.warn("summary hijacked twice — mechanical fallback summary used", { sessionID: input.sessionID })
+          yield* session.removeMessage({ sessionID: input.sessionID, messageID: msg.id })
+          msg = createSummaryMessage()
+          msg.time.completed = Date.now()
+          yield* session.updateMessage(msg)
+          yield* session.updatePart({
+            id: PartID.ascending(),
+            messageID: msg.id,
+            sessionID: input.sessionID,
+            type: "text",
+            text: assembled,
+            time: { start: Date.now(), end: Date.now() },
+          })
+          trace("compaction.fallback", { sid: input.sessionID, mechanical: true })
+          // Steer the existing downstream: a fallback summary continues the turn exactly as a clean one.
+          attempt.result = "continue"
         }
       }
 

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.72.0"
+export const FABULA_VERSION = "0.73.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.73.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Разобран ход, закончившийся хвостом разметки вместо ответа. Причина — в конфиге у модели было вписано окно вдвое меньше настоящего: измеренная поправка чинила текущий запрос, но в файл не попадала, если загрузчику нечего было делать, — и пороги сжатия считались от вымышленного числа. Сжатие било в 84-секундном ходе, сводчик дважды сбивался на продолжение задачи, работа сгорала. Теперь измеренное окно пишется в конфиг в момент самой поправки, а после двойного сбоя сводчика собирается механическая сводка — некрасивая, но ничего не теряющая и читателю невидимая.",
+        en: "The turn that ended in a tail of markup instead of an answer is dissected. The config carried a window half the real size for the model: the measured correction fixed the current request but never reached the file when the loader had nothing to do — so the compaction thresholds computed from a fictional number. Compaction fired inside an 84-second turn, the summarizer derailed into task continuation twice, and the work burned. The measured window is now written to the config at the moment of correction, and after a double derail a mechanical summary is assembled — plain, lossless, and invisible to the reader.",
+      },
+    ],
+  },
   {
     version: "0.72.0",
     date: "2026-07-28",

@@ -42,6 +42,19 @@ export const FabulaWindow = async () =>
           const from = Number(lim.context) || 0
           lim.context = measured
           console.error(`[fabula-window] engine context limit ${from} -> ${measured} (measured from the runtime)`)
+          // WRITE THE CONFIG HERE, at the correction itself — not only after a successful load. The sync
+          // used to live behind `r.window > 0`, and on this machine the loader answers "no action" (the
+          // model is already resident), so the correction never reached the file: every part of the engine
+          // that reads the CONFIG'S limit — the prune thresholds above all — kept computing with the typed
+          // number. Measured 2026-07-28: kat served 135168 while the config said 65536, so a 45k-token
+          // first step read as 69% of the window and auto-compaction fired inside an 84-second turn; the
+          // summariser then hijacked twice and the turn died churning. The by-reference correction fixes
+          // the REQUEST; the config write fixes every other reader from the next start.
+          const cfgPath = process.env.MIMOCODE_CONFIG
+          if (cfgPath) {
+            const sync = syncEngineLimit(cfgPath, id, measured)
+            if (sync.changed) console.error(`[fabula-window] ${sync.reason}; applies from the next engine start`)
+          }
         }
 
         // FABULA_AUTO_WINDOW governs LOADING a model, which is the risky half. Correcting a number the

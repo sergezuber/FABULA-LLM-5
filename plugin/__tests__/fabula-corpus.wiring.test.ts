@@ -120,6 +120,75 @@ test("INTERCEPT actually LAUNCHES the worker (not just cancels the turn)", async
   }
 })
 
+// THE WORDLESS TRIGGER. The ask here is deliberately one nobody would write a pattern for — it names no
+// book, no chapters, no "in full", and it is not even a request to read anything. What fires the worker is
+// the SHAPE of the turn: file after file out of one directory, past the measured window, with more left.
+// A pattern-matching trigger cannot pass this test, which is the point of it.
+test("TRAVERSAL: reading a corpus fires the worker with no word ever matched", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "corpus-walk-"))
+  const marker = join(dir, "argv.txt")
+  const fakeBun = join(dir, "fake-bun.sh")
+  writeFileSync(fakeBun, `#!/bin/sh\nprintf '%s\\n' "$@" > ${JSON.stringify(marker)}\nexit 0\n`)
+  chmodSync(fakeBun, 0o755)
+  for (let i = 0; i < 20; i++) writeFileSync(join(dir, `ch${i}.md`), "x")
+  const prevBun = process.env.FABULA_BUN_BIN
+  const prevWin = process.env.FABULA_CONTEXT_WINDOW
+  process.env.FABULA_BUN_BIN = fakeBun
+  process.env.FABULA_CONTEXT_WINDOW = "8000"
+  try {
+    const h = await hooks(mockClient(), dir)
+    const out: any = {}
+    await h["session.userQuery.pre"]({ sessionID: "s_walk", step: 1, messageID: "m1", query: "ну и?" }, out)
+    expect(out.cancel).toBeFalsy() // no pattern matched — the turn runs normally, as it should
+    const body = "z".repeat(40_000)
+    for (let i = 0; i < 6; i++) {
+      await h["tool.execute.after"](
+        { sessionID: "s_walk", tool: "view" },
+        { args: { file_path: join(dir, `ch${i}.md`) }, output: body },
+      )
+    }
+    for (let i = 0; i < 40 && !existsSync(marker); i++) await new Promise((r) => setTimeout(r, 50))
+    expect(existsSync(marker)).toBe(true) // the traversal itself launched the worker
+    const argv = readFileSync(marker, "utf8").trim().split("\n")
+    expect(argv[1]).toBe(dir)
+    expect(argv[2]).toBe("s_walk")
+  } finally {
+    if (prevBun === undefined) delete process.env.FABULA_BUN_BIN
+    else process.env.FABULA_BUN_BIN = prevBun
+    if (prevWin === undefined) delete process.env.FABULA_CONTEXT_WINDOW
+    else process.env.FABULA_CONTEXT_WINDOW = prevWin
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+// The control: an ordinary turn touching a couple of files must never be taken over.
+test("TRAVERSAL stays out of an ordinary turn", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "corpus-quiet-"))
+  const marker = join(dir, "argv.txt")
+  const fakeBun = join(dir, "fake-bun.sh")
+  writeFileSync(fakeBun, `#!/bin/sh\nprintf '%s\\n' "$@" > ${JSON.stringify(marker)}\nexit 0\n`)
+  chmodSync(fakeBun, 0o755)
+  for (let i = 0; i < 20; i++) writeFileSync(join(dir, `ch${i}.md`), "x")
+  const prevBun = process.env.FABULA_BUN_BIN
+  process.env.FABULA_BUN_BIN = fakeBun
+  try {
+    const h = await hooks(mockClient(), dir)
+    await h["session.userQuery.pre"]({ sessionID: "s_quiet", step: 1, messageID: "m1", query: "почини баг" }, {})
+    for (let i = 0; i < 2; i++) {
+      await h["tool.execute.after"](
+        { sessionID: "s_quiet", tool: "view" },
+        { args: { file_path: join(dir, `ch${i}.md`) }, output: "z".repeat(40_000) },
+      )
+    }
+    await new Promise((r) => setTimeout(r, 300))
+    expect(existsSync(marker)).toBe(false)
+  } finally {
+    if (prevBun === undefined) delete process.env.FABULA_BUN_BIN
+    else process.env.FABULA_BUN_BIN = prevBun
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test("RECURSION GUARD: a re-injected report prefix → no cancel", async () => {
   const h = await hooks(mockClient(), "/tmp/nope")
   const out: any = {}

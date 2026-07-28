@@ -27,6 +27,30 @@ import { dirname, join } from "node:path"
 import { gate } from "./lib/manage"
 import { registerChild, unregisterChild, reapOrphans } from "./lib/childreg"
 import { isCorpusAnalysisTask, accumulatorKey } from "./lib/corpus"
+import { initTraversal, observeRead, traversalVerdict } from "./lib/traversal"
+import { probeWindow } from "./lib/ctxguard"
+import { dirname } from "node:path"
+import { readdirSync } from "node:fs"
+
+/** The file a read-family call actually pulled into the context, or nothing. Tools are named differently
+ *  across the belt and across MCP servers, so the ARGUMENT is what is read — a call carrying a file path
+ *  and returning text has brought a file in, whatever it is called. */
+function readTargetOf(tool: unknown, args: any): string {
+  const name = String(tool ?? "")
+  if (!/read|view|cat|open|file/i.test(name)) return ""
+  const p = args?.file_path ?? args?.path ?? args?.filePath ?? args?.filename
+  return typeof p === "string" && p.startsWith("/") ? p : ""
+}
+
+/** How many readable files that directory holds. Unknown (unreadable, gone) counts as zero, and zero
+ *  never fires the verdict — an unmeasured quantity must not restructure somebody's turn. */
+function countReadableFiles(dir: string): number {
+  try {
+    return readdirSync(dir).filter((f) => /\.(md|txt|rst|org|tex|html?)$/i.test(f)).length
+  } catch {
+    return 0
+  }
+}
 import { existsSync } from "node:fs"
 
 const REPORT_TAG = "[fabula-corpus-report]"
@@ -82,15 +106,43 @@ try {
     console.error(`[fabula-corpus] reaped ${r.reaped.length} orphaned worker(s): ${r.reaped.map((x) => x.label).join(", ")}`)
 } catch { /* a safety net must never stop the plugin loading */ }
 
+/** What the turn has actually read, per session. Cleared when a new turn starts. */
+const traces = new Map<string, { state: ReturnType<typeof initTraversal>; task: string; fired: boolean }>()
+
 export const FabulaCorpus: Plugin = async (pluginInput) =>
   process.env.FABULA_CORPUS === "0" ? {} : gate("corpus", {
-    // Intercept ONLY on the first step of a turn, and ONLY for an explicit corpus-analysis ask.
+    // WATCH WHAT THE TURN IS DOING. This is the trigger that owes nothing to the wording of the ask: a
+    // turn reading file after file out of one directory, past what the measured window holds, with more
+    // files still unread, is covering a corpus — in any language, however it was phrased, including
+    // phrasings nobody has written yet. The word-matching detector below is kept only as a fast path
+    // that saves the reader those first few reads; it is no longer what guarantees coverage.
+    "tool.execute.after": async (input: any, output: any) => {
+      try {
+        const sid = input?.sessionID
+        const t = sid && traces.get(sid)
+        if (!t || t.fired) return
+        const file = readTargetOf(input?.tool, output?.args ?? input?.args)
+        if (!file) return
+        observeRead(t.state, { dir: dirname(file), path: file, chars: String(output?.output ?? "").length })
+        // The window is MEASURED from the runtime, never assumed; unmeasured decides nothing.
+        const windowTokens = await probeWindow().catch(() => 0)
+        const v = traversalVerdict(t.state, { windowTokens, filesInDir: countReadableFiles })
+        if (!v.offload) return
+        t.fired = true
+        console.error(`[fabula-corpus] traversal: ${v.reason}`)
+        spawnWorker({ ...pluginInput, directory: v.dir }, sid, t.task || "")
+      } catch {}
+    },
+    // Intercept ONLY on the first step of a turn.
     "session.userQuery.pre": async (input: any, output: any) => {
       try {
         if (input?.step !== 1) return // not the first step — let the normal turn run
         const text = typeof input?.query === "string" ? input.query : ""
-        if (!isCorpusAnalysisTask(text)) return // narrow trigger — ordinary tasks never intercepted
         if (text.startsWith(RECURSION_PREFIX)) return // never re-intercept our own re-inject
+        // Start watching this turn regardless of how it was phrased. Whether the fast path below fires or
+        // not, the traversal watcher above is now armed and will catch the same work by its shape.
+        if (input?.sessionID) traces.set(input.sessionID, { state: initTraversal(), task: text, fired: false })
+        if (!isCorpusAnalysisTask(text)) return // fast path only; the watcher is the guarantee
         // When the pipeline cannot own a task (corpus too small, no model reachable, nothing summarized)
         // it hands the ORIGINAL text back so the model answers it normally — and that text still matches
         // this detector. Without a record of the hand-back the next turn intercepts it again, falls back

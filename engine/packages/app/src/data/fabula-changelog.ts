@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.61.0"
+export const FABULA_VERSION = "0.62.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.62.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Работа с большим материалом больше не опознаётся по словам вопроса. Раньше нужно было попасть в формулировку — «прочти все главы»; спрошенное иначе шло обычным путём, по файлу за раз, пока нить не терялась. Теперь смотрится происходящее: файл за файлом из одной папки, прочитанного уже больше, чем помещается, и непрочитанное осталось. Это видно одинаково на любом языке и при любой формулировке, включая те, которых ещё никто не написал. Проверено запросом «ну и?» — под него шаблон не напишешь, а разбор собрался.",
+        en: "Working through a large body of material is no longer recognised by the words of the question. It used to require hitting a phrasing — read all the chapters; asked any other way, the work went file by file until the thread was lost. What is watched now is what is happening: file after file from one directory, more taken in than fits, and more still unread. That looks the same in any language and any phrasing, including ones nobody has written yet. Proven with the question \u201cну и?\u201d \u2014 nothing a pattern could catch, and the analysis was still produced.",
+      },
+    ],
+  },
   {
     version: "0.61.0",
     date: "2026-07-28",

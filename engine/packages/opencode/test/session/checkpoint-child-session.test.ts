@@ -475,6 +475,10 @@ describe("checkpoint writer child-session isolation", () => {
           tokens: { input: 10_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } } as never,
           promptOps: {} as never,
         })
+        // Firing a checkpoint must never block the user's turn, so the writer is started from a
+        // DETACHED fiber and has not necessarily run by the time fireCheckpoints returns. Settle
+        // before counting; otherwise "not started yet" reads the same as "correctly not spawned".
+        yield* Effect.sleep("100 millis")
         expect(spawnLog.count).toBe(0) // the prompt alone must not spawn a writer
 
         for (let attempt = 1; attempt <= 3; attempt++) {
@@ -485,6 +489,7 @@ describe("checkpoint writer child-session isolation", () => {
             tokens: oneOverFirstThreshold,
             promptOps: {} as never,
           })
+          yield* Effect.sleep("100 millis")
           expect(spawnLog.count).toBe(before + 1)
 
           // Wait for the prune-side watcher fiber (forkDetach) to actually
@@ -534,6 +539,7 @@ describe("checkpoint writer child-session isolation", () => {
           tokens: oneOverFirstThreshold,
           promptOps: {} as never,
         })
+        yield* Effect.sleep("100 millis")
         expect(spawnLog.count).toBe(beforeFourth)
       }),
       { config: { checkpoint: { fork: true } } },

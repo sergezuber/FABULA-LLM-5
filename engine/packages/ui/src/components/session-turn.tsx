@@ -238,8 +238,13 @@ export function SessionTurn(
   // Compaction markers arrive as a dedicated user message whose only part is type "compaction" —
   // UserMessageDisplay drops unknown part types, so render the part explicitly and skip the empty bubble.
   const compactionPart = createMemo(() => parts().find((part) => part.type === "compaction"))
+  // Synthetic text is the harness talking to the model (compaction follow-ups, forced-verify reminders).
+  // It must not produce a user bubble: the bubble renders with its text filtered out, so the reader saw
+  // an empty message they never sent (measured live 2026-07-28, the post-compaction continue note).
   const hasUserContent = createMemo(() =>
-    parts().some((part) => part.type === "text" || part.type === "file" || part.type === "agent"),
+    parts().some(
+      (part) => (part.type === "text" && !(part as { synthetic?: boolean }).synthetic) || part.type === "file" || part.type === "agent",
+    ),
   )
 
   const diffs = createMemo(() => {
@@ -283,7 +288,12 @@ export function SessionTurn(
       for (let i = 0; i < messages.length; i++) {
         const item = messages[i]
         if (!item) continue
-        if (item.role === "assistant" && item.parentID === msg.id) result.push(item as AssistantMessage)
+        if (item.role !== "assistant" || item.parentID !== msg.id) continue
+        // A compaction summary is the harness writing to itself — "## Goal / ## Instructions" is a
+        // rebuild brief, not an answer, and rendering it put that brief in the reader's chat (measured
+        // live 2026-07-28). The "Session compacted" divider already tells the reader what happened.
+        if ((item as AssistantMessage).summary) continue
+        result.push(item as AssistantMessage)
       }
       return result
     },
@@ -416,7 +426,7 @@ export function SessionTurn(
               <Show when={compactionPart()}>
                 {(part) => <Part part={part()} message={message()!} />}
               </Show>
-              <Show when={!compactionPart() || hasUserContent()}>
+              <Show when={hasUserContent()}>
                 <div data-slot="session-turn-message-content" aria-live="off">
                   <Message message={message()!} parts={parts()} actions={props.actions} />
                 </div>

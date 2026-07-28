@@ -188,11 +188,21 @@ export const FabulaContext: Plugin = async (input: any) => {
         if ((_i as any)?.compaction === true) return
         const messages = output?.messages
         if (!Array.isArray(messages) || !messages.length) return
-        // the last USER message is the current ask
-        const last = [...messages].reverse().find((m: any) => (m?.info?.role ?? m?.role) === "user")
+        // The current ask is the last user message THE USER WROTE. Synthetic user turns are the harness
+        // talking to the model — and the compaction follow-up is written in English, so anchoring on it
+        // pinned English onto a Russian conversation and the reader got an English answer (measured live
+        // 2026-07-28: «о чем книга?» answered in English). A turn whose text parts are all synthetic is
+        // skipped; the steer lands on the reader's own words.
+        const last = [...messages]
+          .reverse()
+          .find(
+            (m: any) =>
+              (m?.info?.role ?? m?.role) === "user" &&
+              (Array.isArray(m?.parts) ? m.parts : []).some((p: any) => typeof p?.text === "string" && !p?.synthetic),
+          )
         const parts = last?.parts
         if (!Array.isArray(parts)) return
-        const textPart = [...parts].reverse().find((p: any) => typeof p?.text === "string")
+        const textPart = [...parts].reverse().find((p: any) => typeof p?.text === "string" && !p?.synthetic)
         if (!textPart) return
         // LANGUAGE STEER (RULE #9/#14). Measured live: a Russian question came back with Chinese spliced
         // into the middle of its own sentences ("### Откуда, скорее всего, 这个故事:"). The content was right

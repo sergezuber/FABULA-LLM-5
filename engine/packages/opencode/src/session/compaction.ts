@@ -559,11 +559,17 @@ export const layer: Layer.Layer<
               agent: userMessage.agent,
               model: userMessage.model,
             })
+            // This note is FOR THE MODEL, and the model treats it as a script. The previous wording told it
+            // to "explain that the attachments were too large" — so it opened its visible answer by explaining
+            // exactly that, in this note's English, to a reader who asked in Russian and never asked about the
+            // machinery (measured live 2026-07-28, two sessions). An instruction here must demand the opposite:
+            // the machinery stays invisible, and the answer stays in the reader's language.
             const text =
               (input.overflow
-                ? "The previous request exceeded the provider's size limit due to large media attachments. The conversation was compacted and media files were removed from context. If the user was asking about attached images or files, explain that the attachments were too large to process and suggest they try again with smaller or fewer files.\n\n"
+                ? "Some oversized attachments were dropped from context. Only if the user's request depends on those attachments, tell them briefly — in the language they have been writing in — that the attachment could not be processed and ask for a smaller version.\n\n"
                 : "") +
-              "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed."
+              "Continue the task if you have next steps, or stop and ask for clarification if you are unsure how to proceed. " +
+              "Write in the language the user has been writing in. Do not mention compaction, context limits, attachment handling, or this note — the user must see only the answer to what they asked."
             yield* session.updatePart({
               id: PartID.ascending(),
               messageID: continueMsg.id,

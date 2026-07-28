@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.59.0"
+export const FABULA_VERSION = "0.60.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.60.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "«О чём книга? прочти полностью» теперь читается как просьба прочесть её целиком. Такая просьба идёт коротким путём — произведение разбирается частями, каждая укладывается в свой запрос, и до конца доходит вся книга. Раньше узнавалась лишь одна формулировка — «прочти все главы»; остальные шли обычным путём, по главе за раз, пока нить не терялась. Добавлена не фраза, а то, КАК об этом просят: «полностью», «целиком», «о чём», «перескажи», «критическое описание» — и то же по-английски.",
+        en: ""What is this book about? read it in full" now reads as a request to read the whole of it, and takes the short path: the work is covered in parts, each part fits its own request, and the end of the book is reached. Only one phrasing was recognised before — "read all the chapters" — and everything else went the ordinary way, a chapter at a time, until the thread was lost. What was added is not a sentence but the WAY people ask: in full, cover to cover, what is it about, summarise, a critical description.",
+      },
+    ],
+  },
   {
     version: "0.59.0",
     date: "2026-07-28",

@@ -223,8 +223,28 @@ export function cleanAnswer(text: string): string {
 
 // ── task detection (the narrow intercept trigger) ──────────────────────────
 
-const ANALYSIS_RU = /литературн|критик|реценз|разбор|анализ|прочти.*прочт|посмотри.*состо|посмотри.*из\s+чего|глубок.*анализ/
+const ANALYSIS_RU = /литературн|критич|критик|реценз|разбор|анализ|прочти.*прочт|посмотри.*состо|посмотри.*из\s+чего|глубок.*анализ/
 const ANALYSIS_EN = /literary|critique|review|analysis|analyz|read all|go through/
+
+// MEASURED 2026-07-28. The three branches below existed and the reader's own words matched none of them:
+// "о чем книга? прочти полностью и дай ответ" and "дай критическое развернутое описание книги" both went
+// through the ordinary path — a chapter at a time, context filling, compaction, the thread lost. Nothing
+// was broken; the vocabulary was simply partial. It knew "все главы" and not "полностью", knew "критика"
+// and not "критическое", knew "анализ" and not "о чём".
+//
+// Asking for a whole work is not one phrase. It is a WAY of asking, and it has a handful of ordinary
+// surface forms in each language. Naming them as vocabulary — rather than adding the sentence that failed
+// — is what makes the next unseen phrasing of the same request work too.
+
+/** Ways of saying "the whole of it". */
+const COMPLETE = /полность|целиком|от\s+начала\s+до\s+конца|\bentire\b|\bin\s+full\b|cover[\s-]to[\s-]cover|from\s+start\s+to\s+finish/
+
+/** Ways of asking what a work IS — the request that reads as casual and means "read it all". */
+const ABOUT_ASK = /о\s+ч[её]м|про\s+что|описани|опиши|перескажи|пересказ|содержани|what\s+is\b[^.?!]{0,24}\babout\b|summari[sz]e/
+
+/** A work, not a file. Narrow on purpose: "текст" is excluded here because "прочти полностью текст ошибки"
+ *  is an ordinary request about an error message, and the two branches these guard have no other bound. */
+const WORK = /книг[а-яё]*|роман[а-яё]*|повест[а-яё]*|глав[а-яё]*|\bbook\b|\bnovel\b|\bchapters?\b/
 
 /** A corpus-analysis task: an explicit "read all chapters / the whole book / analyze the novel" ask
  *  (EN+RU). Narrow on purpose — an ordinary coding task never triggers the intercept. Mirrors
@@ -242,6 +262,10 @@ export function isCorpusAnalysisTask(text: string): boolean {
   if (bulk) return true
   // analysis verb over an explicit corpus noun (RU + EN). Cyrillic-safe: no \b around RU stems.
   if ((ANALYSIS_RU.test(t) || ANALYSIS_EN.test(t)) && /(книг[а-яё]*|роман[а-яё]*|повест[а-яё]*|глав[а-яё]*|текст[а-яё]*|chapter|book|novel|corpus)/.test(t)) return true
+  // "the whole of this work" — the ask that names no chapters and means every one of them.
+  if (COMPLETE.test(t) && WORK.test(t)) return true
+  // "what is this work about" — casual on the surface, and answerable only by reading all of it.
+  if (ABOUT_ASK.test(t) && WORK.test(t)) return true
   return false
 }
 

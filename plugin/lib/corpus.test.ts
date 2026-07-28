@@ -362,3 +362,32 @@ describe("prefix-cache layout in the corpus MAP", () => {
     expect(p.indexOf("UNIQUECHAP")).toBeGreaterThan(MAP_PREAMBLE.length)
   })
 })
+
+// The reader's own words, measured 2026-07-28: none of these matched, so the whole-work path never fired
+// and the book was read a chapter at a time until the thread was lost. Plus the controls that keep the
+// widened vocabulary from reaching ordinary work.
+describe("isCorpusAnalysisTask — how people actually ask for a whole work", () => {
+  const yes = [
+    "о чем книга? прочти полностью и дай ответ",
+    "дай критическое развернутое описание книги",
+    "прочти книгу целиком и скажи о чём она",
+    "перескажи роман",
+    "про что эта повесть, опиши подробно",
+    "read the book in full and tell me what it is about",
+    "what is this novel about, cover to cover",
+    "summarise the book",
+  ]
+  for (const q of yes) test(`fires: ${q}`, () => expect(isCorpusAnalysisTask(q)).toBe(true))
+
+  const no = [
+    "прочти полностью текст ошибки и объясни",
+    "опиши что делает эта функция",
+    "полностью перепиши модуль авторизации",
+    "read the config file completely",
+    "describe what this endpoint returns",
+    "о чем этот коммит",
+    "summarise the diff",
+    "прочитай лог целиком",
+  ]
+  for (const q of no) test(`stays out: ${q}`, () => expect(isCorpusAnalysisTask(q)).toBe(false))
+})

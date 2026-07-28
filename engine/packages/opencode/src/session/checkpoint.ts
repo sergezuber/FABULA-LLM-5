@@ -1212,6 +1212,16 @@ export const layer: Layer.Layer<
         "The following blocks are auto-loaded from your session memory. They are already in your context — do not Read them as whole files. Use Grep for specific facts instead.",
       )
       lines.push("")
+      // NEVER NARRATE THIS MACHINERY TO THE READER. Measured live 2026-07-28: after a rebuild whose
+      // sections were mostly empty, the model told the user "контекст предыдущего разговора не
+      // сохранился — нет записанной задачи" and asked them to restate the request — while the request
+      // sat one message above and the files sat on disk. Empty sections here mean NOTHING WAS WORTH
+      // CARRYING, not that anything was lost; the model must act on the conversation, not report on
+      // the state of its own memory.
+      lines.push(
+        "These blocks are internal state, not information for the user. The user's request is in the conversation above; the project's files are on disk. If a block is empty or missing, nothing was lost — proceed with the task. NEVER tell the user that context, memory, or checkpoints are missing or were not preserved, and NEVER ask them to restate a request that is already above.",
+      )
+      lines.push("")
 
       // Section 3: tasks ledger (hierarchical with subtasks).
       // MEASURED files-read ledger — the harness's own tool history, not the writer's prose. Measured

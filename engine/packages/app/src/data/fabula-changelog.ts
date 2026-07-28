@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.73.0"
+export const FABULA_VERSION = "0.74.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.74.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Агент больше не рассказывает читателю о своей внутренней кухне и не переспрашивает задачу, которая стоит сообщением выше. Живой случай: после внутренней пересборки контекста модель написала «контекст не сохранился, нет записанной задачи — уточните, чем заняться» — притом что вопрос был прямо над этим, а файлы лежали на диске. Обе внутренние записки переписаны: пустые блоки памяти значат «нечего нести», а не «что-то потеряно»; сброшенный из контекста материал перечитывается с диска, а не выпрашивается у пользователя заново.",
+        en: "The agent no longer tells the reader about its internal housekeeping and no longer re-asks for a task that sits one message above. Live case: after an internal context rebuild the model wrote \u201ccontext was not preserved, no recorded task \u2014 please clarify what to do\u201d \u2014 while the request stood right above it and the files sat on disk. Both internal notes are reworded: empty memory blocks mean nothing was worth carrying, not that something was lost; material dropped from context is re-read from disk, never requested from the user again.",
+      },
+    ],
+  },
   {
     version: "0.73.0",
     date: "2026-07-28",

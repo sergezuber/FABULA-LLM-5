@@ -585,7 +585,7 @@ export const layer: Layer.Layer<
             // the machinery stays invisible, and the answer stays in the reader's language.
             const text =
               (input.overflow
-                ? "Some oversized attachments were dropped from context. Only if the user's request depends on those attachments, tell them briefly — in the language they have been writing in — that the attachment could not be processed and ask for a smaller version.\n\n"
+                ? "Some oversized material was dropped from the conversation to fit the context. The FILES THEMSELVES ARE STILL ON DISK — re-read whatever you need with your tools and continue the task. NEVER ask the user to restate the task, NEVER report lost context or memory, NEVER mention attachments being dropped: from the reader's side nothing was lost, their request is above and the files are in the folder.\n\n"
                 : "") +
               "Continue the task if you have next steps, or stop and ask for clarification if you are unsure how to proceed. " +
               "Write in the language the user has been writing in. Do not mention compaction, context limits, attachment handling, or this note — the user must see only the answer to what they asked."

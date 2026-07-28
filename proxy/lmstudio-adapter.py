@@ -73,6 +73,7 @@ _load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir,
 
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from toolcall_text import parse_text_tool_calls, as_openai_tool_calls
 from adapter_util import (
     stable_prefix, shared_prefix_len, classify_overflow, clamp_max_tokens, drain_with_idle_split,
     update_prefix_and_check, compare_and_store, dump_last_request, estimate_tokens,
@@ -906,6 +907,23 @@ class Handler(BaseHTTPRequestHandler):
             if content.strip() == "" and reasoning.strip().startswith("{"):
                 msg["content"] = reasoning
                 data = json.dumps(obj).encode()
+            # A TOOL CALL WRITTEN AS PROSE IS STILL A TOOL CALL. Measured 2026-07-28: a turn's entire
+            # answer was the markup of two calls the model meant to make. The runtime's parser did not
+            # know that dialect, so it came through as ordinary content; the engine only ever reads
+            # `tool_calls`, so it saw a finished turn with a little text in it. Nobody was at fault and
+            # the reader got syntax instead of an answer. Converted here because this is where every
+            # model in the socket passes, and a dialect one runtime parses and another does not is
+            # exactly the difference the harness exists to absorb. Conservative by construction: only
+            # content that is NOTHING BUT complete calls is touched (see toolcall_text.py).
+            if not msg.get("tool_calls"):
+                _txt_calls = parse_text_tool_calls(msg.get("content") or "")
+                if _txt_calls:
+                    msg["tool_calls"] = as_openai_tool_calls(_txt_calls)
+                    msg["content"] = None
+                    obj["choices"][0]["finish_reason"] = "tool_calls"
+                    data = json.dumps(obj).encode()
+                    sys.stderr.write("[fabula-adapter] TEXT-TOOL-CALL recovered %d call(s) the model wrote "
+                                     "as prose\n" % len(_txt_calls))
             # overflow classification (visibility): any model in the socket can truncate the prompt SILENTLY.
             _usg = obj.get("usage") or {}
             _reason = classify_overflow(

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.53.0"
+export const FABULA_VERSION = "0.54.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.54.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Служебная разметка больше не приходит вместо ответа. Иногда модель не вызывает инструмент, а пишет его вызов текстом — в том виде, в каком принято у неё внутри. Сервер модели передаёт это как обычный текст, потому что не узнаёт такую запись, а FABULA видит законченный ход с парой строк — и вы получаете угловые скобки вместо ответа. Теперь такая запись распознаётся и превращается в настоящий вызов. Осторожно: превращается, только если весь ответ состоит из таких вызовов и ни одного слова кроме — сообщение, где эта разметка просто упомянута, остаётся текстом.",
+        en: "Markup no longer arrives instead of an answer. A model sometimes does not call a tool but writes the call out as text, in the notation its own template uses. The model server passes that through as ordinary text because it does not recognise the dialect, and FABULA sees a finished turn with a couple of lines in it — so you get angle brackets instead of a reply. Such notation is now recognised and turned into a real call. Carefully: only when the whole answer consists of those calls and nothing else — a message that merely mentions the markup stays text.",
+      },
+    ],
+  },
   {
     version: "0.53.0",
     date: "2026-07-28",

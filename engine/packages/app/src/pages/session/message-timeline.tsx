@@ -280,6 +280,10 @@ export function MessageTimeline(props: {
   // none), so that phase is worded without numbers rather than shown as "0 of 0".
   const backgroundLabel = () => {
     const b = background()
+    // The work finished and its answer is in the conversation. Suppress the divider entirely rather than
+    // letting it fall back to "Interrupted" — that word above a delivered report is false, and it used to
+    // reappear the moment the progress label went away.
+    if (b.state === "done") return ""
     if (!b.active) return undefined
     // TODO(i18n): these belong in the locale files like every other user-facing string; they are inline
     // English for now so a tracked source file carries no hardcoded non-default language.

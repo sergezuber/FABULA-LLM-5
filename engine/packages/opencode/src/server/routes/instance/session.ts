@@ -521,8 +521,15 @@ export const SessionRoutes = lazy(() =>
               for (const f of files) {
                 if (!f.endsWith(".heartbeat.json") || !f.startsWith(key)) continue
                 const raw = JSON.parse(await fs.readFile(path.join(dir, f), "utf8"))
-                if (typeof raw?.ts !== "number" || Date.now() - raw.ts > stale) continue
-                if (raw?.state === "done") continue // finished; the answer has already been delivered
+                if (typeof raw?.ts !== "number") continue
+                // FINISHED IS REPORTED, NOT DROPPED — and it is permanent. The turn was cancelled by the
+                // harness so the work could run out of band; when that work succeeded, the answer is
+                // sitting in the conversation, and the word "Interrupted" above a delivered report is
+                // simply false. Dropping this state is what left the reader looking at it.
+                // Checked BEFORE staleness deliberately: a run that finished stays finished, so a reader
+                // coming back an hour later must not be told the turn broke.
+                if (raw?.state === "done") return { active: false, state: "done" }
+                if (Date.now() - raw.ts > stale) continue // no heartbeat lately: the producer is gone
                 return { active: true, state: String(raw.state ?? ""), done: Number(raw.done ?? 0), total: Number(raw.total ?? 0), unit: raw.unit ? String(raw.unit) : undefined }
               }
             } catch {}

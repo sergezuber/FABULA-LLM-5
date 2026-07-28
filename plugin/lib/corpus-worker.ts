@@ -286,15 +286,11 @@ async function main(): Promise<number> {
     if (!report.trim()) report = summaries.map((s) => s.text).join("\n\n---\n\n")
   } catch { report = summaries.map((s) => s.text).join("\n\n---\n\n") }
   clearAccumulator(key)
-  // Provenance line, in the language the task was written in — a hardcoded language would prepend a
-  // foreign sentence to every report for everyone else. Cyrillic in the ask is the same signal the
-  // detector already keys on, so this stays a locale matcher rather than a hardcoded default.
-  const n = disc.files.length
-  const b = batches.length
-  const header = /[Ѐ-ӿ]/.test(taskText)
-    ? `Анализ собран map-reduce по ${n} файлам корпуса (${b} батч${b === 1 ? "" : "ей"}) и синтезирован из их резюме.\n\n`
-    : `Built by map-reduce over ${n} corpus file${n === 1 ? "" : "s"} (${b} batch${b === 1 ? "" : "es"}), synthesized from their summaries.\n\n`
-  await deliverAnswer(header + report)
+  // NO PROVENANCE LINE. It used to open every report with how the answer had been assembled — the file
+  // count, the batch count, the words "map-reduce". That is bookkeeping about the machine, printed in the
+  // one place reserved for the answer, and it is the first thing the reader's eye lands on. How the work
+  // was divided is a fact for the log, where a maintainer looks for it; it is not part of what was asked.
+  await deliverAnswer(report)
   hb("done", { reportChars: report.length })
   return 0
 }

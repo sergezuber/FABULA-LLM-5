@@ -298,7 +298,16 @@ export function SessionTurn(
     // out of band and is still doing it. Those look identical here, and the bare word reads as failure —
     // the reader sees "Interrupted" and empty space for minutes while 28 chapters are being analysed.
     // When the caller knows what is really going on, it says so instead.
-    if (interrupted()) return props.interruptedLabel?.() || i18n.t("ui.message.interrupted")
+    //
+    // Three answers, not two. `undefined` = the caller has no opinion, so the plain word stands. A string
+    // = say that instead. An EMPTY string = say NOTHING: the caller knows this turn was not interrupted in
+    // any sense the reader cares about — the harness moved the work elsewhere and it arrived — and a
+    // divider claiming otherwise sits directly above the answer that disproves it.
+    if (interrupted()) {
+      const label = props.interruptedLabel?.()
+      if (label === "") return ""
+      return label || i18n.t("ui.message.interrupted")
+    }
     return ""
   })
   const error = createMemo(

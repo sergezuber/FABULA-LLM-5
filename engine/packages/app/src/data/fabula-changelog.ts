@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.60.0"
+export const FABULA_VERSION = "0.61.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.61.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "«Interrupted» больше не висит над готовым ответом. Когда обвязка сама снимает ход, чтобы доделать работу в стороне, и работа доходит до конца, ход ничем не прерван — ответ лежит тут же, строкой ниже. Слово оставалось потому, что завершённое состояние выбрасывалось, и подпись о ходе работы просто исчезала; хуже того, через полторы минуты оно возвращалось навсегда. Теперь завершение — это факт, и он не стирается.",
+        en: "\u201cInterrupted\u201d no longer sits above a finished answer. When the harness takes a turn down so the work can complete elsewhere, and that work arrives, nothing was interrupted \u2014 the answer is one line below. The word survived because the finished state was discarded and the progress label simply vanished; worse, after ninety seconds it came back for good. Finishing is now a fact that is kept.",
+      },
+      {
+        ru: "Отчёт по книге начинается с самого разбора. Раньше первой строкой шло, из скольких файлов и за сколько заходов он собран — учёт машины на том самом месте, где ждут ответ. Как работа была поделена, остаётся в журнале.",
+        en: "A book report now opens with the analysis itself. It used to begin with how many files and passes it was assembled from \u2014 the machine\u2019s own bookkeeping in the one place reserved for the answer. How the work was divided stays in the log.",
+      },
+    ],
+  },
   {
     version: "0.60.0",
     date: "2026-07-28",

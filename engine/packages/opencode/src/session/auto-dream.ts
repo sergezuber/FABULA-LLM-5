@@ -101,7 +101,13 @@ function shouldAutoRun(input: {
 }
 
 export function shouldAutoDream(cfg: Config.Info) {
-  const enabled = cfg.dream?.auto !== false
+  // OPT-IN, default OFF (owner's rule, 2026-07-28, and it is universal — for every install, not one
+  // machine). These passes run the model on the machine's single inference slot the moment a turn goes
+  // quiet: the reader watches a spinner over an answer that already arrived, and their next question
+  // queues behind housekeeping they never asked for. The value (skills compound, memory stays clean) is
+  // real and stays reachable — /dream and /distill by hand, or this switch in Settings — but nobody's
+  // machine self-occupies by default.
+  const enabled = cfg.dream?.auto === true
   if (!enabled) return Effect.succeed(false)
   const now = Date.now()
   if (now - lastDreamSpawnTime < MIN_SPAWN_GAP_MS) return Effect.succeed(false)
@@ -111,7 +117,8 @@ export function shouldAutoDream(cfg: Config.Info) {
 }
 
 export function shouldAutoDistill(cfg: Config.Info) {
-  const enabled = cfg.distill?.auto !== false
+  // OPT-IN, default OFF — same rule and reason as shouldAutoDream above.
+  const enabled = cfg.distill?.auto === true
   if (!enabled) return Effect.succeed(false)
   const now = Date.now()
   if (now - lastDistillSpawnTime < MIN_SPAWN_GAP_MS) return Effect.succeed(false)

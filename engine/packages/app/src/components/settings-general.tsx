@@ -94,6 +94,26 @@ export const SettingsGeneral: Component = () => {
   })
   const theme = useTheme()
   const language = useLanguage()
+  // Self-improvement switches (Auto Dream / Auto Distill). OPT-IN, engine default OFF — see the
+  // /global/fabula/selfimprove route. The switch writes the launch config; it applies from the next
+  // engine start, which the description says out loud.
+  const [selfImprove, { mutate: setSelfImprove }] = createResource(
+    async () => {
+      const res = await fetch("/global/fabula/selfimprove").catch(() => undefined)
+      if (!res?.ok) return { dream: false, distill: false }
+      return (await res.json()) as { dream: boolean; distill: boolean }
+    },
+    { initialValue: { dream: false, distill: false } },
+  )
+  const toggleSelfImprove = (key: "dream" | "distill") => (checked: boolean) => {
+    setSelfImprove((prev) => ({ ...(prev ?? { dream: false, distill: false }), [key]: checked }))
+    void fetch("/global/fabula/selfimprove", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ [key]: checked }),
+    }).catch(() => {})
+  }
+
   const permission = usePermission()
   const platform = usePlatform()
   const params = useParams()
@@ -266,6 +286,24 @@ export const SettingsGeneral: Component = () => {
         >
           <div data-action="settings-auto-accept-permissions">
             <Switch checked={accepting()} disabled={!dir()} onChange={toggleAccept} />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.autoDream.title")}
+          description={language.t("settings.general.row.autoDream.description")}
+        >
+          <div data-action="settings-auto-dream">
+            <Switch checked={selfImprove.latest.dream} onChange={toggleSelfImprove("dream")} />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.autoDistill.title")}
+          description={language.t("settings.general.row.autoDistill.description")}
+        >
+          <div data-action="settings-auto-distill">
+            <Switch checked={selfImprove.latest.distill} onChange={toggleSelfImprove("distill")} />
           </div>
         </SettingsRow>
 

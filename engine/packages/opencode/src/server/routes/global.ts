@@ -729,6 +729,57 @@ export const GlobalRoutes = lazy(() =>
         return c.json({ ok: true })
       },
     )
+    // FABULA: the self-improvement passes (Auto Dream / Auto Distill) — Settings > General. OPT-IN,
+    // engine default OFF (owner's rule, 2026-07-28, universal): they run the model on the single
+    // inference slot the moment a turn goes quiet, which reads as "still thinking" over a delivered
+    // answer and queues the user's next question behind housekeeping. The switch writes the launch
+    // config; the engine caches its config for the life of the process, so the change applies from
+    // the next engine start — the same contract as every other launch-config switch in Settings.
+    .get(
+      "/fabula/selfimprove",
+      describeRoute({
+        summary: "Get the auto self-improvement switches",
+        operationId: "fabula.selfimprove.get",
+        responses: { 200: { description: "Switches" } },
+      }),
+      async (c) => {
+        const cfgPath = process.env["MIMOCODE_CONFIG"]
+        const cfg = cfgPath
+          ? ((await Bun.file(cfgPath)
+              .json()
+              .catch(() => ({}))) as Record<string, Record<string, unknown> | undefined>)
+          : {}
+        return c.json({
+          dream: cfg["dream"]?.["auto"] === true,
+          distill: cfg["distill"]?.["auto"] === true,
+        })
+      },
+    )
+    .post(
+      "/fabula/selfimprove",
+      describeRoute({
+        summary: "Set the auto self-improvement switches",
+        operationId: "fabula.selfimprove.set",
+        responses: { 200: { description: "Result" } },
+      }),
+      validator("json", z.object({ dream: z.boolean().optional(), distill: z.boolean().optional() })),
+      async (c) => {
+        const body = c.req.valid("json")
+        const cfgPath = process.env["MIMOCODE_CONFIG"]
+        if (!cfgPath) return c.json({ ok: false, error: "no MIMOCODE_CONFIG" }, 400)
+        const cfg = (await Bun.file(cfgPath)
+          .json()
+          .catch(() => undefined)) as Record<string, unknown> | undefined
+        if (!cfg) return c.json({ ok: false, error: "config unreadable" }, 500)
+        const next = { ...cfg }
+        if (typeof body.dream === "boolean")
+          next["dream"] = { ...((cfg["dream"] as Record<string, unknown>) ?? {}), auto: body.dream }
+        if (typeof body.distill === "boolean")
+          next["distill"] = { ...((cfg["distill"] as Record<string, unknown>) ?? {}), auto: body.distill }
+        await Bun.write(cfgPath, JSON.stringify(next, null, 2))
+        return c.json({ ok: true })
+      },
+    )
     // FABULA: default model of the launch config (fabula.config.json). Reading/writing the same
     // file the server was started with; new sessions pick the new default up.
     .get(

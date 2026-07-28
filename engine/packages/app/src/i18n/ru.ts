@@ -745,6 +745,10 @@ export const dict = {
     "Выберите, отправлять ли уточняющие вопросы сразу или помещать их в очередь",
   "settings.general.row.followup.option.queue": "Очередь",
   "settings.general.row.followup.option.steer": "Направлять",
+  "settings.general.row.autoDream.title": 'Авто-сон (уборка памяти)',
+  "settings.general.row.autoDream.description": 'В тихий момент агент может прогнать модель по своим заметкам — слить дубли и убрать устаревшее. По умолчанию выключено: это занимает модель сразу после ответа. Применяется со следующего запуска.',
+  "settings.general.row.autoDistill.title": 'Авто-дистилляция (навыки из сделанного)',
+  "settings.general.row.autoDistill.description": 'В тихий момент агент может выжать из завершённых сессий переиспользуемые навыки. По умолчанию выключено: это занимает модель сразу после ответа. Применяется со следующего запуска.',
   "settings.general.row.reasoningSummaries.title": "Показывать сводки рассуждений",
   "settings.general.row.reasoningSummaries.description": "Отображать сводки рассуждений модели в ленте",
 

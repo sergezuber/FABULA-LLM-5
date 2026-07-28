@@ -114,36 +114,54 @@ export function traversalVerdict(st: TraversalState, o: VerdictOpts): Verdict {
   const cpt = Math.max(1, o.charsPerToken ?? CHARS_PER_TOKEN)
   const budget = Math.floor(window * share)
 
-  let best: Verdict = { offload: false, reason: "no directory shows a traversal" }
+  // THE WINDOW IS SHARED, SO THE OVERFLOW IS COUNTED ACROSS THE WHOLE TURN. Measuring each directory
+  // against the budget separately asks the wrong question: nothing is running out of room per-folder,
+  // the turn is running out of room. Counting per-directory also meant the verdict landed on whichever
+  // folder happened to cross first — measured live 2026-07-28, that was a screenshots subfolder the
+  // agent had wandered into, while 52 chapters sat unread in the folder above it.
+  let material = 0
+  for (const t of st.byDir.values()) material += t.chars
+  const materialTokens = Math.ceil(material / cpt)
+  if (materialTokens <= budget) {
+    return { offload: false, reason: `~${materialTokens} tokens read, within a ${budget}-token budget`, materialTokens, budgetTokens: budget }
+  }
+
+  // THE TARGET IS THE BIGGEST JOB, not the first one to trip the counter. Where the turn ran out of room
+  // is arithmetic about the machine; WHICH body of material is worth covering differently is a question
+  // about the work, and the honest answer is the largest one still unfinished. Ranking by bytes already
+  // read would answer "whichever folder held the fattest files" — a folder of images beats a book on
+  // that measure and is almost never the thing being studied.
+  let target: { dir: string; read: number; remaining: number; scope: number } | undefined
+  let blocked: Verdict | undefined
   for (const [dir, t] of st.byDir) {
     const read = t.paths.size
-    const tokens = Math.ceil(t.chars / cpt)
     if (read < minFiles) continue
-    if (tokens <= budget) continue
     const total = o.filesInDir?.(dir)
     // Unknown total is treated as "no more to come" — the conservative reading. Firing on a guess would
     // mean restructuring a turn without knowing whether anything is left to restructure it for.
     const remaining = typeof total === "number" && total > read ? total - read : 0
     if (remaining <= 0) {
-      best = {
+      blocked ??= {
         offload: false,
-        reason: `${dir}: ${read} file(s) read, ~${tokens} tokens, but nothing left to read`,
+        reason: `${dir}: ${read} file(s) read, ~${materialTokens} tokens, but nothing left to read`,
         filesRead: read,
         filesRemaining: 0,
-        materialTokens: tokens,
+        materialTokens,
         budgetTokens: budget,
       }
       continue
     }
-    return {
-      offload: true,
-      dir,
-      reason: `${dir}: ${read} file(s) read (~${tokens} tokens of a ${budget}-token budget) and ${remaining} still unread — appending the rest would not fit`,
-      filesRead: read,
-      filesRemaining: remaining,
-      materialTokens: tokens,
-      budgetTokens: budget,
-    }
+    const scope = read + remaining
+    if (!target || scope > target.scope) target = { dir, read, remaining, scope }
   }
-  return best
+  if (!target) return blocked ?? { offload: false, reason: "no directory shows a traversal" }
+  return {
+    offload: true,
+    dir: target.dir,
+    reason: `${target.dir}: ${target.read} of ${target.scope} file(s) read, ~${materialTokens} tokens taken in against a ${budget}-token budget, ${target.remaining} still unread — appending the rest would not fit`,
+    filesRead: target.read,
+    filesRemaining: target.remaining,
+    materialTokens,
+    budgetTokens: budget,
+  }
 }

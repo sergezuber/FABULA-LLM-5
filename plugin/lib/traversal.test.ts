@@ -88,3 +88,44 @@ describe("traversalVerdict — the situation, measured, with no words anywhere",
     expect(st.byDir.size).toBe(0)
   })
 })
+
+// The live defect, 2026-07-28: the verdict landed on a screenshots subfolder the agent had wandered into
+// — 5 files, fat ones, first past the counter — while 52 chapters sat unread in the folder above it. The
+// window is shared, so the overflow belongs to the turn; the target belongs to the biggest job left.
+describe("traversalVerdict — which body of material, when several are in play", () => {
+  const st = () => {
+    const s = initTraversal()
+    // The wrong answer FIRST, deliberately. Directories are held in insertion order, so seeding the
+    // decoy ahead of the book is what makes these assertions bite: a version that simply took the first
+    // candidate — or the fattest — would pass if the book happened to be seen first, and the whole point
+    // is that neither of those rules is what decides.
+    // A handful of very fat files out of a small folder: most bytes, small scope.
+    for (let i = 0; i < 5; i++) observeRead(s, { dir: "/book/shots", path: `/book/shots/s${i}.md`, chars: 50_000 })
+    // A few chapters out of a large book: modest bytes, large scope.
+    for (let i = 0; i < 5; i++) observeRead(s, { dir: "/book", path: `/book/ch${i}.md`, chars: 8_000 })
+    return s
+  }
+  const sizes = (d: string) => (d === "/book" ? 52 : 10)
+
+  test("targets the largest unfinished body, not the folder with the fattest files", () => {
+    const v = traversalVerdict(st(), { windowTokens: 100_000, filesInDir: sizes })
+    expect(v.offload).toBe(true)
+    expect(v.dir).toBe("/book")
+    expect(v.filesRemaining).toBe(47)
+  })
+
+  test("the overflow is counted across the whole turn, not per folder", () => {
+    // Neither folder alone passes a 35% budget of this window; together they do.
+    const s = initTraversal()
+    for (let i = 0; i < 5; i++) observeRead(s, { dir: "/a", path: `/a/${i}`, chars: 30_000 })
+    for (let i = 0; i < 5; i++) observeRead(s, { dir: "/b", path: `/b/${i}`, chars: 30_000 })
+    const v = traversalVerdict(s, { windowTokens: 200_000, filesInDir: () => 60 })
+    expect(v.offload).toBe(true)
+    expect(v.materialTokens).toBe(120_000)
+  })
+
+  test("a folder with nothing left is never the target even when it dominates the bytes", () => {
+    const v = traversalVerdict(st(), { windowTokens: 100_000, filesInDir: (d) => (d === "/book" ? 52 : 5) })
+    expect(v.dir).toBe("/book")
+  })
+})

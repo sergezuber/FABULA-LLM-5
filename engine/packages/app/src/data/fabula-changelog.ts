@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.62.0"
+export const FABULA_VERSION = "0.63.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.63.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Когда материала набралось больше, чем помещается, разбирается самый крупный незакрытый массив — а не та папка, где счётчик первым перевалил. На живом прогоне это была подпапка со снимками экрана, куда агент заглянул мимоходом, пока рядом лежали непрочитанные главы. Переполнение теперь считается по всему ходу, потому что окно у него одно на всё; а цель выбирается по объёму работы, а не по весу файлов — папка картинок тяжелее книги почти всегда и почти никогда не является тем, что изучают.",
+        en: "When more material has come in than fits, the largest unfinished body is the one taken apart \u2014 not whichever folder tripped the counter first. On a live run that was a screenshots subfolder the agent had glanced into, while unread chapters sat beside it. Overflow is now counted across the whole turn, because the turn has one window for all of it; the target is chosen by how much work is left rather than by how heavy the files are, since a folder of images outweighs a book almost always and is almost never the thing being studied.",
+      },
+    ],
+  },
   {
     version: "0.62.0",
     date: "2026-07-28",

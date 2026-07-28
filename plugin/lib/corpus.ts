@@ -19,6 +19,7 @@
 import { readFileSync, readdirSync, statSync, writeFileSync, existsSync, mkdirSync, renameSync, unlinkSync } from "node:fs"
 import { join, basename, isAbsolute, dirname } from "node:path"
 import { tmpdir } from "node:os"
+import { sliceBudgetChars } from "./handle"
 
 // ── corpus discovery ────────────────────────────────────────────────────────
 
@@ -110,23 +111,58 @@ export function synthTokensFor(batchCount: number, env: Record<string, string | 
   return Math.min(ceiling, floor + perBatch * n)
 }
 
-/** A role preamble derived deterministically from the task text. A "literary analysis / critique /
- *  разбор / рецензия" ask yields a literary-critic role; otherwise a generic analyst. Never blocks. */
-export function rolePreamble(taskText: string): string {
-  const t = (taskText || "").toLowerCase()
-  const critic =
-    /литератур|критик|реценз|разбор|анализ.*книг|анализ.*роман|literary|critique|review.*book|review.*novel/.test(t)
-  if (critic) {
-    return [
-      "Ты профессиональный литературный критик. Дай глубокий, профессиональный анализ текста ниже: стиль,",
-      "структура, персонажи, темы, ритм, язык, сильные и слабые стороны. Будь конкретен и опирайся на",
-      "сам текст (цитируй ключевые места). Это анализ, а не пересказ.",
-    ].join(" ")
+/**
+ * How much material one map call carries, and how much of a single file it may carry. PURE.
+ *
+ * BOTH USED TO BE FLAT NUMBERS — 60 000 characters per batch and 8 000 per file — and the second was
+ * quietly the more serious: a chapter of a real book runs to tens of thousands of characters, so a
+ * request to read the whole of it read a fifth of each chapter and inferred the rest. That is a
+ * hardcoded volume wearing a cap's clothing, and it truncates in exactly the case the pipeline exists
+ * for. The RLM orchestrator addendum says the opposite of what a small constant does: pack a sub-call
+ * prompt CLOSE to its capacity, because fat prompts in small batches beat mega-batches of tiny prompts.
+ *
+ * So both are DERIVED from the window the socket reports (sliceBudgetChars), and a file is cut only when
+ * it alone will not fit one prompt — never on principle. The env knobs still win for anyone with a reason.
+ */
+export function corpusBudgets(
+  windowTokens: number,
+  env: Record<string, string | undefined> = {},
+): { batchChars: number; chapterCap: number } {
+  const derived = sliceBudgetChars(windowTokens, env as NodeJS.ProcessEnv)
+  const envBatch = parseInt(env.FABULA_CORPUS_BATCH_CHARS || "", 10)
+  const envCap = parseInt(env.FABULA_CORPUS_CHAPTER_CAP || "", 10)
+  return {
+    batchChars: Number.isFinite(envBatch) && envBatch > 0 ? Math.max(2048, envBatch) : derived,
+    chapterCap: Number.isFinite(envCap) && envCap > 0 ? Math.max(1024, envCap) : derived,
   }
-  return [
-    "Ты аналитик. Дай глубокий профессиональный анализ текста ниже: ключевые тезисы, структура, выводы,",
-    "сильные и слабые места. Будь конкретен и опирайся на сам текст.",
-  ].join(" ")
+}
+
+/**
+ * The analyst framing every call in this pipeline shares.
+ *
+ * IT DOES NOT WORK OUT WHAT KIND OF ANALYSIS WAS ASKED FOR. It used to: a regex over the task text chose
+ * between a "literary critic" and a "generic analyst" persona, which is the same word-matching that armed
+ * this pipeline in the first place, and it fails the same way — silently, on the first phrasing nobody
+ * anticipated, by handing a book to an analyst who was told nothing about books. The reader's own words
+ * are carried verbatim into every prompt instead (see ASK_LABEL). They say what they want better than any
+ * classification of them could, and they cannot be wrong about themselves.
+ */
+export const ANALYST_PREAMBLE = [
+  "Ты профессиональный аналитик текста. Дай глубокий, конкретный разбор материала ниже —",
+  "не пересказ: содержание, структура, темы, язык, персонажи и голоса, если они есть,",
+  "сильные и слабые стороны. Опирайся на сам текст и цитируй ключевые места.",
+  "Отвечай на языке запроса читателя.",
+].join(" ")
+
+/** How the reader's own ask is introduced to a sub-call. The words are the reader's; the label is ours. */
+export const ASK_LABEL = "ЗАПРОС ЧИТАТЕЛЯ (выполняй именно его)"
+
+/** The reader's ask, bounded. A prompt is not the place for an unbounded paste, and the ask is carried
+ *  into every sub-call — so a runaway one would be paid for once per batch. */
+export function askLine(taskText: string, cap = 2000): string {
+  const t = String(taskText ?? "").trim()
+  if (!t) return ""
+  return `${ASK_LABEL}: ${t.length > cap ? t.slice(0, cap) + "…" : t}`
 }
 
 /** The isolated per-batch call: role + STOP + the batch's chapter text (each framed as UNTRUSTED data,
@@ -145,7 +181,7 @@ export const MAP_PREAMBLE = [
 ].join("\n")
 
 export function chapterSummaryPrompt(batchFiles: CorpusFile[], taskText: string, cap: number = DEFAULT_CHAPTER_CAP): string {
-  const role = rolePreamble(taskText)
+  const ask = askLine(taskText)
   const body = batchFiles
     .map((f) => {
       let text = ""
@@ -155,12 +191,16 @@ export function chapterSummaryPrompt(batchFiles: CorpusFile[], taskText: string,
     })
     .join("\n\n")
   return [
-    // ORDER IS THE MECHANISM: constant block, then the run-constant role, then the batch that varies.
+    // ORDER IS THE MECHANISM: constant block, then the run-constant role and ask, then the batch that
+    // varies. The reader's ask is run-constant too — the same bytes in every batch of one run.
     MAP_PREAMBLE,
     "",
-    role,
+    ANALYST_PREAMBLE,
     "",
-    "ЗАДАЧА: проанализируй главы ниже и дай КОМПАКТНОЕ аналитическое резюме (выводы, а не пересказ).",
+    ask,
+    "",
+    "ЗАДАЧА: проанализируй главы ниже и дай КОМПАКТНОЕ аналитическое резюме (выводы, а не пересказ),",
+    "отвечая ровно на запрос читателя выше.",
     "Это один шаг map-reduce: ты видишь ТОЛЬКО эти главы — синтез финального отчёта сделает отдельный шаг.",
     // Same delimiter contract as the reduce step. Without it the map step has no boundary between the
     // model's visible reasoning and its answer, and models that narrate their thinking as PLAIN TEXT
@@ -179,14 +219,13 @@ export function chapterSummaryPrompt(batchFiles: CorpusFile[], taskText: string,
 /** The final synthesize call: critic role + the task + every per-batch summary (capped). Produces the
  *  full report from the summaries (small context), never from raw corpus. */
 export function synthesizeReportPrompt(summaries: { name: string; text: string }[], taskText: string, cap: number = 4000): string {
-  const role = rolePreamble(taskText)
   const body = summaries
     .map((s) => `=== резюме по ${s.name} ===\n${(s.text || "").slice(0, cap)}`)
     .join("\n\n")
   return [
-    role,
+    ANALYST_PREAMBLE,
     "",
-    `ИСХОДНАЯ ЗАДАЧА: ${taskText}`,
+    askLine(taskText, 4000),
     "",
     "Ниже — аналитические резюме по группам глав книги (каждое сделано изолированным шагом).",
     "Синтезируй из них ИТОГОВЫЙ профессиональный отчёт-критику по книге целиком: цельный разбор,",
@@ -221,53 +260,18 @@ export function cleanAnswer(text: string): string {
   return t.replace(/<\/?(?:think|final)>/gi, "").trim()
 }
 
-// ── task detection (the narrow intercept trigger) ──────────────────────────
-
-const ANALYSIS_RU = /литературн|критич|критик|реценз|разбор|анализ|прочти.*прочт|посмотри.*состо|посмотри.*из\s+чего|глубок.*анализ/
-const ANALYSIS_EN = /literary|critique|review|analysis|analyz|read all|go through/
-
-// MEASURED 2026-07-28. The three branches below existed and the reader's own words matched none of them:
-// "о чем книга? прочти полностью и дай ответ" and "дай критическое развернутое описание книги" both went
-// through the ordinary path — a chapter at a time, context filling, compaction, the thread lost. Nothing
-// was broken; the vocabulary was simply partial. It knew "все главы" and not "полностью", knew "критика"
-// and not "критическое", knew "анализ" and not "о чём".
+// ── no task detection lives here any more ──────────────────────────────────
 //
-// Asking for a whole work is not one phrase. It is a WAY of asking, and it has a handful of ordinary
-// surface forms in each language. Naming them as vocabulary — rather than adding the sentence that failed
-// — is what makes the next unseen phrasing of the same request work too.
-
-/** Ways of saying "the whole of it". */
-const COMPLETE = /полность|целиком|от\s+начала\s+до\s+конца|\bentire\b|\bin\s+full\b|cover[\s-]to[\s-]cover|from\s+start\s+to\s+finish/
-
-/** Ways of asking what a work IS — the request that reads as casual and means "read it all". */
-const ABOUT_ASK = /о\s+ч[её]м|про\s+что|описани|опиши|перескажи|пересказ|содержани|what\s+is\b[^.?!]{0,24}\babout\b|summari[sz]e/
-
-/** A work, not a file. Narrow on purpose: "текст" is excluded here because "прочти полностью текст ошибки"
- *  is an ordinary request about an error message, and the two branches these guard have no other bound. */
-const WORK = /книг[а-яё]*|роман[а-яё]*|повест[а-яё]*|глав[а-яё]*|\bbook\b|\bnovel\b|\bchapters?\b/
-
-/** A corpus-analysis task: an explicit "read all chapters / the whole book / analyze the novel" ask
- *  (EN+RU). Narrow on purpose — an ordinary coding task never triggers the intercept. Mirrors
- *  ctxguard.isBulkReadAsk plus analysis-verb coverage; fail-silent on ambiguity. NOTE: the corpus-noun
- *  alternation uses explicit [a-zа-яё] stems, not \b — \b is ASCII-only in JS regex without the u flag
- *  and would not match Cyrillic word boundaries (the same gotcha ctxguard documents). */
-export function isCorpusAnalysisTask(text: string): boolean {
-  const t = (typeof text === "string" ? text : "").toLowerCase()
-  if (t.length < 12) return false
-  // explicit bulk-read corpus ask (the ctxguard pattern)
-  const bulk =
-    /\b(read|analyz|analys|review|summari[sz]e|go through|process|study)\w*[^.?!]{0,48}\b(all|every|entire|whole|each)\b[^.?!]{0,32}\b(chapters?|files?|books?|documents?|pages?|sections?)\b/.test(t) ||
-    /\b(all|every|entire|whole)\s+(the\s+)?(chapters?|files?|book|documents?|pages?)\b/.test(t) ||
-    /прочти\s+все|прочитай.*все|прочти\s+всю\s+книг|прочти\s+весь|по\s+всем\s+глав|вс[еёех]\s+глав|всю\s+книг/.test(t)
-  if (bulk) return true
-  // analysis verb over an explicit corpus noun (RU + EN). Cyrillic-safe: no \b around RU stems.
-  if ((ANALYSIS_RU.test(t) || ANALYSIS_EN.test(t)) && /(книг[а-яё]*|роман[а-яё]*|повест[а-яё]*|глав[а-яё]*|текст[а-яё]*|chapter|book|novel|corpus)/.test(t)) return true
-  // "the whole of this work" — the ask that names no chapters and means every one of them.
-  if (COMPLETE.test(t) && WORK.test(t)) return true
-  // "what is this work about" — casual on the surface, and answerable only by reading all of it.
-  if (ABOUT_ASK.test(t) && WORK.test(t)) return true
-  return false
-}
+// It used to. `isCorpusAnalysisTask` decided by regex over the reader's wording whether this pipeline ran
+// at all, and the vocabulary was widened every time somebody phrased the same request differently:
+// COMPLETE ("полностью", "in full"), ABOUT_ASK ("о чём", "what is it about"), WORK ("книга", "novel").
+// It passed its tests and two live runs, and it was still a guess about the next sentence.
+//
+// The owner rejected it outright (2026-07-28) and the research agrees: an RLM never classifies the ask,
+// because the root never sees raw material — only constant metadata — so every task is token-identical at
+// step one and there is nothing to classify. What fires this pipeline now is lib/traversal: the measured
+// shape of the work, in no language at all. The vocabulary is deleted rather than left unreferenced,
+// because a detector still sitting in the file is a detector somebody re-wires.
 
 // ── persistent accumulator (resume-safe progress) ──────────────────────────
 
@@ -403,4 +407,63 @@ export function doneSummaries(key: string): { name: string; text: string }[] {
 /** Drop the accumulator once the report is delivered (clean exit; re-runs seed fresh). */
 export function clearAccumulator(key: string): void {
   try { unlinkSync(accumulatorPath(key)) } catch {}
+}
+
+// ── the finished answer, or nothing (owner's rule, 2026-07-28) ─────────────────────────────────────
+//
+// MEASURED. A reduce that failed used to dump the raw per-batch summaries into the chat, joined with
+// "---": the reader asked one question about a book and received seven half-summaries, several cut
+// mid-word — the machine's work-in-progress presented as the answer. The owner's rule is absolute: the
+// chat receives the FINISHED report or nothing at all; intermediates are internal material, whatever
+// goes wrong.
+//
+// So a failed one-shot synthesis now reduces HIERARCHICALLY instead of giving up: the summaries are
+// grouped, each group is synthesized into an internal partial (never delivered), and the final report
+// is synthesized over the partials. Each call carries a fraction of the material, so the layer that
+// failed for size succeeds in pieces — and the shape generalizes to any corpus, because the group size
+// derives from how much material one call held, not from a constant about books.
+
+/** Split summaries into groups for a two-layer reduce. Pure. Groups are balanced (a remainder never
+ *  produces a trailing group of one) and order is preserved, because chapter order is meaning. */
+export function groupSummaries<T>(items: T[], maxPerGroup = 8): T[][] {
+  const n = items.length
+  if (n === 0) return []
+  const per = Math.max(2, Math.min(maxPerGroup, n))
+  const groups = Math.ceil(n / per)
+  const base = Math.floor(n / groups)
+  const extra = n % groups
+  const out: T[][] = []
+  let i = 0
+  for (let g = 0; g < groups; g++) {
+    const take = base + (g < extra ? 1 : 0)
+    out.push(items.slice(i, i + take))
+    i += take
+  }
+  return out
+}
+
+/** Produce the final report, trying flat first, then hierarchically — or return null, never raw parts.
+ *
+ *  `call` is the one model call (prompt, budgetTokens) → text; empty text means that call failed. The
+ *  orchestration is pure relative to it, which is what makes the no-raw-material guarantee testable:
+ *  whatever `call` does, the ONLY strings this function can return came out of a synthesis call. */
+export async function synthesizeWithFallback(
+  call: (prompt: string, budgetTokens: number) => Promise<string>,
+  summaries: { name: string; text: string }[],
+  taskText: string,
+  env: Record<string, string | undefined> = {},
+): Promise<string | null> {
+  if (summaries.length === 0) return null
+  const flat = await call(synthesizeReportPrompt(summaries, taskText), synthTokensFor(summaries.length, env)).catch(() => "")
+  if (flat.trim()) return flat
+  if (summaries.length < 3) return null // nothing to layer; the flat call WAS the small call
+  const partials: { name: string; text: string }[] = []
+  for (const group of groupSummaries(summaries)) {
+    const partial = await call(synthesizeReportPrompt(group, taskText), synthTokensFor(group.length, env)).catch(() => "")
+    // A group that produced nothing is a coverage hole, not a reason to show raw material.
+    if (partial.trim()) partials.push({ name: `part-${partials.length + 1}`, text: partial })
+  }
+  if (partials.length === 0) return null
+  const final = await call(synthesizeReportPrompt(partials, taskText), synthTokensFor(partials.length, env)).catch(() => "")
+  return final.trim() ? final : null
 }

@@ -10,8 +10,10 @@ import {
   synthTokensFor,
   synthesizeReportPrompt,
   cleanAnswer,
-  isCorpusAnalysisTask,
-  rolePreamble,
+  ANALYST_PREAMBLE,
+  ASK_LABEL,
+  askLine,
+  corpusBudgets,
   accumulatorKey,
   readAccumulator,
   writeAccumulator,
@@ -23,8 +25,7 @@ import {
   type CorpusFile,
   emptyBatchCount,
   chapterSummaryPrompt,
-  MAP_PREAMBLE,
-} from "./corpus"
+  MAP_PREAMBLE, synthesizeWithFallback, groupSummaries } from "./corpus"
 
 // ── test workspace helpers ─────────────────────────────────────────────────
 
@@ -134,17 +135,83 @@ describe("planBatches", () => {
   })
 })
 
-// ── rolePreamble + prompts ─────────────────────────────────────────────────
+// ── the map budget is derived from the socket, not typed into the file ─────
+//
+// The old constants read a fifth of a real chapter and inferred the rest — a hardcoded volume in the exact
+// case this pipeline exists for. What replaces them has to MOVE with the window, or it is the same defect
+// with a different number in it.
+describe("corpusBudgets", () => {
+  const env = { FABULA_CTX_CHARS_PER_TOKEN: "5" }
 
-describe("rolePreamble", () => {
-  test("literary-analysis task → critic role", () => {
-    expect(rolePreamble("Прочти все главы романа и сделай глубокий литературный анализ")).toContain("критик")
-    expect(rolePreamble("write a literary critique of the book")).toContain("критик") // role text is RU; the marker word is крitik
+  test("scales with the window, for the batch and for a single file alike", () => {
+    const small = corpusBudgets(8_000, env)
+    const big = corpusBudgets(64_000, env)
+    expect(big.batchChars).toBeGreaterThan(small.batchChars)
+    expect(big.chapterCap).toBeGreaterThan(small.chapterCap)
   })
-  test("generic analysis task → analyst role", () => {
-    const r = rolePreamble("read all documents and analyze the data")
-    expect(r).toContain("аналитик")
-    expect(r).not.toContain("критик")
+
+  test("a real chapter is read WHOLE on a real window — the defect that prompted this", () => {
+    const CHAPTER = 36_000 // measured on a live corpus: the average, not the maximum
+    expect(corpusBudgets(135_168, env).chapterCap).toBeGreaterThan(CHAPTER)
+    expect(corpusBudgets(135_168, env).chapterCap).toBeGreaterThan(8000) // the constant it replaces
+  })
+
+  test("both ends stay env-overridable for anyone with a reason", () => {
+    expect(corpusBudgets(135_168, { ...env, FABULA_CORPUS_BATCH_CHARS: "5000" }).batchChars).toBe(5000)
+    expect(corpusBudgets(135_168, { ...env, FABULA_CORPUS_CHAPTER_CAP: "3000" }).chapterCap).toBe(3000)
+  })
+
+  test("a nonsense override never produces a nonsense budget", () => {
+    for (const bad of ["0", "-1", "abc", ""]) {
+      const b = corpusBudgets(64_000, { ...env, FABULA_CORPUS_BATCH_CHARS: bad, FABULA_CORPUS_CHAPTER_CAP: bad })
+      expect(b.batchChars).toBeGreaterThan(1024)
+      expect(b.chapterCap).toBeGreaterThan(1024)
+    }
+  })
+})
+
+// ── the framing carries the reader's words instead of classifying them ─────
+//
+// The preamble used to be CHOSEN by a regex over the task text — literary critic if it saw "критик" or
+// "literary", generic analyst otherwise. That is the same word-matching that armed this pipeline, and it
+// fails the same way: silently, on the first phrasing nobody anticipated, by handing a book to an analyst
+// who was told nothing about books. The reader's own words go through verbatim now.
+
+describe("askLine — the reader's ask, carried not classified", () => {
+  test("carries the words exactly, whatever they are", () => {
+    for (const q of [
+      "о чем книга? прочти полностью и дай ответ",
+      "дай критическое развернутое описание книги",
+      "read the book in full",
+      "ну и?",
+    ]) expect(askLine(q)).toBe(`${ASK_LABEL}: ${q}`)
+  })
+
+  test("an ask is bounded — it is paid for once per batch", () => {
+    const line = askLine("x".repeat(9000), 2000)
+    expect(line.length).toBeLessThan(2100)
+    expect(line.endsWith("…")).toBe(true)
+  })
+
+  test("no ask is no line, not an empty label", () => {
+    expect(askLine("")).toBe("")
+    expect(askLine("   ")).toBe("")
+    expect(askLine(null as any)).toBe("")
+  })
+})
+
+describe("ANALYST_PREAMBLE", () => {
+  // The property the deleted classifier could not have: every ask gets the SAME framing, so no phrasing
+  // can fall through to a weaker one.
+  test("is one constant framing, identical for every phrasing of the ask", () => {
+    makeFile(CWD, "глава_01.md", "# Глава 1\ntext")
+    const files = discoverCorpus(CWD).files
+    const skeleton = (q: string) => chapterSummaryPrompt(files, q, 1000).replace(askLine(q), "<ASK>")
+    expect(skeleton("сделай литературный разбор романа")).toBe(skeleton("ну и?"))
+  })
+  test("asks for analysis rather than retelling, and answers in the reader's language", () => {
+    expect(ANALYST_PREAMBLE).toContain("не пересказ")
+    expect(ANALYST_PREAMBLE).toContain("языке запроса")
   })
 })
 
@@ -238,26 +305,33 @@ describe("cleanAnswer", () => {
   })
 })
 
-// ── isCorpusAnalysisTask ───────────────────────────────────────────────────
+// ── no detector survives here, and this is the test that keeps it that way ──
+//
+// A regex nobody imports is still a regex somebody re-wires. The module is asserted to hold no vocabulary
+// of asks at all: the words that used to arm it, and the ones that used to be missing, are equally absent.
+describe("the corpus core carries no vocabulary of asks", () => {
+  test("exports nothing that classifies a task", () => {
+    const mod = require("./corpus")
+    for (const name of Object.keys(mod))
+      expect(/^is[A-Z]|Task$|Detect|Classif/.test(name)).toBe(false)
+  })
 
-describe("isCorpusAnalysisTask", () => {
-  test("FIRES on explicit bulk-read corpus asks (EN+RU)", () => {
-    expect(isCorpusAnalysisTask("Прочитай все главы книги и сделай глубокий анализ")).toBe(true)
-    expect(isCorpusAnalysisTask("прочитай весь роман и проанализируй")).toBe(true)
-    expect(isCorpusAnalysisTask("read all chapters of the book and analyze")).toBe(true)
-    expect(isCorpusAnalysisTask("review every chapter of the novel")).toBe(true)
-  })
-  test("FIRES on analysis verb + corpus noun (no 'all' word)", () => {
-    expect(isCorpusAnalysisTask("сделай литературный разбор романа")).toBe(true)
-    expect(isCorpusAnalysisTask("write a literary critique of the novel")).toBe(true)
-    expect(isCorpusAnalysisTask("проведи анализ книги по главам")).toBe(true)
-  })
-  test("STAYS SILENT on ordinary coding/chat tasks (fail-open)", () => {
-    expect(isCorpusAnalysisTask("почини баг в adapter.ts")).toBe(false)
-    expect(isCorpusAnalysisTask("add a unit test for the parser")).toBe(false)
-    expect(isCorpusAnalysisTask("что думаешь о романе?")).toBe(false) // opinion, no corpus verb
-    expect(isCorpusAnalysisTask("hi")).toBe(false)
-    expect(isCorpusAnalysisTask("refactor the auth module")).toBe(false)
+  // The behavioural form of the same claim, and the one that would actually catch a re-wiring: EVERY
+  // function here that takes the reader's text must use it only by carrying it. Substitute the ask back
+  // out and two completely different requests have to leave byte-identical output.
+  test("no exported function branches on what the ask says", () => {
+    const summaries = [{ name: "b1", text: "s" }]
+    const asks = [
+      "сделай литературный критический разбор романа",
+      "о чем книга? прочти полностью и дай ответ",
+      "read the book in full",
+      "ну и?",
+      "почини баг в adapter.ts",
+    ]
+    const shapes = new Set(
+      asks.map((q) => synthesizeReportPrompt(summaries, q).split(askLine(q, 4000)).join("<ASK>")),
+    )
+    expect(shapes.size).toBe(1)
   })
 })
 
@@ -363,31 +437,83 @@ describe("prefix-cache layout in the corpus MAP", () => {
   })
 })
 
-// The reader's own words, measured 2026-07-28: none of these matched, so the whole-work path never fired
-// and the book was read a chapter at a time until the thread was lost. Plus the controls that keep the
-// widened vocabulary from reaching ordinary work.
-describe("isCorpusAnalysisTask — how people actually ask for a whole work", () => {
-  const yes = [
+// The asks that broke the old detector, measured 2026-07-28: none of them matched, so the whole-work path
+// never fired and the book was read a chapter at a time until the thread was lost. They are kept here — no
+// longer as inputs to a decision, but as proof that the pipeline treats every one of them the same, next
+// to the ordinary asks that must never be dragged into a corpus pass. A detector could tell these two
+// groups apart and got it wrong; this pipeline does not have to, because it never sees them at all.
+describe("how people actually ask makes no difference to this pipeline", () => {
+  const asks = [
     "о чем книга? прочти полностью и дай ответ",
     "дай критическое развернутое описание книги",
     "прочти книгу целиком и скажи о чём она",
     "перескажи роман",
-    "про что эта повесть, опиши подробно",
     "read the book in full and tell me what it is about",
-    "what is this novel about, cover to cover",
     "summarise the book",
-  ]
-  for (const q of yes) test(`fires: ${q}`, () => expect(isCorpusAnalysisTask(q)).toBe(true))
-
-  const no = [
+    // …and the ones a detector had to keep OUT, which are equally uninteresting here:
     "прочти полностью текст ошибки и объясни",
-    "опиши что делает эта функция",
     "полностью перепиши модуль авторизации",
-    "read the config file completely",
-    "describe what this endpoint returns",
-    "о чем этот коммит",
-    "summarise the diff",
-    "прочитай лог целиком",
+    "почини баг в adapter.ts",
+    "ну и?",
   ]
-  for (const q of no) test(`stays out: ${q}`, () => expect(isCorpusAnalysisTask(q)).toBe(false))
+
+  test("every ask produces the same prompt but for the reader's own sentence", () => {
+    makeFile(CWD, "глава_01.md", "# Глава 1\ntext")
+    const files = discoverCorpus(CWD).files
+    const shapes = new Set(asks.map((q) => chapterSummaryPrompt(files, q, 1000).replace(askLine(q), "<ASK>")))
+    expect(shapes.size).toBe(1)
+  })
+
+  test("and the reader's own sentence is in there, whichever it was", () => {
+    makeFile(CWD, "глава_01.md", "# Глава 1\ntext")
+    const files = discoverCorpus(CWD).files
+    for (const q of asks) expect(chapterSummaryPrompt(files, q, 1000)).toContain(q)
+  })
+})
+
+// The owner's rule, 2026-07-28: the chat receives the FINISHED report or nothing. A failed reduce used
+// to dump the raw per-batch summaries joined with "---" — seven half-summaries cut mid-word, presented
+// as the answer to one question about a book.
+describe("synthesizeWithFallback — the finished answer or nothing", () => {
+  const sums = (n: number) => Array.from({ length: n }, (_, i) => ({ name: `b${i}`, text: `summary ${i} raw material` }))
+
+  test("a working flat call returns its report", async () => {
+    const r = await synthesizeWithFallback(async () => "полный разбор книги", sums(10), "о чем книга")
+    expect(r).toBe("полный разбор книги")
+  })
+
+  test("a failed flat call reduces hierarchically instead of giving up", async () => {
+    let calls = 0
+    const r = await synthesizeWithFallback(async (p) => {
+      calls++
+      if (calls === 1) return "" // the flat attempt fails
+      return p.includes("part-1") ? "итоговый разбор из частей" : "внутренняя часть"
+    }, sums(20), "о чем книга")
+    expect(r).toBe("итоговый разбор из частей")
+    expect(calls).toBeGreaterThan(2)
+  })
+
+  test("NEVER returns raw summaries, whatever fails", async () => {
+    const r = await synthesizeWithFallback(async () => "", sums(20), "о чем книга")
+    expect(r).toBeNull() // null — not a "---" join, not a fragment
+  })
+
+  test("a throwing call is a failure, not a crash", async () => {
+    const r = await synthesizeWithFallback(async () => { throw new Error("HTTP 500") }, sums(12), "q")
+    expect(r).toBeNull()
+  })
+
+  test("groups are balanced and ordered", () => {
+    const g = groupSummaries(Array.from({ length: 21 }, (_, i) => i), 8)
+    expect(g.length).toBe(3)
+    expect(g.map((x) => x.length)).toEqual([7, 7, 7])
+    expect(g.flat()).toEqual(Array.from({ length: 21 }, (_, i) => i))
+  })
+
+  test("a group of one never trails", () => {
+    for (const n of [9, 17, 25, 33]) {
+      const g = groupSummaries(Array.from({ length: n }, (_, i) => i), 8)
+      for (const grp of g) expect(grp.length).toBeGreaterThanOrEqual(2)
+    }
+  })
 })

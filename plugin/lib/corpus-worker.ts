@@ -8,7 +8,9 @@
 // All args are strings; taskText is passed base64-encoded by the spawner to survive shell quoting.
 // The worker is fully self-contained: it imports only the pure core (corpus.ts) + node:fetch.
 
-import { discoverCorpus, planBatches, chapterSummaryPrompt, synthesizeReportPrompt, cleanAnswer, accumulatorKey, seedAccumulator, markDone, pendingBatches, doneSummaries, emptyBatchCount, clearAccumulator, synthTokensFor } from "./corpus"
+import { discoverCorpus, planBatches, chapterSummaryPrompt, synthesizeReportPrompt, synthesizeWithFallback, cleanAnswer, accumulatorKey, seedAccumulator, markDone, pendingBatches, doneSummaries, emptyBatchCount, clearAccumulator, synthTokensFor, corpusBudgets } from "./corpus"
+import { budgetWindow } from "./handle"
+import { probeWindow } from "./ctxguard"
 import { writeFileSync, readFileSync, existsSync } from "node:fs"
 import { join } from "node:path"
 
@@ -25,8 +27,7 @@ try { taskText = Buffer.from(taskB64 || "", "base64").toString("utf8") } catch {
 const BASE = (process.env.FABULA_CORPUS_URL || process.env.FABULA_GRAPH_URL || "http://localhost:1235/v1").replace(/\/+$/, "")
 const TIMEOUT_MS = Math.max(30000, parseInt(process.env.FABULA_CORPUS_TIMEOUT_MS || "0", 10) || 240000)
 const BATCH_MAX_FILES = Math.max(1, parseInt(process.env.FABULA_CORPUS_BATCH_SIZE || "4", 10) || 4)
-const BATCH_MAX_CHARS = Math.max(2048, parseInt(process.env.FABULA_CORPUS_BATCH_CHARS || "60000", 10) || 60000)
-const CHAPTER_CAP = Math.max(1024, parseInt(process.env.FABULA_CORPUS_CHAPTER_CAP || "0", 10) || 8000)
+// How much material one map call carries — corpusBudgets, in the pure core so it can be tested.
 const SUMMARY_TOKENS = Math.max(200, parseInt(process.env.FABULA_CORPUS_SUMMARY_TOKENS || "0", 10) || 900)
 // NB the synthesis budget is NOT a constant — it scales with how many batches the report must cover
 // (synthTokensFor), so a book does not get a three-file-sized report cut off mid-heading.
@@ -104,18 +105,23 @@ async function callLocal(model: string, prompt: string, maxTokens: number): Prom
  *  delivery on any streaming failure, and always closes the message — a half-written one left open is
  *  the same defect that once kept the progress line running forever.
  *  NB the map phase stays non-streaming on purpose: those summaries are internal and never shown. */
-async function streamAnswer(model: string, prompt: string, maxTokens: number): Promise<{ text: string; truncated: boolean } | null> {
+/** The one channel that writes an ASSISTANT message. Module-scope deliberately: the reduce path rewrites
+ *  the streaming message after streamAnswer has returned, and a helper scoped inside it would make that
+ *  rewrite a ReferenceError the tests cannot see (the wiring suite stands the worker in with a marker
+ *  script and never executes this path). */
+async function post(body: any): Promise<any> {
+  const r = await fetch(`${serverUrl}/session/${sessionID}/assistant-message?directory=${encodeURIComponent(cwd)}`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+  })
+  if (!r.ok) throw new Error(`assistant-message HTTP ${r.status}`)
+  return await r.json()
+}
+
+async function streamAnswer(model: string, prompt: string, maxTokens: number): Promise<{ text: string; truncated: boolean; messageID: string; partID: string } | null> {
   let messageID = ""
   let partID = ""
   let text = ""
   let truncated = false
-  const post = async (body: any) => {
-    const r = await fetch(`${serverUrl}/session/${sessionID}/assistant-message?directory=${encodeURIComponent(cwd)}`, {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
-    })
-    if (!r.ok) throw new Error(`assistant-message HTTP ${r.status}`)
-    return await r.json()
-  }
   try {
     const opened = await post({ text: "", model, final: false })
     messageID = opened.messageID; partID = opened.partID
@@ -160,13 +166,17 @@ async function streamAnswer(model: string, prompt: string, maxTokens: number): P
     } finally { clearTimeout(t) }
     const finalText = cleanAnswer(text)
     if (!finalText.trim()) throw new Error("empty stream")
-    await post({ text: finalText, messageID, partID, final: true, model, tokens: usageTotal })
-    return { text: finalText, truncated }
+    // A TRUNCATED stream is an intermediate, and intermediates never reach the reader (owner's rule,
+    // 2026-07-28): do not finalize the stump. The message stays open and its ids go back to the caller,
+    // which rewrites the SAME message with the full report — one message, filled in, never a stump plus
+    // a second copy underneath it.
+    if (!truncated) await post({ text: finalText, messageID, partID, final: true, model, tokens: usageTotal })
+    return { text: finalText, truncated, messageID, partID }
   } catch (e: any) {
-    // Never leave a half-written message open — an unfinished one reads as work still in flight.
-    if (messageID && partID) await post({ text: cleanAnswer(text) || "(the report could not be completed)", messageID, partID, final: true, model, tokens: usageTotal }).catch(() => {})
     console.error(`[corpus-worker] stream failed: ${e?.message}`)
-    return null
+    // The open message carries whatever partial streamed; the caller rewrites it with the finished
+    // report, or empties it if no report can be produced. No service string ever lands in the chat.
+    return { text: "", truncated: true, messageID, partID }
   }
 }
 
@@ -222,6 +232,11 @@ async function main(): Promise<number> {
   const model = await localModel()
   usedModel = model
   if (!model) { markHandback(); await reInject(taskText, false); hb("fallback-no-model"); return 0 }
+  // MEASURE THE SOCKET, then size the prompts to it. A probe that cannot answer falls back to the same
+  // window figure every other consumer resolves — never to a number invented here.
+  const windowTokens = budgetWindow(await probeWindow().catch(() => 0), process.env)
+  const { batchChars: BATCH_MAX_CHARS, chapterCap: CHAPTER_CAP } = corpusBudgets(windowTokens, process.env)
+  hb("budget", { windowTokens, batchChars: BATCH_MAX_CHARS, chapterCap: CHAPTER_CAP })
   const batches = planBatches(disc.files, { maxFiles: BATCH_MAX_FILES, maxBatchChars: BATCH_MAX_CHARS })
   const key = accumulatorKey(sessionID, cwd)
   seedAccumulator(key, taskText, batches)
@@ -264,33 +279,55 @@ async function main(): Promise<number> {
   const missing = emptyBatchCount(key)
   if (missing > 0) hb("reduce-gaps", { missing })
   if (summaries.length === 0) { markHandback(); await reInject(taskText, false); clearAccumulator(key); hb("fallback-no-summaries"); return 0 }
-  let report: string
-  try {
-    let budget = synthTokensFor(summaries.length, process.env)
-    // Try to write it into the chat as it is produced; fall back to producing it whole if streaming
-    // fails, so a transport problem costs formatting-in-flight, never the report itself.
-    const streamed = await streamAnswer(model, synthesizeReportPrompt(summaries, taskText), budget)
-    if (streamed && !streamed.truncated) { hb("done", { reportChars: streamed.text.length, streamed: true }); return 0 }
-    let out = streamed ?? (await callLocalFull(model, synthesizeReportPrompt(summaries, taskText), budget))
-    // A report cut mid-sentence is worse than a shorter one written to fit, so grow the room and ask
-    // again rather than shipping the stump. Bounded: two attempts, each doubling, never past the cap the
-    // socket will actually return.
-    for (let attempt = 0; attempt < 2 && out.truncated; attempt++) {
-      const grown = Math.min(SYNTH_HARD_CAP, budget * 2)
-      if (grown <= budget) break
-      budget = grown
-      hb("reduce-retry", { budget })
-      out = await callLocalFull(model, synthesizeReportPrompt(summaries, taskText), budget)
+  // THE FINISHED ANSWER OR NOTHING (owner's rule, 2026-07-28). The raw per-batch summaries never reach
+  // the chat: a failed flat synthesis reduces hierarchically (groups → internal partials → final), and
+  // if no report can be produced at all, the task is handed back to the ordinary agent — silence, never
+  // work-in-progress presented as an answer.
+  let budget = synthTokensFor(summaries.length, process.env)
+  const streamed = await streamAnswer(model, synthesizeReportPrompt(summaries, taskText), budget)
+  if (streamed && !streamed.truncated && streamed.text.trim()) {
+    clearAccumulator(key)
+    hb("done", { reportChars: streamed.text.length, streamed: true })
+    return 0
+  }
+  // The streaming message (complete or a stump) is rewritten in place with whatever the fallback
+  // produces — the reader sees ONE message that fills in, never a stump plus a second copy.
+  const rewrite = async (text: string) => {
+    if (streamed?.messageID && streamed?.partID) {
+      await post({ text, messageID: streamed.messageID, partID: streamed.partID, final: true, model, tokens: usageTotal }).catch(() => {})
+      return
     }
-    report = cleanAnswer(out.text)
-    if (!report.trim()) report = summaries.map((s) => s.text).join("\n\n---\n\n")
-  } catch { report = summaries.map((s) => s.text).join("\n\n---\n\n") }
+    await deliverAnswer(text)
+  }
+  const call = async (prompt: string, tokens: number): Promise<string> => {
+    let b = tokens
+    let out = await callLocalFull(model, prompt, b)
+    for (let attempt = 0; attempt < 2 && out.truncated; attempt++) {
+      const grown = Math.min(SYNTH_HARD_CAP, b * 2)
+      if (grown <= b) break
+      b = grown
+      hb("reduce-retry", { budget: b })
+      out = await callLocalFull(model, prompt, b)
+    }
+    // A truncated report is an intermediate too — treat it as a failure so the layered path runs.
+    return out.truncated ? "" : cleanAnswer(out.text)
+  }
+  const report = await synthesizeWithFallback(call, summaries, taskText, process.env)
+  if (!report) {
+    // Nothing finished to show. Empty the streaming stump if one exists, hand the task back, stay silent.
+    if (streamed?.messageID && streamed?.partID) await post({ text: "", messageID: streamed.messageID, partID: streamed.partID, final: true, model, tokens: usageTotal }).catch(() => {})
+    markHandback()
+    await reInject(taskText, false)
+    clearAccumulator(key)
+    hb("fallback-synthesis-failed")
+    return 0
+  }
   clearAccumulator(key)
   // NO PROVENANCE LINE. It used to open every report with how the answer had been assembled — the file
   // count, the batch count, the words "map-reduce". That is bookkeeping about the machine, printed in the
   // one place reserved for the answer, and it is the first thing the reader's eye lands on. How the work
   // was divided is a fact for the log, where a maintainer looks for it; it is not part of what was asked.
-  await deliverAnswer(report)
+  await rewrite(report)
   hb("done", { reportChars: report.length })
   return 0
 }

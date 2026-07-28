@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.55.0"
+export const FABULA_VERSION = "0.56.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.56.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Сжатие разговора больше не отправляет всё разом. Когда история переставала помещаться, её сворачивали одним запросом — и на шести главах книги он выходил больше, чем модель способна удержать: сервер умирал, сжатие обрывалось, а всё прочитанное пропадало. Теперь длинная история сворачивается по частям: старая часть сокращается, её итог переносится в следующую, и так до конца. Каждый запрос помещается, а целое не ограничено ничем. Если история и так помещалась — она по-прежнему обрабатывается одним разом.",
+        en: "Compressing a conversation no longer sends all of it at once. When the history stopped fitting it was folded in a single request — and six chapters of a book made that request larger than the model can hold: the server died, the compression broke off, and everything already read was lost. A long history is now folded in parts: the oldest part is condensed, its result carried into the next, and so on to the end. Every request fits, while the whole is bounded by nothing. A history that fitted anyway is still handled in one go.",
+      },
+    ],
+  },
   {
     version: "0.55.0",
     date: "2026-07-28",

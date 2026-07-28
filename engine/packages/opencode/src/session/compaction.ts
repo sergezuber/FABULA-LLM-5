@@ -17,6 +17,7 @@ import { detectRepeatedCharShingle } from "./prompt/text-ngram-detection"
 import { Effect, Layer, Context } from "effect"
 import { InstanceState } from "@/effect"
 import { isOverflow as overflow, usable } from "./overflow"
+import { planFold, foldContinuation } from "./compaction-fold"
 import { makeRuntime } from "@/effect/run-service"
 import { fn } from "@/util/fn"
 import { trace } from "./trace"
@@ -366,7 +367,7 @@ export const layer: Layer.Layer<
           created: Date.now(),
         },
       })
-      const processSummary = (message: MessageV2.Assistant, instruction: string) =>
+      const processSummary = (message: MessageV2.Assistant, instruction: string, send = modelMessages) =>
         Effect.gen(function* () {
           const processor = yield* processors.create({
             assistantMessage: message,
@@ -402,7 +403,48 @@ export const layer: Layer.Layer<
         })
       let msg = createSummaryMessage()
       yield* session.updateMessage(msg)
-      let attempt = yield* processSummary(msg, prompt)
+      const summaryText = (messageID: MessageID) =>
+        MessageV2.page({ sessionID: input.sessionID, limit: 10 })
+          .items.filter((m) => m.info.id === messageID)
+          .flatMap((m) => m.parts)
+          .filter((p): p is MessageV2.TextPart => p.type === "text")
+          .map((p) => p.text)
+          .join("\n")
+
+      // FOLD THE HEAD IF IT DOES NOT FIT. Measured 2026-07-28: six chapters of a book made this call
+      // 188 870 units against a model holding 135 168, and the serving process died allocating cache for
+      // it — "the model has crashed", "compaction did not finish", and every chapter already read was
+      // lost. Knowing the right limit does not help on its own: the limit was correct on that very run
+      // and nothing consulted it before deciding how much to send.
+      //
+      // Older slices are summarised first and carried forward, so every call is bounded while the whole
+      // is not. The LAST pass goes through exactly the path it always did, which is why the retry and
+      // hijack handling below needs no change at all. A head that already fits takes one call, as before.
+      const fold = planFold(modelMessages as any, usable({ cfg, model }))
+      let carried = ""
+      if (fold.slices.length > 1) {
+        log.info("compaction folding oversized head", { sessionID: input.sessionID, reason: fold.reason })
+        for (let i = 0; i < fold.slices.length - 1; i++) {
+          const passMsg = createSummaryMessage()
+          yield* session.updateMessage(passMsg)
+          const pass = yield* processSummary(
+            passMsg,
+            i === 0 ? prompt : foldContinuation(carried, i, fold.slices.length),
+            fold.slices[i] as any,
+          )
+          if (pass.result === "overflow") {
+            yield* abortOverflow(pass.processor)
+            return "stop"
+          }
+          carried = summaryText(passMsg.id).trim() || carried
+        }
+      }
+      
+      let attempt = yield* processSummary(
+        msg,
+        fold.slices.length > 1 ? foldContinuation(carried, fold.slices.length - 1, fold.slices.length) : prompt,
+        fold.slices.length > 1 ? (fold.slices[fold.slices.length - 1] as any) : modelMessages,
+      )
 
       if (attempt.result === "overflow") {
         yield* abortOverflow(attempt.processor)
@@ -414,13 +456,6 @@ export const layer: Layer.Layer<
       // retry ONCE with a corrective appended to the instruction (the steer channel measured to work on
       // this project). A clean retry proceeds like any summary; a failed retry sets a VISIBLE error so
       // the session shows red instead of a fake-done ending on a garbage summary.
-      const summaryText = (messageID: MessageID) =>
-        MessageV2.page({ sessionID: input.sessionID, limit: 10 })
-          .items.filter((m) => m.info.id === messageID)
-          .flatMap((m) => m.parts)
-          .filter((p): p is MessageV2.TextPart => p.type === "text")
-          .map((p) => p.text)
-          .join("\n")
       let hijacked = attempt.result === "text-repeat" || summaryLooksHijacked(summaryText(msg.id))
       trace("compaction.summary", {
         sid: input.sessionID,

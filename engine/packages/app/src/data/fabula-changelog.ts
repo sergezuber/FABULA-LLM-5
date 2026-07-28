@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.51.0"
+export const FABULA_VERSION = "0.52.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.52.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Отменено вчерашнее ускорение остановки: оно выбрасывало настоящие ответы. Чтобы заметить, что вы ушли, пока модель читает запрос, за соединением следили и обрывали его, если оттуда ничего не приходит. Но обычный сетевой собеседник, отправив запрос, закрывает свою сторону отправки и молча ждёт ответа — и это выглядело точно так же. В итоге ответ обрывался на полпути, сервер модели дописывал его в никуда, а окно оставалось пустым. Признак признан негодным и убран; отличать ушедшего от ждущего нужно иначе.",
+        en: "Yesterday's faster stop is withdrawn: it was discarding real answers. To notice that you had left while the model was still reading the request, the connection was watched and dropped when nothing came back from it. But an ordinary network peer closes its sending side once the request is out and then waits quietly for the reply — which looked exactly the same. Answers were cut off mid-flight, the model server finished writing them to nobody, and the window stayed empty. The signal is unsound and has been removed; telling someone who left from someone who is waiting needs a different one.",
+      },
+    ],
+  },
   {
     version: "0.51.0",
     date: "2026-07-28",

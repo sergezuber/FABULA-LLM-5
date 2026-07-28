@@ -310,9 +310,7 @@ PORT = int(os.environ.get("ADAPTER_PORT", "1235"))
 # FIRST byte; STREAM_IDLE_TIMEOUT (smaller) bounds every gap AFTER the first byte. Applies to BOTH the
 # streaming and the non-streaming path (the non-streaming read used to be a single 900s socket timeout
 # — a stalled upstream mid-body wedged the turn for the full 15 min; now it is idle-watchdogged too).
-FIRST_TOKEN_TIMEOUT = float(os.environ.get("FABULA_FIRST_TOKEN_TIMEOUT", "300"))
-# How often the watcher asks whether the caller is still there while the first token is awaited.
-PREFILL_POLL_SEC = float(os.environ.get("FABULA_PREFILL_POLL_SEC", "1")) # sec to the FIRST byte (prefill) -> abort
+FIRST_TOKEN_TIMEOUT = float(os.environ.get("FABULA_FIRST_TOKEN_TIMEOUT", "300")) # sec to the FIRST byte (prefill) -> abort
 STREAM_IDLE_TIMEOUT = float(os.environ.get("FABULA_STREAM_IDLE_TIMEOUT", "120"))  # sec of zero bytes AFTER first -> abort read
 STREAM_RETRIES = int(os.environ.get("FABULA_STREAM_RETRIES", "1"))               # retry once if it stalls before the 1st byte
 UPSTREAM_TIMEOUT = float(os.environ.get("FABULA_UPSTREAM_TIMEOUT", "900"))        # hard ceiling (fallback; idle watchdog fires first)
@@ -457,40 +455,6 @@ def apply_reasoning(body, mapping, level, kind=API_KIND):
         if isinstance(op, dict) and isinstance(op.get("path"), list) and op["path"]:
             set_path(body, op["path"], op.get("value"))
     return body
-
-
-def _watch_client(sock, resp, stop):
-    """Close the upstream the moment the caller hangs up.
-
-    A separate thread, because the reading thread cannot help: during prefill it is blocked inside one
-    long read, and a departed caller is otherwise noticed only when a write to it fails — with nothing to
-    write until the first token arrives. Measured 2026-07-28: pressing Stop during PROCESSINGPROMPT had
-    no effect for 45 seconds and counting.
-
-    Shortening the read instead was tried and abandoned: http.client does not resume cleanly after a
-    socket timeout, so the loop that woke up to check could no longer read the stream it was watching.
-    Closing the response is the one action that needs no cooperation from that loop — the runtime aborts
-    the prediction when its socket closes, which is the same lever the mid-stream disconnect already
-    pulls."""
-    while not stop.is_set():
-        stop.wait(PREFILL_POLL_SEC)
-        if stop.is_set():
-            return
-        try:
-            r, _, _ = select.select([sock], [], [], 0)
-            gone = bool(r) and not sock.recv(1, socket.MSG_PEEK)
-        except (BlockingIOError, InterruptedError):
-            continue
-        except (OSError, ValueError):
-            gone = True
-        if gone:
-            sys.stderr.write("[fabula-adapter] client left before the first token — "
-                             "closing upstream to abort generation\n")
-            try:
-                resp.close()
-            except Exception:
-                pass
-            return
 
 
 def set_read_timeout(resp, seconds):
@@ -710,13 +674,6 @@ class Handler(BaseHTTPRequestHandler):
             # to the smaller inter-token idle once the first byte lands (see set_read_timeout).
             _t_open = time.time()
             resp = _open_upstream(FIRST_TOKEN_TIMEOUT)
-            # Watch the caller while the first token is awaited. Stopped the moment bytes start flowing:
-            # from then on a write failure notices a departure immediately, and a second watcher would be
-            # a second thing that can close the stream.
-            _watch_stop = threading.Event()
-            _watcher = threading.Thread(target=_watch_client, args=(self.request, resp, _watch_stop),
-                                        daemon=True)
-            _watcher.start()
             _gap_prev = None
         except urllib.error.HTTPError as e:
             data = e.read()
@@ -856,7 +813,6 @@ class Handler(BaseHTTPRequestHandler):
                     # the idle baseline. That budget governs INTER-TOKEN gaps, and sampling time-to-first-
                     # token to bound it is a category error — it measured one quantity and governed
                     # another, which collapsed the watchdog to its floor and truncated healthy turns.
-                    _watch_stop.set()  # bytes are flowing; a failed write is the faster signal now
                     set_read_timeout(resp, _idle_budget)  # split: first byte in -> inter-token idle
                 _gap_prev = time.time()
                 forwarded = True

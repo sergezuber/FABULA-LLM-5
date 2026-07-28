@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.65.0"
+export const FABULA_VERSION = "0.72.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,88 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.72.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Найдена и устранена причина «приложение намертво зависает»: проверяя, можно ли показать чат, движок спрашивал у файловой системы канонический путь каждой папки каждой сессии — а этот вызов на папке под iCloud (Рабочий стол) периодически засыпает в ядре без ограничения времени. Один такой путь останавливал весь сервер: ни списка чатов, ни ответов, ноль загрузки процессора. Зависание приходило и уходило вместе с настроением синхронизации — потому и казалось случайным. Теперь вопрос «своя ли это папка» решается сравнением строк, без единого обращения к диску: виснуть больше нечему.",
+        en: "The cause of \u201cthe app freezes solid\u201d is found and removed: deciding whether a chat may be shown, the engine asked the filesystem for the canonical path of every session\u2019s folder \u2014 and that call, on an iCloud-managed folder (Desktop), periodically sleeps in the kernel with no time limit. One such path stopped the whole server: no chat list, no answers, zero CPU. The freeze came and went with the sync daemon\u2019s mood, which is why it looked random. \u201cIs this folder ours\u201d is now answered by comparing strings, with not a single disk access \u2014 there is nothing left to sleep.",
+      },
+    ],
+  },
+  {
+    version: "0.71.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Фоновые само-проходы — «Авто-сон» (уборка памяти) и «Авто-дистилляция» (навыки из сделанного) — теперь выключены по умолчанию, для всех. Они запускались сами, едва наступала тишина после ответа, занимали единственный слот модели и выглядели как бесконечное «думает»; следующий вопрос вставал за ними в очередь. Включаются осознанно: два переключателя в Настройках ▸ Основные, применяются со следующего запуска. Ручные /dream и /distill работают как раньше.",
+        en: "The background self-improvement passes — Auto Dream (memory consolidation) and Auto Distill (skills from finished work) — are now off by default, for everyone. They used to start on their own the moment a turn went quiet, occupy the single model slot and read as endless \u201cthinking\u201d; the next question queued behind them. Enabling is a deliberate act: two switches in Settings \u25b8 General, applied from the next launch. Manual /dream and /distill work as before.",
+      },
+    ],
+  },
+  {
+    version: "0.70.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Разбор книги приходит только готовым — или не приходит вовсе. Когда итоговый синтез не удавался, в чат вываливались сырые заготовки по группам глав, склеенные разделителями и обрезанные на полуслове, — рабочий материал машины вместо ответа. Теперь неудавшийся синтез собирается слоями: группы заготовок сводятся во внутренние части, части — в один итог; не вышло и так — задача молча возвращается обычному ходу, и читатель получает ответ оттуда. Оборванная трансляция больше не оставляет огрызок: сообщение одно, и оно дозаполняется до целого.",
+        en: "A book analysis arrives finished — or not at all. When the final synthesis failed, raw per-group drafts were dumped into the chat, joined with dividers and cut mid-word: the machine's working material in place of the answer. A failed synthesis now assembles in layers — group drafts into internal parts, parts into one whole; failing even that, the task quietly returns to the ordinary turn and the reader gets the answer from there. An interrupted stream no longer leaves a stump: there is one message, and it fills in to completion.",
+      },
+    ],
+  },
+  {
+    version: "0.69.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Из диалога убраны последние машинные пометки: «Session compacted», «Compacting context…», «Compaction did not finish · Retry» и голое «Interrupted». Сжатие повторяется и восстанавливается само — кнопка дублировала автоматику; обрыв хода либо сопровождается осмысленной подписью о идущей работе, либо не говорит ничего. В диалоге остаются только ваши слова и ответы; состояние машины — в журнале.",
+        en: "The last machine markers are gone from the conversation: \"Session compacted\", \"Compacting context…\", \"Compaction did not finish · Retry\" and the bare \"Interrupted\". Compaction retries and recovers on its own — the button duplicated the automatic path; an interrupted turn either carries a meaningful label about work in progress or says nothing. The conversation keeps only your words and the answers; the machine's state lives in the log.",
+      },
+    ],
+  },
+  {
+    version: "0.68.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Служебный текст сжатия больше не попадает в диалог — четырьмя путями разом. Сводка сжатия («## Goal…») была видна как ответ — теперь она не показывается: о сжатии говорит только разделитель. Внутренняя записка модели после сжатия рисовала пустое сообщение от вашего имени — пузырь скрыт. Та же записка, написанная по-английски, сбивала определитель языка — «о чём книга?» получал ответ по-английски; язык теперь определяется только по вашим собственным словам. И сама записка переписана: раньше она велела модели объяснять читателю про лимиты и вложения — теперь прямо запрещает упоминать механику и требует отвечать на языке пользователя.",
+        en: "Compaction's internal text no longer reaches the conversation, closed four ways at once. The compaction summary (\"## Goal…\") rendered as an answer — it is hidden now, and only the divider speaks of compaction. The internal follow-up note drew an empty message in your name — that bubble is gone. The same note, written in English, misled the language pin — a Russian question got an English answer; the language is now read from your own words only. And the note itself is reworded: it used to tell the model to explain limits and attachments to the reader — it now forbids mentioning the machinery and requires answering in the user's language.",
+      },
+    ],
+  },
+  {
+    version: "0.67.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Закрывая приложение, оно больше не обрывает чужую работу. Уходя, оно снимает всё, что запустило само, — и последней страховкой глушило разбор корпуса по имени скрипта, а под это имя попадал любой такой разбор на машине, кем бы он ни был начат. Дважды за день это оборвало чужой прогон — на 7-й главе из 52 и на 31-й. Работа продолжилась с того же места, потерялось только время; но «ничто, запущенное FABULA, не переживает FABULA» никогда не давало права заканчивать начатое кем-то другим. Теперь под страховку попадают только собственные работники — те, что отчитываются этому же приложению.",
+        en: "Closing the app no longer cuts off somebody else's work. On the way out it ends everything it started itself, and its last safety net silenced a corpus pass by the name of its script — which matched any such pass on the machine, whoever had begun it. Twice in one day that ended another run, at chapter 7 of 52 and again at 31. The work carried on from where it stopped and only time was lost; but \"nothing FABULA starts may outlive FABULA\" was never a licence to end what something else started. The net now catches only its own workers — the ones reporting back to this app.",
+      },
+    ],
+  },
+  {
+    version: "0.66.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Просьба разобрать книгу целиком работает какими угодно словами. Раньше её узнавали по формулировке, и список узнаваемых оборотов приходилось расширять каждый раз, когда кто-то спрашивал иначе: он знал «все главы», но не «полностью», знал «критика», но не «критическое», знал «анализ», но не «о чём». Теперь смотрят не на просьбу, а на работу: файл за файлом из одной папки, сверх окна, с которым модель реально загружена, и непрочитанное ещё осталось. Это одно и то же на любом языке — и для той фразы, которую ещё никто не написал.",
+        en: "Asking for a whole book taken apart works in whatever words you use. It used to be recognised by phrasing, and the list of recognisable turns of speech had to be widened every time somebody asked differently: it knew «every chapter» but not «in full», knew «critique» but not «critical», knew «analysis» but not «what is it about». What is looked at now is the work rather than the request: file after file out of one folder, past the window the model is actually loaded with, with more still unread. That is the same in any language — and for the sentence nobody has written yet.",
+      },
+      {
+        ru: "Крупный результат больше не заливается в переписку. Когда прочитанное перестаёт помещаться в ход, текст целиком остаётся снаружи, а вместо него приходит короткая ссылка: что это, какого размера, как начинается и как добраться до остального. Дальше можно задать вопрос ко ВСЕМУ материалу — он читается по частям отдельными вызовами, а ответы сводятся в один, — или прочитать любой кусок дословно. Ничего не обрезается и ничего не теряется. Обычные результаты не трогаются, так что на повседневной работе это не стоит ничего.",
+        en: "A large result is no longer poured into the conversation. When what has been read stops fitting the turn, the text stays outside it whole and a short reference arrives instead: what it is, how big it is, how it starts, and how to reach the rest. A question can then be asked of ALL of it — read in parts by separate calls, the answers merged into one — or any passage read verbatim. Nothing is truncated and nothing is lost. Ordinary results are untouched, so everyday work pays nothing for it.",
+      },
+      {
+        ru: "Глава читается целиком, а не первой своей пятой частью. Размер порции был записан числом — восемь тысяч знаков, — а глава живой книги вчетверо длиннее, так что просьба прочесть всё оборачивалась чтением начала каждой главы и догадками об остальном. Теперь порция считается от окна, с которым модель загружена, и набирается под самую его ёмкость: длинный текст входит целиком, вызовов становится меньше, а покрытие — полным.",
+        en: "A chapter is read whole rather than in its first fifth. The size of a portion was written down as a number — eight thousand characters — and a chapter of a real book runs four times that, so a request to read everything came out as reading the opening of each chapter and inferring the rest. A portion is now worked out from the window the model is loaded with and packed close to its capacity: a long text goes in whole, there are fewer calls, and the coverage is complete.",
+      },
+      {
+        ru: "Ответ приходит один. Когда разбор корпуса уходит в фон, собственный ход модели теперь завершается — раньше он продолжал набирать главы, которые уже не помещались, пока рядом писался настоящий отчёт.",
+        en: "One answer arrives. When covering a corpus moves to the background the model's own turn now ends — it used to go on taking in chapters that no longer fitted while the real report was being written beside it.",
+      },
+    ],
+  },
   {
     version: "0.65.0",
     date: "2026-07-28",

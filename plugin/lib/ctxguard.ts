@@ -59,6 +59,16 @@ export function learnedWindow(now = Date.now()): number {
 export function setLearnedWindow(n: number): void {
   if (Number.isFinite(n) && n > 0) { LEARNED = n; LEARNED_AT = Date.now() }
 }
+
+/** Forget the measured ceiling, so the next probe asks the runtime again.
+ *
+ *  Separate from `setLearnedWindow(0)` on purpose: a zero there means "a probe reported nothing useful",
+ *  which must never shrink the window, while this is a caller saying the figure is no longer trustworthy
+ *  — after a deliberate reload, for instance. Collapsing the two would make one of them wrong. */
+export function clearLearnedWindow(): void {
+  LEARNED = 0
+  LEARNED_AT = 0
+}
 /** Fraction of the window at which we force consolidation. Must leave room for the reply + reasoning. */
 export function highWater(env: NodeJS.ProcessEnv = process.env): number {
   const n = Number(env.FABULA_CTX_HIGH_WATER)

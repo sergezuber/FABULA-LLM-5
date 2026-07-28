@@ -14,21 +14,47 @@
 // number.
 
 import { gate } from "./lib/manage"
-import { ensureLoadedAtPlannedWindow, syncEngineLimit } from "./lib/modelload"
+import { ensureLoadedAtPlannedWindow, syncEngineLimit, anyModelBusy } from "./lib/modelload"
+import { probeWindow } from "./lib/ctxguard"
 
 export const FabulaWindow = async () =>
   gate("window", {
     "chat.params": async (input: any) => {
       try {
-        if (process.env.FABULA_AUTO_WINDOW === "0") return
         const id = String(input?.model?.id ?? input?.model?.modelID ?? "")
         if (!id) return
         // Only a local model has a window we can set; a cloud endpoint has none to plan.
         const provider = String(input?.provider?.id ?? input?.model?.providerID ?? "")
         if (provider && !/lmstudio|local/i.test(provider)) return
+        // CORRECT THE ENGINE'S ARITHMETIC BEFORE IT IS USED. Everything the engine decides about size —
+        // when to prune, when to compact, how much it may send — is computed by overflow.ts `usable()`
+        // from `model.limit.context`, and that number comes from a config file somebody typed. When it
+        // disagrees with what the runtime actually loaded, the engine reasons confidently about a machine
+        // that does not exist: measured 2026-07-28, requests of 188 841 and 271 525 units went to a model
+        // holding 65 536, and the serving process died allocating cache for them ("the model has crashed").
+        //
+        // The model object arrives here BY REFERENCE, so a measured figure put in it is the figure every
+        // later decision uses — no restart, no second copy of the number, nothing written down. Silent
+        // when the probe cannot answer: an unmeasured limit is left exactly as the config had it.
+        const measured = await probeWindow().catch(() => 0)
+        const lim = (input as any)?.model?.limit
+        if (measured > 0 && lim && Number(lim.context) !== measured) {
+          const from = Number(lim.context) || 0
+          lim.context = measured
+          console.error(`[fabula-window] engine context limit ${from} -> ${measured} (measured from the runtime)`)
+        }
+
+        // FABULA_AUTO_WINDOW governs LOADING a model, which is the risky half. Correcting a number the
+        // engine is about to compute with is neither risky nor optional — a kill switch that silences it
+        // leaves the engine sizing requests against a machine that does not exist.
+        if (process.env.FABULA_AUTO_WINDOW === "0") return
         if (seen.has(id)) return
         seen.add(id)
-        const r = await ensureLoadedAtPlannedWindow(id)
+        // NEVER act while a turn is running. A reload unloads the model, and a model that is BUSY cannot
+        // be unloaded — the failure was swallowed and a SECOND copy was loaded on top, which took the
+        // machine into swap and killed the run that was in flight. The hook fires as a turn STARTS, so
+        // "quiet" here means: nothing was already generating when we arrived.
+        const r = await ensureLoadedAtPlannedWindow(id, { quiet: async () => !(await anyModelBusy()) })
         // The engine log is the channel a maintainer reads; the reader of the chat never sees this.
         console.error(`[fabula-window] ${id}: ${r.acted ? "LOADED" : "no action"} — ${r.reason}`)
         // The engine keeps its OWN idea of the window in the launch config and prunes against it. That

@@ -31,6 +31,19 @@ const LIB_DIR = join(PLUGIN_DIR, "lib")
  * and production is the thing that has cost this project four times.
  */
 const DECLARED_UNREACHABLE: Record<string, string> = {
+  // The app-shutdown reap. Its caller is the SWIFT side (FabulaApp.swift), which reads the registry file
+  // and kills the pids itself rather than starting a runtime to call in here — so no TypeScript path
+  // reaches it, and none should. Kept because the rule it encodes ("when the app stops, everything it
+  // started stops") belongs beside the registry it acts on, and because the tests exercise it against
+  // real processes, which is what proves the thing actually dies.
+  "childreg.ts:reapAll": "called from the app's own shutdown path in Swift, which reads the registry file directly",
+
+  // Written for the moment a model is deliberately reloaded and the measured ceiling stops being true.
+  // Nothing reloads a model mid-process today, so nothing calls it; it exists so that when something
+  // does, the alternative is not `setLearnedWindow(0)` — which deliberately means "a probe reported
+  // nothing useful" and must never shrink the window. Collapsing those two would make one of them wrong.
+  "ctxguard.ts:clearLearnedWindow": "the explicit forget-it, kept distinct from a probe that answered nothing",
+
   // The UI carries its own twin of these (packages/ui/src/components/harness-steer.ts) because the
   // plugins and the frontend are separate build graphs and cannot share a module. The plugin side only
   // ever APPLIES the marker; reading it back is the frontend's job, so these two have no plugin caller

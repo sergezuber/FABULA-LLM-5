@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.52.0"
+export const FABULA_VERSION = "0.53.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.53.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "FABULA перестала рассуждать о размерах по числу из настроек. Когда решать пора — сокращать историю, сжимать её, сколько можно отправить — считалось от значения, которое кто-то однажды вписал в файл. Оно расходилось с тем, что модель на самом деле держит: замерено, запросы на 188 841 и 271 525 единиц уходили к модели с окном 65 536, и сервер умирал, выделяя под них память — то самое «модель упала». Теперь настоящий предел спрашивается у сервера перед каждым решением и подставляется на место записанного. Если спросить не удалось и ничего не запомнено — записанное остаётся нетронутым.",
+        en: "FABULA no longer reasons about size from a number in a settings file. Every decision about when to trim history, when to compress it and how much may be sent was computed from a figure somebody typed once. It disagreed with what the model actually holds: measured, requests of 188 841 and 271 525 units went to a model with a 65 536 window, and the server died allocating memory for them — the 'model has crashed' you saw. The real limit is now read from the server before those decisions and put in place of the written one. When it cannot be read and nothing is remembered, the written figure is left untouched.",
+      },
+    ],
+  },
   {
     version: "0.52.0",
     date: "2026-07-28",

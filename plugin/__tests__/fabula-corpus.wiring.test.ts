@@ -130,7 +130,11 @@ test("TRAVERSAL: reading a corpus fires the worker with no word ever matched", a
   const fakeBun = join(dir, "fake-bun.sh")
   writeFileSync(fakeBun, `#!/bin/sh\nprintf '%s\\n' "$@" > ${JSON.stringify(marker)}\nexit 0\n`)
   chmodSync(fakeBun, 0o755)
-  for (let i = 0; i < 20; i++) writeFileSync(join(dir, `ch${i}.md`), "x")
+  // The chapters live in a SUBFOLDER and the agent reads them there, exactly as it did live. The verdict
+  // must name the working directory it was given, not the folder it happened to walk into — which also
+  // means the file count has to see below the top level or the root looks smaller than its own child.
+  mkdirSync(join(dir, "chapters"), { recursive: true })
+  for (let i = 0; i < 20; i++) writeFileSync(join(dir, "chapters", `ch${i}.md`), "x")
   const prevBun = process.env.FABULA_BUN_BIN
   const prevWin = process.env.FABULA_CONTEXT_WINDOW
   process.env.FABULA_BUN_BIN = fakeBun
@@ -144,13 +148,13 @@ test("TRAVERSAL: reading a corpus fires the worker with no word ever matched", a
     for (let i = 0; i < 6; i++) {
       await h["tool.execute.after"](
         { sessionID: "s_walk", tool: "view" },
-        { args: { file_path: join(dir, `ch${i}.md`) }, output: body },
+        { args: { file_path: join(dir, "chapters", `ch${i}.md`) }, output: body },
       )
     }
     for (let i = 0; i < 40 && !existsSync(marker); i++) await new Promise((r) => setTimeout(r, 50))
     expect(existsSync(marker)).toBe(true) // the traversal itself launched the worker
     const argv = readFileSync(marker, "utf8").trim().split("\n")
-    expect(argv[1]).toBe(dir)
+    expect(argv[1]).toBe(dir) // the working directory, not dir/chapters
     expect(argv[2]).toBe("s_walk")
   } finally {
     if (prevBun === undefined) delete process.env.FABULA_BUN_BIN

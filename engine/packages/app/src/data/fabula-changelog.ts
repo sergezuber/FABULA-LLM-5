@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.63.0"
+export const FABULA_VERSION = "0.64.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.64.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Разбирается та папка, на которую вы указали, а не та, куда агент заглянул по дороге. Дважды на живом прогоне он заходил в подпапку со снимками экрана, набирал материал там — и работа шла по ней, пока рядом лежали непрочитанные главы. Подпапка рабочей папки — часть той же работы, а не соперник ей. Заодно файлы под папкой считаются вглубь: при счёте по верхнему уровню корень выглядел меньше собственного ребёнка, из-за чего папка снимков и обходила книгу.",
+        en: "The folder taken apart is the one you pointed at, not the one the agent stepped into along the way. Twice on live runs it walked into a screenshots subfolder, took its material in there, and the work followed it while unread chapters sat alongside. A subfolder of the working directory belongs to the same job rather than competing with it. Files beneath a folder are also counted downward now: counted only at the top level, a root looked smaller than its own child, which is how a screenshots folder came to outrank a book.",
+      },
+    ],
+  },
   {
     version: "0.63.0",
     date: "2026-07-28",

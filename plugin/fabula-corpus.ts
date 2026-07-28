@@ -29,7 +29,7 @@ import { registerChild, unregisterChild, reapOrphans } from "./lib/childreg"
 import { isCorpusAnalysisTask, accumulatorKey } from "./lib/corpus"
 import { initTraversal, observeRead, traversalVerdict } from "./lib/traversal"
 import { probeWindow } from "./lib/ctxguard"
-import { dirname } from "node:path"
+import { dirname, join } from "node:path"
 import { readdirSync } from "node:fs"
 
 /** The file a read-family call actually pulled into the context, or nothing. Tools are named differently
@@ -44,9 +44,21 @@ function readTargetOf(tool: unknown, args: any): string {
 
 /** How many readable files that directory holds. Unknown (unreadable, gone) counts as zero, and zero
  *  never fires the verdict — an unmeasured quantity must not restructure somebody's turn. */
-function countReadableFiles(dir: string): number {
+function countReadableFiles(dir: string, depth = 2): number {
+  // RECURSIVE, because the working directory must not look smaller than a folder inside it. Counting one
+  // level made a subfolder of ten outrank a tree of fifty-two, which is how a screenshots folder came to
+  // stand in for a book. Bounded depth: this runs on a tool result, and walking an entire disk to answer
+  // it would cost more than the decision is worth.
   try {
-    return readdirSync(dir).filter((f) => /\.(md|txt|rst|org|tex|html?)$/i.test(f)).length
+    let n = 0
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (e.isDirectory()) {
+        if (depth > 0 && !e.name.startsWith(".")) n += countReadableFiles(join(dir, e.name), depth - 1)
+        continue
+      }
+      if (/\.(md|txt|rst|org|tex|html?)$/i.test(e.name)) n++
+    }
+    return n
   } catch {
     return 0
   }
@@ -126,7 +138,7 @@ export const FabulaCorpus: Plugin = async (pluginInput) =>
         observeRead(t.state, { dir: dirname(file), path: file, chars: String(output?.output ?? "").length })
         // The window is MEASURED from the runtime, never assumed; unmeasured decides nothing.
         const windowTokens = await probeWindow().catch(() => 0)
-        const v = traversalVerdict(t.state, { windowTokens, filesInDir: countReadableFiles })
+        const v = traversalVerdict(t.state, { windowTokens, filesInDir: countReadableFiles, taskRoot: pluginInput?.directory })
         if (!v.offload) return
         t.fired = true
         console.error(`[fabula-corpus] traversal: ${v.reason}`)

@@ -129,3 +129,47 @@ describe("traversalVerdict — which body of material, when several are in play"
     expect(v.dir).toBe("/book")
   })
 })
+
+// The live case, twice over: the agent walked into a screenshots subfolder and never reached the
+// chapters, so that subfolder was the ONLY directory with reads in it — and naming it was correct by a
+// per-folder rule and useless to the reader. The working directory is the body they pointed at.
+describe("traversalVerdict — a subfolder walked into is part of the same job", () => {
+  const walkedIntoSubfolder = () => {
+    const s = initTraversal()
+    for (let i = 0; i < 5; i++) observeRead(s, { dir: "/book/shots", path: `/book/shots/s${i}.md`, chars: 50_000 })
+    return s
+  }
+  // The root holds everything beneath it; the subfolder holds ten.
+  const sizes = (d: string) => (d === "/book" ? 62 : 10)
+
+  test("names the working directory, not the subfolder the agent happened to enter", () => {
+    const v = traversalVerdict(walkedIntoSubfolder(), { windowTokens: 100_000, filesInDir: sizes, taskRoot: "/book" })
+    expect(v.offload).toBe(true)
+    expect(v.dir).toBe("/book")
+    expect(v.filesRemaining).toBe(57)
+  })
+
+  test("without a working directory it still answers, with what it has", () => {
+    const v = traversalVerdict(walkedIntoSubfolder(), { windowTokens: 100_000, filesInDir: sizes })
+    expect(v.offload).toBe(true)
+    expect(v.dir).toBe("/book/shots")
+  })
+
+  test("a directory elsewhere on disk can still win on its own merits", () => {
+    const s = walkedIntoSubfolder()
+    for (let i = 0; i < 8; i++) observeRead(s, { dir: "/other", path: `/other/f${i}.md`, chars: 5_000 })
+    const v = traversalVerdict(s, {
+      windowTokens: 100_000,
+      filesInDir: (d) => (d === "/other" ? 900 : d === "/book" ? 62 : 10),
+      taskRoot: "/book",
+    })
+    expect(v.dir).toBe("/other")
+  })
+
+  test("the working directory is not conjured up when nothing under it was read", () => {
+    const s = initTraversal()
+    for (let i = 0; i < 6; i++) observeRead(s, { dir: "/elsewhere", path: `/elsewhere/f${i}`, chars: 40_000 })
+    const v = traversalVerdict(s, { windowTokens: 100_000, filesInDir: () => 60, taskRoot: "/book" })
+    expect(v.dir).toBe("/elsewhere")
+  })
+})

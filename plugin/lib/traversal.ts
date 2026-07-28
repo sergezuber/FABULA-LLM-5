@@ -84,6 +84,10 @@ export interface VerdictOpts {
   windowTokens: number
   /** How many files that directory holds in total. Absent means unknown. */
   filesInDir?: (dir: string) => number
+  /** The directory the turn is working in — the body of material the reader actually pointed at. A
+   *  subfolder walked into along the way belongs to this job, not to a separate one. Absent means the
+   *  harness does not know, and then only the directories actually read are considered. */
+  taskRoot?: string
   materialShare?: number
   minFiles?: number
   charsPerToken?: number
@@ -131,8 +135,31 @@ export function traversalVerdict(st: TraversalState, o: VerdictOpts): Verdict {
   // about the work, and the honest answer is the largest one still unfinished. Ranking by bytes already
   // read would answer "whichever folder held the fattest files" — a folder of images beats a book on
   // that measure and is almost never the thing being studied.
+  // THE JOB IS THE ONE THE READER POINTED AT. Measured live twice, 2026-07-28: the agent walked into a
+  // screenshots subfolder first, five files put the turn over its budget, and the verdict named that
+  // subfolder — correctly by a per-folder rule, and uselessly, because fifty-two chapters sat unread one
+  // level up. A subfolder of the working directory is part of the same body of material, not a rival to
+  // it. So the working directory is offered as a candidate in its own right, standing for everything
+  // read beneath it; it wins only on the same measure as any other candidate — the most work left —
+  // which keeps a genuinely separate directory elsewhere on disk able to win on its own merits.
+  const candidates: { dir: string; read: number; total: number }[] = []
+  const root = o.taskRoot
+  if (root) {
+    let readUnder = 0
+    for (const [dir, t] of st.byDir) if (dir === root || dir.startsWith(root + "/")) readUnder += t.paths.size
+    const totalUnder = o.filesInDir?.(root) ?? 0
+    if (readUnder > 0 && totalUnder > 0) candidates.push({ dir: root, read: readUnder, total: totalUnder })
+  }
+
   let target: { dir: string; read: number; remaining: number; scope: number } | undefined
   let blocked: Verdict | undefined
+  for (const c of candidates) {
+    if (c.read < minFiles) continue
+    const remaining = c.total > c.read ? c.total - c.read : 0
+    if (remaining <= 0) continue
+    const scope = c.read + remaining
+    if (!target || scope > target.scope) target = { dir: c.dir, read: c.read, remaining, scope }
+  }
   for (const [dir, t] of st.byDir) {
     const read = t.paths.size
     if (read < minFiles) continue

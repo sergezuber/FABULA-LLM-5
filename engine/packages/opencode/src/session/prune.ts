@@ -356,13 +356,22 @@ export const layer: Layer.Layer<
       // Iterate by INDEX: `already` is keyed by the RESOLVED (baseline-independent) threshold, while the
       // comparison uses the rescaled one. Keying the set by the rescaled value would let a lowered
       // baseline shift every key and re-fire checkpoints the session had already taken.
+      // Collect every threshold this call newly crosses, claiming each one SYNCHRONOUSLY so the next step
+      // of the same turn cannot claim it again. One call can cross several at once: a step that adds a
+      // large tool result jumped 56 379 -> 94 275 on a 135 168 window, clearing all four default
+      // thresholds together.
+      const newlyCrossed: { t: number; key: number }[] = []
       for (let i = 0; i < thresholds.length; i++) {
         const t = thresholds[i]
         const key = resolved[i]
         if (currentTokens < t) break // sorted ascending; nothing more to trigger
         if (already.has(key)) continue
+        already.add(key)
+        newlyCrossed.push({ t, key })
+      }
 
-        // CLAIM THE THRESHOLD NOW, WAIT FOR QUIET ELSEWHERE.
+      if (newlyCrossed.length > 0) {
+        // ONE WAITER FOR THE WHOLE BATCH, WAITING OFF THE TURN'S PATH.
         //
         // The writer is a full model run, and running it inside the user's turn made it compete for the
         // single inference slot. Measured 2026-07-27: over fifteen minutes the writers produced ten
@@ -384,18 +393,24 @@ export const layer: Layer.Layer<
         // runs detached, so the turn proceeds immediately and the writer starts once the machine is
         // genuinely quiet, which for this session means after the turn ends.
         //
-        // The threshold is claimed SYNCHRONOUSLY so each crossing forks one waiter rather than one per
-        // step, and handed back if quiet never comes — preserving the old rule that a skipped checkpoint
-        // is retried at the next crossing rather than lost. `maxCrossed` stays inside the fiber, after a
-        // writer actually starts: it triggers a rebuild that discards conversation and restores from a
-        // checkpoint, so setting it without a writer would discard with nothing to restore from.
-        already.add(key)
-
+        // ONE waiter for the batch, not one per threshold. The old loop was sequential, so a second
+        // tryStartCheckpointWriter saw the first writer already holding the slot and queued behind it.
+        // Waiters that wait concurrently do not serialise like that: forked per threshold, all four woke
+        // together the moment the turn ended and raced past the single-writer guard — measured 2026-07-28,
+        // four checkpoint-writer subagents streaming at once against the one inference slot, which is a
+        // worse version of the competition this wait exists to prevent. One crossing batch describes one
+        // conversation, so it wants one summary however many bars it cleared at once.
+        //
+        // Thresholds are claimed SYNCHRONOUSLY above and handed back below if quiet never comes —
+        // preserving the old rule that a skipped checkpoint is retried at the next crossing rather than
+        // lost. `maxCrossed` is set only after a writer actually starts: it triggers a rebuild that
+        // discards conversation and restores from a checkpoint, so setting it without a writer would
+        // discard with nothing to restore from.
         yield* Effect.gen(function* () {
           if (!(yield* waitForQuiet(sessionStatus))) {
-            already.delete(key)
+            for (const c of newlyCrossed) already.delete(c.key)
             log.info("checkpoint writer deferred — foreground never went quiet", { sessionID: input.sessionID })
-            trace("ckpt.deferred", { sid: input.sessionID, threshold: key })
+            for (const c of newlyCrossed) trace("ckpt.deferred", { sid: input.sessionID, threshold: c.key })
             return
           }
 
@@ -448,9 +463,10 @@ export const layer: Layer.Layer<
             }).pipe(Effect.forkDetach)
           }
 
-          log.info("checkpoint triggered", { threshold: t, currentTokens })
-
-          if (t === maxThreshold) maxCrossed.add(input.sessionID)
+          for (const c of newlyCrossed) {
+            log.info("checkpoint triggered", { threshold: c.t, currentTokens })
+            if (c.t === maxThreshold) maxCrossed.add(input.sessionID)
+          }
         }).pipe(Effect.forkDetach)
       }
     })

@@ -396,6 +396,39 @@ describe("SessionPrune.fireCheckpoints writer-failure retry", () => {
     )
   }, 30_000)
 
+  // ONE CONVERSATION WANTS ONE SUMMARY.
+  //
+  // A single step can clear several bars at once — a large tool result took a live session from 56 379 to
+  // 94 275 on a 135 168 window, past all four defaults together. Waiting per threshold meant four waiters
+  // that all woke the moment the turn ended and raced past the single-writer guard: measured 2026-07-28,
+  // four checkpoint-writer subagents streaming at once against the one inference slot.
+  test("several thresholds crossed at once start one writer, not one each", async () => {
+    const harness = makeRetryHarness()
+    const promptOps = {} as any
+
+    await runWithHarness(
+      harness,
+      Effect.gen(function* () {
+        const svc = yield* SessionPrune.Service
+        const ssn = yield* SessionNs.Service
+        const info = yield* ssn.create({})
+        const model = createModel({ context: 100_000, output: 32_000 })
+        const at = (input: number) => ({ input, output: 0, reasoning: 0, cache: { read: 0, write: 0 } })
+
+        // Establish the prompt baseline low, the way a real first turn does.
+        yield* svc.fireCheckpoints({ sessionID: info.id, model, tokens: at(1_000), promptOps })
+        yield* Effect.sleep(200)
+        expect(harness.state.enqueueCount).toBe(0)
+
+        // Now jump past every threshold in one step.
+        yield* svc.fireCheckpoints({ sessionID: info.id, model, tokens: at(95_000), promptOps })
+        yield* Effect.sleep(400)
+        expect(harness.state.enqueueCount).toBe(1)
+      }),
+      { checkpoint: { thresholds: ["20%", "40%", "60%", "80%"] } },
+    )
+  })
+
   test("success outcome resets failure counter", async () => {
     const harness = makeRetryHarness()
     const promptOps = {} as any

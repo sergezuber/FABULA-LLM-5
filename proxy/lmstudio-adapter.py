@@ -545,6 +545,17 @@ class Handler(BaseHTTPRequestHandler):
                     # added them up.
                     _est_in = estimate_tokens(body) if body else 0
                     _cap = derived_output_cap(j.get("model"), _est_in)
+                    # THE CLAIM THIS FILE MAKES, WRITTEN DOWN IN ONE UNIT. Everything here is tokens: what
+                    # the request occupies, what it may generate, and what the runtime loaded. The defect
+                    # that produced this line was an addition nobody performed; the line performs it out
+                    # loud so the next reader does not have to trust anyone's summary — including mine,
+                    # which was wrong five times today for want of exactly this.
+                    _w_now = effective_window(j.get("model"))
+                    if _w_now > 0:
+                        sys.stderr.write(
+                            "[fabula-adapter] BUDGET tokens in=%d + out<=%d = %d of window %d %s\n"
+                            % (_est_in, _cap, _est_in + _cap, _w_now,
+                               "OK" if _est_in + _cap <= _w_now else "OVER"))
                     if _cap > 0:
                         cur = j.get("max_tokens")
                         newv = _cap if not isinstance(cur, int) else min(cur, _cap)

@@ -18,6 +18,7 @@ import { Effect, Layer, Context } from "effect"
 import { InstanceState } from "@/effect"
 import { isOverflow as overflow, usable } from "./overflow"
 import { planFold, foldContinuation } from "./compaction-fold"
+import { mechanicalSummary } from "./compaction-fallback"
 import { makeRuntime } from "@/effect/run-service"
 import { fn } from "@/util/fn"
 import { trace } from "./trace"
@@ -484,12 +485,32 @@ export const layer: Layer.Layer<
         hijacked = attempt.result === "text-repeat" || summaryLooksHijacked(summaryText(msg.id))
         trace("compaction.retry", { sid: input.sessionID, hijacked })
         if (hijacked) {
-          attempt.processor.message.error = new MessageV2.AbortedError(
-            { message: "Compaction failed: the summarizer kept continuing the task instead of summarizing" },
-          ).toObject()
-          attempt.processor.message.finish = "error"
+          // TWICE HIJACKED, SO STOP ASKING. Killing the turn here is what the reader met as a red error at
+          // the moment they were waiting for an answer, and everything the run had read went with it
+          // (measured 2026-07-28). A model that will not summarise cannot be talked into it by a third
+          // request — but a summary does not have to come from a model. What follows is assembled from what
+          // the conversation demonstrably contains: the words the user used, the tools that ran, the files
+          // touched, where it stood. Duller prose, always available, impossible to hijack because nothing
+          // is asked of anyone. Losing eloquence beats losing the work.
+          const summary = mechanicalSummary(msgs as any)
+          log.info("compaction hijacked twice; assembling a summary instead of failing the turn", {
+            sessionID: input.sessionID,
+            chars: summary.length,
+          })
+          // Written through the session, the way every other part in this file is. The hijacked attempt's
+          // own text is left where it is: it is a record of what happened, and the reader of the next turn
+          // reads the summary below it, not that.
+          yield* session.updatePart({
+            id: PartID.ascending(),
+            messageID: attempt.processor.message.id,
+            sessionID: input.sessionID,
+            type: "text",
+            text: summary,
+          } as any)
+          attempt.processor.message.error = undefined
+          attempt.processor.message.finish = "stop"
           yield* session.updateMessage(attempt.processor.message)
-          return "stop"
+          hijacked = false
         }
       }
 

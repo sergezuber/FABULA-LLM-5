@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.57.0"
+export const FABULA_VERSION = "0.58.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.58.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Работа больше не пропадает, если сжатие не удалось. Когда история становится длинной, её просят сократить — но, читая разговор, полный указаний «прочти главы», модель иногда продолжала читать вместо того чтобы сокращать. FABULA это замечала, просила ещё раз, а после второй неудачи прекращала ход красной ошибкой — и всё прочитанное пропадало ровно в тот момент, когда вы ждали ответа. Теперь после второй неудачи сводка собирается из того, что в разговоре и так есть: ваши слова, какие файлы открывались, чем всё закончилось. Суше, зато всегда есть, и подменить её нечем — ни у кого ничего не спрашивают.",
+        en: "Work is no longer lost when compression fails. As a history grows long the model is asked to shorten it — but reading a conversation full of instructions to read chapters, it sometimes kept reading instead of shortening. FABULA noticed, asked again, and after a second failure ended the turn with a red error, losing everything already read at exactly the moment you were waiting for an answer. After a second failure the summary is now assembled from what the conversation already contains: your own words, which files were opened, where things stood. Drier, but always available, and impossible to derail because nothing is asked of anyone.",
+      },
+    ],
+  },
   {
     version: "0.57.0",
     date: "2026-07-28",

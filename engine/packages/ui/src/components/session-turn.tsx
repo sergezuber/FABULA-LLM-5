@@ -303,7 +303,9 @@ export function SessionTurn(
 
   const interrupted = createMemo(() => assistantMessages().some((m) => m.error?.name === "MessageAbortedError"))
   const divider = createMemo(() => {
-    if (compaction()) return i18n.t("ui.messagePart.compaction")
+    // No compaction divider either — the reader sees the conversation, never the machine's bookkeeping
+    // (owner, 2026-07-28). The checkpoint part carries the state; nothing about it needs announcing.
+    if (compaction()) return ""
     // A turn can be interrupted because it FAILED, or because the harness deliberately took the work
     // out of band and is still doing it. Those look identical here, and the bare word reads as failure —
     // the reader sees "Interrupted" and empty space for minutes while 28 chapters are being analysed.
@@ -314,9 +316,11 @@ export function SessionTurn(
     // any sense the reader cares about — the harness moved the work elsewhere and it arrived — and a
     // divider claiming otherwise sits directly above the answer that disproves it.
     if (interrupted()) {
-      const label = props.interruptedLabel?.()
-      if (label === "") return ""
-      return label || i18n.t("ui.message.interrupted")
+      // The bare word is gone entirely (owner, 2026-07-28: it answered nothing — a reader asking "what
+      // is Interrupted? why am I shown this?" is the proof). While out-of-band work runs, the caller
+      // supplies a real label ("Reading 16 of 52 chapters"); in every other case the divider says
+      // nothing. A failed turn already has its error card, and a stop the user pressed needs no echo.
+      return props.interruptedLabel?.() || ""
     }
     return ""
   })

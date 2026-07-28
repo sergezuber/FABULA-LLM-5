@@ -1462,66 +1462,14 @@ export function MessageDivider(props: { label: string }) {
   )
 }
 
-PART_MAPPING["compaction"] = function CompactionPartDisplay(props) {
-  const data = useData()
-  const i18n = useI18n()
-  const summaryMessage = createMemo(() => {
-    const messages = data.store.message?.[props.message.sessionID] ?? []
-    return messages.find(
-      (m) =>
-        m.role === "assistant" &&
-        (m as AssistantMessage).summary === true &&
-        (m as AssistantMessage).parentID === props.message.id,
-    ) as AssistantMessage | undefined
-  })
-  const busy = createMemo(() => {
-    const status = data.store.session_status?.[props.message.sessionID]
-    return !!status && status.type !== "idle"
-  })
-  const state = createMemo(() => {
-    const msg = summaryMessage()
-    if (msg?.error) return "failed"
-    if (msg?.time.completed) return "done"
-    if (msg || busy()) return "running"
-    return "failed"
-  })
-  const retry = () => window.dispatchEvent(new CustomEvent("fabula:compact-retry"))
-  return (
-    <Switch>
-      <Match when={state() === "running"}>
-        <div data-component="compaction-part">
-          <div data-slot="compaction-part-divider">
-            <span data-slot="compaction-part-line" />
-            <span data-slot="compaction-part-label" class="text-12-regular text-text-weak animate-pulse">
-              {i18n.t("ui.messagePart.compaction.running")}
-            </span>
-            <span data-slot="compaction-part-line" />
-          </div>
-        </div>
-      </Match>
-      <Match when={state() === "failed"}>
-        <div data-component="compaction-part">
-          <div data-slot="compaction-part-divider">
-            <span data-slot="compaction-part-line" />
-            <span data-slot="compaction-part-label" class="text-12-regular text-text-weak">
-              {i18n.t("ui.messagePart.compaction.failed")}
-              <button
-                type="button"
-                class="ml-2 underline decoration-dotted text-text-base cursor-pointer"
-                onClick={retry}
-              >
-                {i18n.t("ui.messagePart.compaction.retry")}
-              </button>
-            </span>
-            <span data-slot="compaction-part-line" />
-          </div>
-        </div>
-      </Match>
-      <Match when={true}>
-        <MessageDivider label={i18n.t("ui.messagePart.compaction")} />
-      </Match>
-    </Switch>
-  )
+PART_MAPPING["compaction"] = function CompactionPartDisplay() {
+  // NOTHING. The reader asked what the book was about; the chat answered with "Session compacted",
+  // "Compacting context…" and "Compaction did not finish · Retry" — the machine describing its own
+  // digestion, three different ways (owner, 2026-07-28: the chat is for answers, machinery goes to the
+  // log). The engine already retries a failed compaction and falls back to the deterministic rebuild
+  // boundary on its own, so the Retry button duplicated an automatic path. State remains in the log and
+  // the trace; the conversation shows the conversation.
+  return null
 }
 
 PART_MAPPING["text"] = function TextPartDisplay(props) {

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.56.0"
+export const FABULA_VERSION = "0.57.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.57.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Найдена настоящая причина падений — и она оказалась сложением. Окно модели вмещает и вопрос, и ответ вместе, а место под ответ просилось всегда одинаковое: четверть окна, сколько бы ни занимал сам вопрос. Замерено: вопрос на 133 385 при окне 135 168 помещался свободно, но вместе с запрошенной четвертью выходило 167 177 — и сервер умирал при выделении. Каждая часть по отдельности выглядела разумной, просто никто их не складывал. Теперь место под ответ считается из того, что осталось свободным, с запасом на неточность подсчёта.",
+        en: "The real cause of the crashes turned out to be an addition. A model's window holds the question and the answer together, while the room asked for the answer was always the same: a quarter of the window, however much the question already took. Measured: a question of 133 385 fit comfortably in a 135 168 window, but together with the quarter it asked for it came to 167 177 — and the server died allocating. Each part looked reasonable on its own; nobody added them up. The room for an answer is now computed from what is actually left free, with a margin for the estimate being inexact.",
+      },
+    ],
+  },
   {
     version: "0.56.0",
     date: "2026-07-28",

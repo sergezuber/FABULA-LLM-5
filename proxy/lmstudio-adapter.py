@@ -225,14 +225,38 @@ def effective_window(model_id):
     note_window_shortfall(model_id)  # observe only; this function never reloads anything
     return CONTEXT_WINDOW if CONTEXT_WINDOW > 0 else loaded_window(model_id)
 
-def derived_output_cap(model_id):
-    """How much room to leave a single generation, DERIVED from the window rather than typed. A quarter of
-    the window keeps three quarters for the conversation, which is the ratio the context guard already
-    sheds at. 0 (unknown window, no override) means no clamp — the previous behaviour, unchanged."""
+# The share of a window a generation may claim when the request is small — a starting point, not a rule.
+# Written down because it is a judgement (how much of an empty window one answer deserves), while the
+# figure that actually governs is computed below from what the request leaves free.
+OUTPUT_SHARE_OF_EMPTY_WINDOW = 0.25
+
+
+def derived_output_cap(model_id, input_tokens=0):
+    """How much room a single generation may claim.
+
+    A WINDOW HOLDS THE REQUEST AND THE ANSWER TOGETHER, and the serving runtime reserves both at once.
+    Measured 2026-07-28: an input of 133 385 tokens fit comfortably inside a 135 168 window — and the
+    request still asked for a quarter of that window on top, 33 792 more, so 167 177 was demanded of a
+    135 168 machine. It died allocating, and what the reader saw was "the model has crashed". Every part
+    was individually reasonable: the input fit, the share was modest, nobody added them up.
+
+    So the ceiling is what the request LEAVES FREE, less a margin, and the fixed share applies only while
+    there is room to spare. 0 (unknown window, no override) still means no clamp, exactly as before.
+    """
     if MAX_OUTPUT_TOKENS > 0:
         return MAX_OUTPUT_TOKENS
     w = effective_window(model_id)
-    return max(1024, w // 4) if w > 0 else 0
+    if not (w > 0):
+        return 0
+    share = max(1024, int(w * OUTPUT_SHARE_OF_EMPTY_WINDOW))
+    if not (input_tokens > 0):
+        return share
+    # A tokenizer estimate is never exact, and a runtime keeps a little for itself; leave a tenth of the
+    # window unclaimed so being slightly wrong costs a shorter answer rather than a dead server.
+    free = int(w - input_tokens - w * 0.1)
+    if free < 256:
+        return 256          # something must be generatable, or the turn cannot even report the problem
+    return min(share, free)
 
 # Phase-0 context audit tap (Context OS §9): when set to a file path, the adapter atomically
 # writes the LAST /chat/completions request body there so context_audit.py can compute the
@@ -515,7 +539,12 @@ class Handler(BaseHTTPRequestHandler):
                     # FABULA_MAX_OUTPUT_TOKENS still wins; with neither an override nor a knowable window the
                     # request passes through untouched. A caller asking 32000 tokens of a 65536-token model
                     # needs this: prompt plus reply has to fit, and only the server knows the ceiling.
-                    _cap = derived_output_cap(j.get("model"))
+                    # The estimate is already computed a few lines below for the near-ceiling note; it is
+                    # needed HERE too, because a ceiling that ignores what the request already occupies is
+                    # the arithmetic that killed the server — input fit, the share was modest, and nobody
+                    # added them up.
+                    _est_in = estimate_tokens(body) if body else 0
+                    _cap = derived_output_cap(j.get("model"), _est_in)
                     if _cap > 0:
                         cur = j.get("max_tokens")
                         newv = _cap if not isinstance(cur, int) else min(cur, _cap)

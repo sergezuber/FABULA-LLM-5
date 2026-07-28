@@ -123,6 +123,14 @@ describe("SessionPrune.fireCheckpoints — system-spawn skip", () => {
             agentID: "checkpoint-writer-1",
           })
 
+          // The writer now starts on a DETACHED fiber, so that firing a checkpoint cannot block the
+
+          // user's turn. Let it settle before reading the count: without this pause a writer that has
+
+          // merely not started yet is indistinguishable from one the guard correctly skipped.
+
+          yield* Effect.sleep(100)
+
           expect(enqueueState.count).toBe(0)
         }),
       { config: { checkpoint: { thresholds: ["50%"] } } },
@@ -201,6 +209,14 @@ describe("SessionPrune.fireCheckpoints — system-spawn skip", () => {
             agentID: "explore-1",
           })
 
+          // The writer now starts on a DETACHED fiber, so that firing a checkpoint cannot block the
+
+          // user's turn. Let it settle before reading the count: without this pause a writer that has
+
+          // merely not started yet is indistinguishable from one the guard correctly skipped.
+
+          yield* Effect.sleep(100)
+
           expect(enqueueState.count).toBe(0)
         }),
       { config: { checkpoint: { thresholds: ["50%"] } } },
@@ -263,6 +279,14 @@ describe("SessionPrune.fireCheckpoints — system-spawn skip", () => {
             tokens,
             promptOps: {} as any,
           })
+
+          // The writer now starts on a DETACHED fiber, so that firing a checkpoint cannot block the
+
+          // user's turn. Let it settle before reading the count: without this pause a writer that has
+
+          // merely not started yet is indistinguishable from one the guard correctly skipped.
+
+          yield* Effect.sleep(100)
 
           expect(enqueueState.count).toBe(1)
         }),
@@ -341,6 +365,14 @@ describe("SessionPrune.fireCheckpoints — system-spawn skip", () => {
             promptOps: {} as any,
             agentID: "researcher-1",
           })
+
+          // The writer now starts on a DETACHED fiber, so that firing a checkpoint cannot block the
+
+          // user's turn. Let it settle before reading the count: without this pause a writer that has
+
+          // merely not started yet is indistinguishable from one the guard correctly skipped.
+
+          yield* Effect.sleep(100)
 
           expect(enqueueState.count).toBe(1)
         }),

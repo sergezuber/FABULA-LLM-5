@@ -18,6 +18,7 @@ import { testEffect } from "../lib/effect"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { ActorRegistry } from "../../src/actor/registry"
 import { SessionStatus } from "../../src/session/status"
+import { POLL_MS } from "../../src/session/background-defer"
 
 void Log.init({ print: false })
 
@@ -261,6 +262,9 @@ describe("SessionPrune.fireCheckpoints writer-failure retry", () => {
     const env = Layer.mergeAll(
       SessionNs.defaultLayer,
       CrossSpawnSpawner.defaultLayer,
+      // Exposed as well as provided, so a test can mark a session busy the way a real turn does.
+      // Layers memoize by reference, so prune sees the same instance the test writes to.
+      SessionStatus.defaultLayer,
       SessionPrune.layer.pipe(
         Layer.provide(SessionStatus.defaultLayer),
         Layer.provide(SessionNs.defaultLayer),
@@ -276,7 +280,7 @@ describe("SessionPrune.fireCheckpoints writer-failure retry", () => {
   // Helper: run a prune-layer effect inside a tmpdir + Instance context.
   function runWithHarness<A, E>(
     harness: ReturnType<typeof makeRetryHarness>,
-    body: Effect.Effect<A, E, SessionPrune.Service | SessionNs.Service>,
+    body: Effect.Effect<A, E, SessionPrune.Service | SessionNs.Service | SessionStatus.Service>,
     config?: Partial<Config.Info>,
   ): Promise<A> {
     return Effect.runPromise(
@@ -324,6 +328,73 @@ describe("SessionPrune.fireCheckpoints writer-failure retry", () => {
       { checkpoint: { thresholds: ["50%"] } },
     )
   })
+
+  // THE TURN MUST NOT WAIT ON ITSELF.
+  //
+  // fireCheckpoints is called from inside the run loop, which marks the session busy at the top of every
+  // iteration and holds it busy until the turn ends. The quiet-wait deliberately excludes nothing, so
+  // when it ran inline it waited on the very turn that was parked inside it: neither could move, and the
+  // call returned only at MAX_WAIT_MS. Measured live 2026-07-28 — a turn crossing its first threshold
+  // stopped for thirty minutes at 0% CPU with the app apparently frozen, and because the wait could
+  // never succeed, no main session had ever taken a checkpoint at all.
+  //
+  // These pin the observable contract rather than the arrangement: firing returns to the turn promptly,
+  // and the checkpoint still happens once the turn is over.
+  test("a busy session does not block its own turn", async () => {
+    const harness = makeRetryHarness()
+    const promptOps = {} as any
+
+    await runWithHarness(
+      harness,
+      Effect.gen(function* () {
+        const svc = yield* SessionPrune.Service
+        const ssn = yield* SessionNs.Service
+        const status = yield* SessionStatus.Service
+        const info = yield* ssn.create({})
+        const model = createModel({ context: 100_000, output: 32_000 })
+
+        // Exactly what prompt.ts does before calling fireCheckpoints in the same iteration.
+        yield* status.set(info.id, { type: "busy" })
+
+        const began = Date.now()
+        yield* svc.fireCheckpoints({ sessionID: info.id, model, tokens: makeTokens(), promptOps })
+        const elapsed = Date.now() - began
+
+        // One poll interval is already far longer than this should take; the bug spent 30 minutes here.
+        expect(elapsed).toBeLessThan(POLL_MS)
+      }),
+      { checkpoint: { thresholds: ["50%"] } },
+    )
+  })
+
+  test("the checkpoint the busy turn deferred still runs once the turn ends", async () => {
+    const harness = makeRetryHarness()
+    const promptOps = {} as any
+
+    await runWithHarness(
+      harness,
+      Effect.gen(function* () {
+        const svc = yield* SessionPrune.Service
+        const ssn = yield* SessionNs.Service
+        const status = yield* SessionStatus.Service
+        const info = yield* ssn.create({})
+        const model = createModel({ context: 100_000, output: 32_000 })
+
+        yield* status.set(info.id, { type: "busy" })
+        yield* svc.fireCheckpoints({ sessionID: info.id, model, tokens: makeTokens(), promptOps })
+
+        // Still busy: the writer must not compete with the turn for the one inference slot.
+        yield* Effect.sleep(100)
+        expect(harness.state.enqueueCount).toBe(0)
+
+        // Turn over. The waiter polls on POLL_MS, so give it a poll plus slack.
+        yield* status.set(info.id, { type: "idle" })
+        yield* Effect.sleep(POLL_MS + 500)
+        expect(harness.state.enqueueCount).toBe(1)
+      }),
+      { checkpoint: { thresholds: ["50%"] } },
+    )
+  }, 30_000)
 
   test("success outcome resets failure counter", async () => {
     const harness = makeRetryHarness()

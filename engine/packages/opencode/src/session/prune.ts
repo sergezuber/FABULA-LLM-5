@@ -349,6 +349,9 @@ export const layer: Layer.Layer<
 
       const already = crossed.get(input.sessionID) ?? new Set<number>()
       const maxThreshold = thresholds[thresholds.length - 1]
+      // Registered BEFORE the loop: the threshold waiters below run detached and hand a threshold back by
+      // mutating this set, so it must already be the one the map holds rather than a copy stored later.
+      crossed.set(input.sessionID, already)
 
       // Iterate by INDEX: `already` is keyed by the RESOLVED (baseline-independent) threshold, while the
       // comparison uses the rescaled one. Keying the set by the rescaled value would let a lowered
@@ -359,88 +362,97 @@ export const layer: Layer.Layer<
         if (currentTokens < t) break // sorted ascending; nothing more to trigger
         if (already.has(key)) continue
 
-        // WAIT FOR QUIET. The writer is a full model run and it was started from INSIDE the user's own
-        // turn, so it competed with that turn for the single inference slot. Measured 2026-07-27: over
-        // fifteen minutes the writers produced ten messages against the user's three, and every request
-        // to the model spent an average of 72 seconds queueing, the worst pinned at the 300-second
-        // ceiling. A request as small as "translate this" was not slow to compute — it was not being
-        // computed at all.
+        // CLAIM THE THRESHOLD NOW, WAIT FOR QUIET ELSEWHERE.
         //
-        // Same rule the self-improvement passes were given in v0.17.0, decided by the same module. That
-        // entry said checkpoint writers still shared the slot and named it the next step; this is it.
+        // The writer is a full model run, and running it inside the user's turn made it compete for the
+        // single inference slot. Measured 2026-07-27: over fifteen minutes the writers produced ten
+        // messages against the user's three, and requests to the model averaged 72 seconds of queueing.
+        // Waiting for quiet is the right answer to that. Waiting for it HERE was not.
         //
-        // NOTHING IS EXCLUDED from the wait, and that is the load-bearing detail. The writer runs in its
-        // OWN CHILD session (checkpoint.ts sets `parentID`), and `busy` is only ever set for the main
-        // agent (prompt.ts) — so the writer's own session can never block it, while the PARENT session,
-        // the user's turn, is exactly what must. An earlier draft passed `[input.sessionID]` as excluded
-        // and would have skipped the only session worth waiting on: correct mechanism, wired to miss.
+        // fireCheckpoints is called from inside the run loop (prompt.ts), which marks the session busy at
+        // the top of every iteration and holds it busy for the whole turn. So a wait that excludes nothing
+        // waits on the very turn that is parked inside this call: the turn cannot finish until the wait
+        // returns, and the wait cannot return until the turn finishes. Measured 2026-07-28 on a live run —
+        // the first threshold crossing (61 111 tokens against a 60 092 bar) stopped the turn dead for the
+        // full 30-minute MAX_WAIT_MS, at 0% CPU, and the reader saw an app that had simply stopped
+        // answering. Because the wait could never succeed, not one checkpoint was written by any session
+        // after cf6b3ea introduced it: the mechanism was inert and expensive at the same time. The newest
+        // checkpoint on the machine predated that commit.
         //
-        // Deferring is safe for the checkpoint: it summarises the conversation so far, so a later
-        // boundary carries MORE of it, never less, and `crossed` still prevents a second fire at the same
-        // threshold. The wait is bounded; if quiet never comes the checkpoint is skipped rather than
-        // forced, and the next threshold tries again.
-        if (!(yield* waitForQuiet(sessionStatus))) {
-          log.info("checkpoint writer deferred — foreground never went quiet", { sessionID: input.sessionID })
-          trace("ckpt.deferred", { sid: input.sessionID, threshold: key })
-          continue
-        }
-
-        const outcome = yield* checkpoint
-          .tryStartCheckpointWriter({
-            sessionID: input.sessionID,
-            model: { providerID: input.model.providerID, modelID: input.model.id },
-            promptOps: input.promptOps,
-          })
-          .pipe(Effect.catch(() => Effect.succeed<"started" | "queued" | "skipped">("skipped")))
-
-        if (outcome === "started") {
-          // Fork a watcher that settles after the detached writer fiber
-          // finishes. On success, clear the failure counter. On failure,
-          // increment the counter; if below MAX_WRITER_FAILURES, clear the
-          // session's crossed thresholds so the next iteration retries.
-          //
-          // Known narrow race: between tryStartCheckpointWriter returning "started" and
-          // the watcher's forkDetach scheduling, a very-fast writer fiber can
-          // complete and delete itself from the writers map. waitForWriter
-          // then returns "no-writer" and the watcher exits without touching
-          // the counter. Impact is low — real writers run an LLM round-trip
-          // (seconds) vs. microseconds to schedule the fork, so observable
-          // failures tick the counter in practice. Proper fix: have
-          // tryStartCheckpointWriter return the Deferred handle so the watcher doesn't
-          // re-read the writers map.
-          yield* Effect.gen(function* () {
-            const result = yield* checkpoint.waitForWriter(input.sessionID)
-            if (result === "success") {
-              writerFailures.delete(input.sessionID)
-              return
-            }
-            if (result !== "failure") return
-            const next = (writerFailures.get(input.sessionID) ?? 0) + 1
-            writerFailures.set(input.sessionID, next)
-            if (next < maxFailures) {
-              crossed.delete(input.sessionID)
-              maxCrossed.delete(input.sessionID)
-              log.info("checkpoint writer failed — cleared thresholds for retry", {
-                sessionID: input.sessionID,
-                attempt: next,
-                maxAttempts: maxFailures,
-              })
-            } else {
-              log.warn("checkpoint writer gave up after max consecutive failures", {
-                sessionID: input.sessionID,
-                maxAttempts: maxFailures,
-              })
-            }
-          }).pipe(Effect.forkDetach)
-        }
-
+        // The wait itself is unchanged and still excludes nothing — a checkpoint must not start while the
+        // user is generating, and that includes this very turn. What changed is who does the waiting: it
+        // runs detached, so the turn proceeds immediately and the writer starts once the machine is
+        // genuinely quiet, which for this session means after the turn ends.
+        //
+        // The threshold is claimed SYNCHRONOUSLY so each crossing forks one waiter rather than one per
+        // step, and handed back if quiet never comes — preserving the old rule that a skipped checkpoint
+        // is retried at the next crossing rather than lost. `maxCrossed` stays inside the fiber, after a
+        // writer actually starts: it triggers a rebuild that discards conversation and restores from a
+        // checkpoint, so setting it without a writer would discard with nothing to restore from.
         already.add(key)
-        log.info("checkpoint triggered", { threshold: t, currentTokens })
 
-        if (t === maxThreshold) maxCrossed.add(input.sessionID)
+        yield* Effect.gen(function* () {
+          if (!(yield* waitForQuiet(sessionStatus))) {
+            already.delete(key)
+            log.info("checkpoint writer deferred — foreground never went quiet", { sessionID: input.sessionID })
+            trace("ckpt.deferred", { sid: input.sessionID, threshold: key })
+            return
+          }
+
+          const outcome = yield* checkpoint
+            .tryStartCheckpointWriter({
+              sessionID: input.sessionID,
+              model: { providerID: input.model.providerID, modelID: input.model.id },
+              promptOps: input.promptOps,
+            })
+            .pipe(Effect.catch(() => Effect.succeed<"started" | "queued" | "skipped">("skipped")))
+
+          if (outcome === "started") {
+            // Fork a watcher that settles after the detached writer fiber
+            // finishes. On success, clear the failure counter. On failure,
+            // increment the counter; if below MAX_WRITER_FAILURES, clear the
+            // session's crossed thresholds so the next iteration retries.
+            //
+            // Known narrow race: between tryStartCheckpointWriter returning "started" and
+            // the watcher's forkDetach scheduling, a very-fast writer fiber can
+            // complete and delete itself from the writers map. waitForWriter
+            // then returns "no-writer" and the watcher exits without touching
+            // the counter. Impact is low — real writers run an LLM round-trip
+            // (seconds) vs. microseconds to schedule the fork, so observable
+            // failures tick the counter in practice. Proper fix: have
+            // tryStartCheckpointWriter return the Deferred handle so the watcher doesn't
+            // re-read the writers map.
+            yield* Effect.gen(function* () {
+              const result = yield* checkpoint.waitForWriter(input.sessionID)
+              if (result === "success") {
+                writerFailures.delete(input.sessionID)
+                return
+              }
+              if (result !== "failure") return
+              const next = (writerFailures.get(input.sessionID) ?? 0) + 1
+              writerFailures.set(input.sessionID, next)
+              if (next < maxFailures) {
+                crossed.delete(input.sessionID)
+                maxCrossed.delete(input.sessionID)
+                log.info("checkpoint writer failed — cleared thresholds for retry", {
+                  sessionID: input.sessionID,
+                  attempt: next,
+                  maxAttempts: maxFailures,
+                })
+              } else {
+                log.warn("checkpoint writer gave up after max consecutive failures", {
+                  sessionID: input.sessionID,
+                  maxAttempts: maxFailures,
+                })
+              }
+            }).pipe(Effect.forkDetach)
+          }
+
+          log.info("checkpoint triggered", { threshold: t, currentTokens })
+
+          if (t === maxThreshold) maxCrossed.add(input.sessionID)
+        }).pipe(Effect.forkDetach)
       }
-
-      crossed.set(input.sessionID, already)
     })
 
     // Each turn end, decide (based on cache-TTL + pressure) whether to soft-trim

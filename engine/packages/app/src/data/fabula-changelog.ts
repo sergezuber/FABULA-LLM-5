@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.64.0"
+export const FABULA_VERSION = "0.65.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.65.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Разговор больше не встаёт намертво через несколько минут после запуска. Дойдя до определённого объёма, беседа откладывает в сторону свою краткую запись — и перед этим ждала, пока машина освободится. Занята она была этой самой беседой: ожидание держало разговор, разговор держал ожидание. Через полчаса ожидание сдавалось, и всё продолжалось само, но эти полчаса выглядели как зависшее приложение — окно живо, ответа нет, процессор пуст. Теперь запись дожидается своей очереди в стороне, а разговор идёт дальше не останавливаясь. Из-за той же ошибки запись не делалась ни разу с тех пор, как ожидание появилось сегодня утром: закончиться иначе, чем впустую, оно не могло.",
+        en: "A conversation no longer stops dead a few minutes after launch. Past a certain size it sets aside a short record of itself, and before doing so it waited for the machine to fall quiet — while what was keeping the machine busy was that very conversation: the wait held the turn, the turn held the wait. After half an hour the wait gave up and everything carried on, but that half hour looked exactly like a frozen app — window alive, no answer, processor idle. The record is now made out of the way and the conversation continues without pausing. By the same fault not one record had been made since the wait arrived this morning: it could not end any way but empty-handed.",
+      },
+    ],
+  },
   {
     version: "0.64.0",
     date: "2026-07-28",

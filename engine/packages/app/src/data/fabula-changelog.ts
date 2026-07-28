@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.54.0"
+export const FABULA_VERSION = "0.55.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.55.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Записи о том, что делает обвязка, больше не выбрасываются. Всё, что расширения писали о принятых решениях, уходило в никуда — и разобраться, почему что-то повело себя не так, было нечем: механизм, который на самом деле работал, выглядел ни разу не запускавшимся, а единственным доказательством был случайный след в файле настроек. Теперь это пишется в отдельный файл рядом с остальными журналами. Вас это не касается — записи для того, кто разбирает поломки.",
+        en: "What the harness does is no longer thrown away. Everything extensions wrote about the decisions they took went nowhere, leaving nothing to reason from when something behaved oddly: a mechanism that was in fact working looked as though it had never run, and its only evidence was an incidental trace in a settings file. This is now written to its own file beside the other journals. It does not concern you — the notes are for whoever is diagnosing a fault.",
+      },
+    ],
+  },
   {
     version: "0.54.0",
     date: "2026-07-28",

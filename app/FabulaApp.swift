@@ -530,8 +530,31 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
         let cfgFile = "\(PROJECT_DIR)/fabula.config.json"
         let cfgDir = "\(PROJECT_DIR)/.fabula"
         p.arguments = ["-lc", PATH_PREFIX + "set -a; [ -f '\(dotenv)' ] && . '\(dotenv)'; set +a; mkdir -p '\(WORKSPACE_DIR)'; cd '\(WORKSPACE_DIR)'; export MIMOCODE_GIT_DENYLIST=\"$HOME/GitHub\"; export MIMOCODE_DISABLE_CLAUDE_IMPORT=1; export MIMOCODE_EXPERIMENTAL_LSP_TOOL=1; export FABULA_TOOL_ROUTER=\"${FABULA_TOOL_ROUTER:-1}\"; export FABULA_AUTO_GOAL=\"${FABULA_AUTO_GOAL:-1}\"; export MIMOCODE_CONFIG='\(cfgFile)'; export MIMOCODE_CONFIG_DIR='\(cfgDir)'; export FABULA_SKILLS_DIR=\"${FABULA_SKILLS_DIR:-\(cfgDir)/skills}\"; ENG=\(ENGINE); exec \"$ENG\" serve --port \(PORT) --hostname 127.0.0.1"]
-        p.standardOutput = FileHandle.nullDevice
-        p.standardError = FileHandle.nullDevice
+        // KEEP THE ENGINE'S DIAGNOSTIC CHANNEL. Discarding stderr threw away every line a plugin writes
+        // about the decisions it takes, and there is nowhere else those go — measured 2026-07-28, a
+        // correction that WAS working looked like it had never run, and the only evidence it had was a
+        // side effect in a config file. A maintainer reading this file is the audience; the reader of the
+        // chat never sees it. Failing to open it degrades to the old silence rather than blocking startup.
+        let diagPath = "\(NSHomeDirectory())/.local/share/fabula/log/plugins.log"
+        try? FileManager.default.createDirectory(
+            atPath: (diagPath as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+        if !FileManager.default.fileExists(atPath: diagPath) {
+            FileManager.default.createFile(atPath: diagPath, contents: nil)
+        }
+        // A day of decisions is useful, a month is a disk leak. Same 20 MB ceiling the engine's own trace
+        // uses, so there is one answer in this project to "how much history is worth keeping".
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: diagPath),
+           let size = attrs[.size] as? UInt64, size > 20 * 1024 * 1024 {
+            try? "".write(toFile: diagPath, atomically: true, encoding: .utf8)
+        }
+        if let handle = FileHandle(forWritingAtPath: diagPath) {
+            handle.seekToEndOfFile()
+            p.standardOutput = handle
+            p.standardError = handle
+        } else {
+            p.standardOutput = FileHandle.nullDevice
+            p.standardError = FileHandle.nullDevice
+        }
         do { try p.run(); engineProc = p } catch { engineProc = nil }
     }
 

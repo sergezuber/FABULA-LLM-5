@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.78.0"
+export const FABULA_VERSION = "0.79.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.79.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Ход больше не может молотить бесконечно. Вчерашняя правка заменила аварийное завершение на запасную сводку и продолжение — и тем сняла единственное условие остановки: один вопрос «что тут? о чем?» дал десять сжатий, четыре запасные сводки и полсотни сообщений, а модель продолжала считать спустя долгое время после того, как ответ был получен. Запасных сводок теперь не больше двух: сдаться позже — лучше, чем упасть сразу, но сдаваться бесконечно — это петля.",
+        en: "A turn can no longer churn forever. Yesterday\u2019s change replaced the abort with a fallback summary and a continuation, and in doing so removed the only stopping condition there was: one question produced ten compactions, four fallback summaries and fifty-odd messages, with the model still computing long after the answer had arrived. At most two fallback summaries now: degrading beats dying, but degrading forever is a loop.",
+      },
+    ],
+  },
   {
     version: "0.78.0",
     date: "2026-07-28",

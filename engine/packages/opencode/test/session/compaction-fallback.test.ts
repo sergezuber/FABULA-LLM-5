@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { mechanicalSummary, LIST_LIMIT } from "../../src/session/compaction-fallback"
+import { mechanicalSummary, LIST_LIMIT, MECHANICAL_SUMMARY_MARKER, MECHANICAL_FALLBACK_MAX, fallbacksUsed, fallbackExhausted } from "../../src/session/compaction-fallback"
 
 // The measured case: a conversation about reading a book, where the summariser kept reading instead of
 // summarising. Twice. The run then died and everything it had read was lost.
@@ -59,5 +59,42 @@ describe("mechanicalSummary", () => {
     const s = mechanicalSummary(CONVO)
     for (const claim of ["ch01", "ch02", "read"]) expect(s).toContain(claim)
     expect(s).not.toContain("ch03")
+  })
+})
+
+// A degradation that always continues is a loop, not a recovery. Measured live 2026-07-28: one question
+// ("что тут? о чем?") produced 10 compactions, 4 assembled summaries and 51 messages, and the model kept
+// generating long after the reader had their answer — because the mechanical fallback replaced the only
+// terminal condition the hijack path had with an unconditional "continue".
+describe("the mechanical fallback is bounded", () => {
+  test("the marker the loop counts is the summary's own opening line", () => {
+    const s = mechanicalSummary([{ role: "user", parts: [{ type: "text", text: "что тут?" }] }] as never)
+    expect(s.startsWith(MECHANICAL_SUMMARY_MARKER)).toBe(true)
+  })
+  const assembled = (n: number) =>
+    Array.from({ length: n }, () => ({
+      info: { role: "assistant", summary: true },
+      parts: [{ type: "text", text: MECHANICAL_SUMMARY_MARKER + "\n\nwhatever" }],
+    }))
+  const ordinary = [
+    { info: { role: "user" }, parts: [{ type: "text", text: "что тут?" }] },
+    { info: { role: "assistant" }, parts: [{ type: "text", text: "вот разбор" }] },
+    // a MODEL summary (not assembled) must not spend the allowance
+    { info: { role: "assistant", summary: true }, parts: [{ type: "text", text: "## Goal\nread" }] },
+  ]
+
+  test("an ordinary turn has spent nothing", () => {
+    expect(fallbacksUsed(ordinary as never)).toBe(0)
+    expect(fallbackExhausted(ordinary as never)).toBe(false)
+  })
+  test("one assembled summary is not yet the bound — degrading beats dying", () => {
+    expect(fallbackExhausted([...ordinary, ...assembled(1)] as never)).toBe(false)
+  })
+  test("at the bound the turn ends instead of degrading again", () => {
+    expect(fallbacksUsed(assembled(MECHANICAL_FALLBACK_MAX) as never)).toBe(MECHANICAL_FALLBACK_MAX)
+    expect(fallbackExhausted(assembled(MECHANICAL_FALLBACK_MAX) as never)).toBe(true)
+  })
+  test("the live loop — ten compactions, four assembled summaries — is stopped", () => {
+    expect(fallbackExhausted(assembled(4) as never)).toBe(true)
   })
 })

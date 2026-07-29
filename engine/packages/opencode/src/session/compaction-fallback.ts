@@ -34,6 +34,13 @@ function listOf(items: string[], limit = LIST_LIMIT): string {
  * Deliberately factual and dull: the user's own words, the files touched, the tools used, the last thing
  * said. A later turn reading this knows what was done and what was asked, which is what a summary is for.
  */
+/** The opening line of an assembled summary. Exported so the compaction loop can COUNT how many it has
+ *  already produced this turn — a degradation that always continues is a loop, not a recovery. */
+export const MECHANICAL_SUMMARY_MARKER = "# Summary of the conversation so far"
+
+/** How many assembled summaries one turn may use before the hijack path gives up and ends the turn. */
+export const MECHANICAL_FALLBACK_MAX = 2
+
 export function mechanicalSummary(messages: readonly FallbackMessage[]): string {
   const msgs = messages ?? []
   const userTexts: string[] = []
@@ -59,7 +66,7 @@ export function mechanicalSummary(messages: readonly FallbackMessage[]): string 
   }
 
   const out: string[] = [
-    "# Summary of the conversation so far",
+    MECHANICAL_SUMMARY_MARKER,
     "",
     "_Assembled from what the conversation contains, because the summariser could not be persuaded to",
     "summarise. Factual rather than eloquent; nothing here is inferred._",
@@ -91,4 +98,26 @@ export function mechanicalSummary(messages: readonly FallbackMessage[]): string 
 
   out.push("Continue from here. The detail above is what is known; anything not listed was not recorded.")
   return out.join("\n")
+}
+
+/** How many assembled summaries this turn has already used. PURE, so the bound is testable: the inline
+ *  version of this count was covered by nothing, and a mutation removing the bound killed no test. */
+export function fallbacksUsed(
+  messages: readonly { info: { role: string; summary?: boolean }; parts: readonly { type: string; text?: string }[] }[],
+): number {
+  return messages.filter(
+    (m) =>
+      m.info.role === "assistant" &&
+      m.info.summary === true &&
+      m.parts.some((p) => p.type === "text" && (p.text ?? "").startsWith(MECHANICAL_SUMMARY_MARKER)),
+  ).length
+}
+
+/** Has the turn spent its allowance of assembled summaries? Degrading beats dying; degrading FOREVER is
+ *  a loop — measured live 2026-07-28 as 10 compactions and 51 messages on one question. */
+export function fallbackExhausted(
+  messages: readonly { info: { role: string; summary?: boolean }; parts: readonly { type: string; text?: string }[] }[],
+  max = MECHANICAL_FALLBACK_MAX,
+): boolean {
+  return fallbacksUsed(messages) >= max
 }

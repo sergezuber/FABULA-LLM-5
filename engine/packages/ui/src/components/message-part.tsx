@@ -583,6 +583,12 @@ export function AssistantParts(props: {
   // inner work. On a COMPLETED turn the inner work collapses under one "Worked for Ns" spoiler
   // (ZCode reference); while streaming, everything renders live as before.
   const finalKey = createMemo(() => {
+    // NOTHING LEAVES THE FOLD UNTIL THE TURN IS DONE. While work is running, the last non-empty text is
+    // whatever the model said in passing — "продолжаю читать ключевые главы" — and treating it as the
+    // answer put a progress note in the open for the whole run (measured live 2026-07-28, twice). Only a
+    // finished turn has an answer to show; until then the fold holds everything, and the header says how
+    // long it has been working.
+    if (props.working) return undefined
     const groups = grouped()
     for (let i = groups.length - 1; i >= 0; i--) {
       const g = groups[i]

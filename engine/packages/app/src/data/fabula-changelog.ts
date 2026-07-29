@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.77.0"
+export const FABULA_VERSION = "0.78.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.78.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Пока агент работает, в чате не остаётся ничего, кроме свёрнутого заголовка. Раньше наружу выносилась последняя реплика модели — и, пока ход не закончен, ею оказывалась заметка о процессе: «продолжаю читать ключевые главы». Ответ есть только у завершённого хода; до тех пор под свёрнутым заголовком лежит всё.",
+        en: "While the agent works, nothing stands in the conversation but the folded header. The last piece of model text used to be shown in the open, and until a turn finishes that is a progress note \u2014 \u201ccontinuing with the key chapters\u201d. Only a finished turn has an answer; until then the fold holds everything.",
+      },
+    ],
+  },
   {
     version: "0.77.0",
     date: "2026-07-28",

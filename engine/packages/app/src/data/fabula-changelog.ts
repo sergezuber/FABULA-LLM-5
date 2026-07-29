@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.82.0"
+export const FABULA_VERSION = "0.83.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.83.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Фраза о вызове больше не исполняется как вызов. Вчерашнее послабление — принимать вызов, если блок разметки полон, — открыло дыру: предложение «я бы написал сюда вызов, но не буду» цитирует безупречно составленный блок и потому исполнялось. Различает не полнота блока, а его место: тот, кто вызывает, договаривает, вызывает и умолкает; тот, кто рассказывает о вызове, продолжает фразу дальше. Речь после блока — признак рассказа.",
+        en: "A sentence about a call is no longer executed as one. Yesterday\u2019s relaxation \u2014 accept a call when the markup block is complete \u2014 opened a hole: \u201cI would normally write a call here, but I will not\u201d quotes a flawless block and was therefore executed. What separates them is not the block\u2019s completeness but its position: one who calls finishes speaking, calls, and stops; one who describes a call keeps writing. Speech after the block is the mark of description.",
+      },
+    ],
+  },
   {
     version: "0.82.0",
     date: "2026-07-28",

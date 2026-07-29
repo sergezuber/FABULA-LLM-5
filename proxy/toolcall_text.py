@@ -61,8 +61,18 @@ def parse_text_tool_calls(content):
     # below — a block we do not fully understand still disqualifies the whole content — so the guard here
     # only needs to refuse content with NO complete block at all.
     #
-    # One shape stays refused: prose that mentions the tags but closes nothing. That is caught by _FUNC
-    # failing to match inside the block, which returns [] for the whole content.
+    # THE DISCRIMINATOR IS WHERE THE PROSE SITS, not whether there is any.
+    #
+    # A model that CALLS narrates its next step, emits the call, and stops — the block is the last thing
+    # in the message. A model that TALKS ABOUT a call embeds it mid-sentence and keeps writing: "I would
+    # normally write <tool_call>…</tool_call> here, but I will not." Completeness cannot tell those apart,
+    # because the quoted block is perfectly well-formed; position can, and it is the only thing that can.
+    #
+    # This was found by review after the first version shipped: relaxing "no prose at all" to "the block
+    # is complete" made that sentence execute as a call — the exact false positive this file exists to
+    # prevent, and pinned by test_prose_around_a_block_disqualifies_it since the day it was written.
+    if _CALL.split(content)[-1].strip():
+        return []
 
     calls = []
     for body in blocks:

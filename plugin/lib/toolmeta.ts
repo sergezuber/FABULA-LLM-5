@@ -31,6 +31,12 @@ export const TOOL_META: Record<string, ToolMeta> = {
   expand_tools: { snippet: "use a tool hidden by the active belt (execute it or get its schema)" },
   save_handoff: { snippet: "persist a durable handoff note" },
   read_handoff: {}, list_handoffs: {},
+  // Material held outside the context. These are reached from a [fabula-handle] block that arrives in a
+  // TOOL RESULT, not from the task text — so they must stay visible whatever the turn looked like at step
+  // one. A descriptor naming a tool the belt has hidden is a dead end for the reader.
+  handle_query: { snippet: "ask a question of material held outside the context (a [fabula-handle] result)" },
+  handle_peek: { snippet: "read a window of material held outside the context" },
+  handle_list: { snippet: "list material held outside the context" },
   list_checkpoints: { snippet: "list edit checkpoints" },
   restore_checkpoint: { snippet: "undo the agent's edits" },
   diff_checkpoints: {},

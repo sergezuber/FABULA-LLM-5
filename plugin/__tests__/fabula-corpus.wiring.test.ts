@@ -1,18 +1,32 @@
-// Wiring test for the corpus map-reduce intercept. Drives the REAL fabula-corpus hook with the engine's
-// session.userQuery.pre contract. The pipeline (fetch to the local model) never runs here because the
-// test cwd has no corpus (fewer than MIN_CORPUS_FILES → fallback re-inject, and the mock client records
-// that). Asserts the CENTRAL INVARIANTS:
-//   1. MUTE on a non-corpus task (step 1) → no cancel;
-//   2. MUTE on step > 1 → no cancel (intercept is first-step only);
-//   3. INTERCEPT on a corpus-analysis task → cancel=true + reason, AND the detached worker is really
-//      launched with the right script, corpus directory and session (asserted, not assumed);
-//   4. RECURSION GUARD: a re-injected [fabula-corpus-report] prefix → no cancel (no infinite loop);
+// Wiring test for the corpus map-reduce. Drives the REAL fabula-corpus hooks through the engine's own
+// session.userQuery.pre and tool.execute.after contracts, with a marker script standing in for `bun` so
+// a worker that really launched is observable and one that never did fails.
+//
+// THE CENTRAL INVARIANT, and the reason this file was rewritten: NOTHING IN THE DECISION PATH READS THE
+// READER'S WORDS. The pipeline used to be armed by a regex over the ask, widened once per unseen
+// phrasing; the owner rejected that (2026-07-28). What fires it now is the measured shape of the turn —
+// so the cases below drive it with asks that no pattern would match ("ну и?"), and with asks that the
+// old pattern DID match, and both must behave identically. Also asserted:
+//   1. an ordinary turn touching a couple of files is never taken over;
+//   2. a traversal launches the worker with the right script, directory and session;
+//   3. once the worker owns the work, the model's own turn ends — one answer reaches the reader, not two;
+//   4. a suppressed trigger (already handed back) does NOT cancel the turn — that would drop the task;
 //   5. KILL-SWITCH FABULA_CORPUS=0 → inert ({}), no hooks.
 
-import { test, expect, beforeAll } from "bun:test"
+import { test, expect, beforeAll, afterAll, beforeEach } from "bun:test"
 import { writeFileSync, mkdtempSync, mkdirSync, chmodSync, existsSync, readFileSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
+
+/** The window the traversal measures against. SERVED HERE, not borrowed from the machine.
+ *
+ *  This was a real defect and not a tidiness point: the probe reads the runtime's own models endpoint,
+ *  and with nothing standing in for it these cases quietly read the DEVELOPER'S live LM Studio. On a
+ *  machine without one the probe answers nothing, the verdict correctly refuses to decide on an unmeasured
+ *  window, and the traversal cases fail — so the suite passed here and would have failed anywhere else,
+ *  for a reason that has nothing to do with the mechanism being tested. */
+let modelsServer: { stop: () => void } | undefined
+const SERVED_WINDOW = 8000
 
 beforeAll(() => {
   // Isolate the corpus data dir. The intercept and its worker both keep state under
@@ -24,10 +38,23 @@ beforeAll(() => {
   const stateFile = join(tmpdir(), `corpus-state-${process.pid}.json`)
   writeFileSync(stateFile, JSON.stringify({ disabled: [], enabled: ["corpus"] }))
   process.env.FABULA_PLUGIN_STATE = stateFile
+  const srv = Bun.serve({
+    port: 0,
+    fetch: () => Response.json({ data: [{ id: "test-model", state: "loaded", loaded_context_length: SERVED_WINDOW }] }),
+  })
+  modelsServer = srv
+  process.env.FABULA_MODEL_API = `http://127.0.0.1:${srv.port}/api/v0/models`
 })
+
+afterAll(() => { try { modelsServer?.stop() } catch {} })
 
 import { FabulaCorpus } from "../fabula-corpus"
 import { accumulatorKey } from "../lib/corpus"
+import { clearLearnedWindow } from "../lib/ctxguard"
+
+// The learned window is cached for a minute across the whole process, so another file's probe would
+// otherwise decide these cases.
+beforeEach(() => clearLearnedWindow())
 
 // Mock SDK client: records every session.prompt call (the pipeline's re-inject / fallback).
 function mockClient() {
@@ -54,70 +81,31 @@ test("kill-switch: FABULA_CORPUS=0 → inert ({}), no hooks", async () => {
   delete process.env.FABULA_CORPUS
 })
 
-test("MUTE on a non-corpus coding task (step 1) → no cancel", async () => {
-  const h = await hooks(mockClient(), "/tmp/nope")
-  const out: any = {}
-  await h["session.userQuery.pre"]({ sessionID: "s1", step: 1, query: "fix the bug in adapter.ts" }, out)
-  expect(out.cancel).toBeUndefined()
-})
-
-test("MUTE on an opinion/chat ask (step 1) → no cancel", async () => {
-  const h = await hooks(mockClient(), "/tmp/nope")
-  const out: any = {}
-  await h["session.userQuery.pre"]({ sessionID: "s1", step: 1, query: "что думаешь о романе?" }, out)
-  expect(out.cancel).toBeUndefined()
-})
-
-test("MUTE on step > 1 (intercept is first-step only)", async () => {
-  const h = await hooks(mockClient(), "/tmp/nope")
-  const out: any = {}
-  await h["session.userQuery.pre"]({ sessionID: "s1", step: 3, query: "прочитай все главы и проанализируй" }, out)
-  expect(out.cancel).toBeUndefined()
-})
-
-test("INTERCEPT on a corpus-analysis task (step 1) → cancel=true + reason", async () => {
+// NO ASK, HOWEVER PHRASED, TAKES A TURN OVER BY ITSELF. These are the exact sentences the deleted
+// detector fired on — the ones it knew and the ones it had to be widened for. Each of them now starts an
+// ordinary turn, because nothing has been read yet and a request is not a situation.
+test("no wording of an ask cancels a turn on its own", async () => {
   const h = await hooks(mockClient(), "/tmp/no-corpus-here")
-  const out: any = {}
-  await h["session.userQuery.pre"](
-    { sessionID: "s1", step: 1, query: "Прочитай все главы книги и сделай глубокий литературный анализ" },
-    out,
-  )
-  expect(out.cancel).toBe(true)
-  expect(typeof out.cancelReason).toBe("string")
-  expect(out.cancelReason.length).toBeGreaterThan(0)
+  for (const q of [
+    "Прочитай все главы книги и сделай глубокий литературный анализ",
+    "о чем книга? прочти полностью и дай ответ",
+    "дай критическое развернутое описание книги",
+    "read the book in full and tell me what it is about",
+    "fix the bug in adapter.ts",
+    "что думаешь о романе?",
+  ]) {
+    const out: any = {}
+    await h["session.userQuery.pre"]({ sessionID: `s_${q.length}`, step: 1, query: q }, out)
+    expect(out.cancel).toBeUndefined()
+  }
 })
 
-// The intercept only matters if the WORK actually starts. Cancelling the turn without launching the
-// pipeline is the worst outcome available — the user's task is dropped and nothing replaces it. Every
-// other case here asserts a DECISION; this one asserts the mechanism, by standing a marker script in
-// for `bun` (FABULA_BUN_BIN) so a spawn that happens is observable and one that never happens fails.
-test("INTERCEPT actually LAUNCHES the worker (not just cancels the turn)", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "corpus-spawn-"))
-  const marker = join(dir, "argv.txt")
-  const fakeBun = join(dir, "fake-bun.sh")
-  writeFileSync(fakeBun, `#!/bin/sh\nprintf '%s\\n' "$@" > ${JSON.stringify(marker)}\nexit 0\n`)
-  chmodSync(fakeBun, 0o755)
-  const prevBun = process.env.FABULA_BUN_BIN
-  process.env.FABULA_BUN_BIN = fakeBun
-  try {
-    const out: any = {}
-    await (await hooks(mockClient(), dir))["session.userQuery.pre"](
-      { sessionID: "s_spawn", agentID: "build", step: 1, messageID: "m1", query: "Прочитай все главы книги и сделай глубокий литературный анализ" },
-      out,
-    )
-    expect(out.cancel).toBe(true)
-    for (let i = 0; i < 40 && !existsSync(marker); i++) await new Promise((r) => setTimeout(r, 50))
-    expect(existsSync(marker)).toBe(true) // the detached worker really ran
-    const argv = readFileSync(marker, "utf8").trim().split("\n")
-    expect(argv[0].endsWith("lib/corpus-worker.ts")).toBe(true) // the worker script, resolved next to the plugin
-    expect(existsSync(argv[0])).toBe(true) // …and it exists on disk (a wrong path would spawn nothing)
-    expect(argv[1]).toBe(dir) // the corpus directory it must scan
-    expect(argv[2]).toBe("s_spawn") // the session the report has to be delivered to
-  } finally {
-    if (prevBun === undefined) delete process.env.FABULA_BUN_BIN
-    else process.env.FABULA_BUN_BIN = prevBun
-    rmSync(dir, { recursive: true, force: true })
-  }
+test("a later step of a turn nothing has taken over runs normally", async () => {
+  const h = await hooks(mockClient(), "/tmp/nope")
+  const out: any = {}
+  await h["session.userQuery.pre"]({ sessionID: "s_late", step: 1, query: "прочитай все главы и проанализируй" }, {})
+  await h["session.userQuery.pre"]({ sessionID: "s_late", step: 3, query: "" }, out)
+  expect(out.cancel).toBeUndefined()
 })
 
 // THE WORDLESS TRIGGER. The ask here is deliberately one nobody would write a pattern for — it names no
@@ -136,9 +124,7 @@ test("TRAVERSAL: reading a corpus fires the worker with no word ever matched", a
   mkdirSync(join(dir, "chapters"), { recursive: true })
   for (let i = 0; i < 20; i++) writeFileSync(join(dir, "chapters", `ch${i}.md`), "x")
   const prevBun = process.env.FABULA_BUN_BIN
-  const prevWin = process.env.FABULA_CONTEXT_WINDOW
   process.env.FABULA_BUN_BIN = fakeBun
-  process.env.FABULA_CONTEXT_WINDOW = "8000"
   try {
     const h = await hooks(mockClient(), dir)
     const out: any = {}
@@ -154,13 +140,22 @@ test("TRAVERSAL: reading a corpus fires the worker with no word ever matched", a
     for (let i = 0; i < 40 && !existsSync(marker); i++) await new Promise((r) => setTimeout(r, 50))
     expect(existsSync(marker)).toBe(true) // the traversal itself launched the worker
     const argv = readFileSync(marker, "utf8").trim().split("\n")
+    expect(argv[0].endsWith("lib/corpus-worker.ts")).toBe(true) // the worker script, next to the plugin
+    expect(existsSync(argv[0])).toBe(true) // …and it exists on disk (a wrong path would spawn nothing)
     expect(argv[1]).toBe(dir) // the working directory, not dir/chapters
     expect(argv[2]).toBe("s_walk")
+    // The reader's own words reached the pipeline — carried, never classified.
+    expect(Buffer.from(argv[3], "base64").toString("utf8")).toBe("ну и?")
+    // ONE ANSWER, NOT TWO. With the work handed to the worker, the model's own turn must end rather than
+    // keep appending chapters it can no longer fit while the report is being written elsewhere.
+    const later: any = {}
+    await h["session.userQuery.pre"]({ sessionID: "s_walk", step: 2, messageID: "m2", query: "" }, later)
+    expect(later.cancel).toBe(true)
+    expect(typeof later.cancelReason).toBe("string")
+    expect(later.cancelReason.length).toBeGreaterThan(0)
   } finally {
     if (prevBun === undefined) delete process.env.FABULA_BUN_BIN
     else process.env.FABULA_BUN_BIN = prevBun
-    if (prevWin === undefined) delete process.env.FABULA_CONTEXT_WINDOW
-    else process.env.FABULA_CONTEXT_WINDOW = prevWin
     rmSync(dir, { recursive: true, force: true })
   }
 })
@@ -193,32 +188,103 @@ test("TRAVERSAL stays out of an ordinary turn", async () => {
   }
 })
 
-test("RECURSION GUARD: a re-injected report prefix → no cancel", async () => {
-  const h = await hooks(mockClient(), "/tmp/nope")
-  const out: any = {}
-  await h["session.userQuery.pre"](
-    { sessionID: "s1", step: 1, query: "[fabula-corpus-report]\n\nАнализ книги..." },
-    out,
-  )
-  expect(out.cancel).toBeUndefined() // never re-intercept our own re-inject
+test("RECURSION GUARD: a re-injected report prefix is not watched at all", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "corpus-recur-"))
+  const marker = join(dir, "argv.txt")
+  const fakeBun = join(dir, "fake-bun.sh")
+  writeFileSync(fakeBun, `#!/bin/sh\nprintf '%s\\n' "$@" > ${JSON.stringify(marker)}\nexit 0\n`)
+  chmodSync(fakeBun, 0o755)
+  for (let i = 0; i < 20; i++) writeFileSync(join(dir, `ch${i}.md`), "x")
+  const prevBun = process.env.FABULA_BUN_BIN
+  process.env.FABULA_BUN_BIN = fakeBun
+  try {
+    const h = await hooks(mockClient(), dir)
+    await h["session.userQuery.pre"]({ sessionID: "s_recur", step: 1, query: "[fabula-corpus-report]\n\nАнализ книги..." }, {})
+    for (let i = 0; i < 6; i++)
+      await h["tool.execute.after"](
+        { sessionID: "s_recur", tool: "view" },
+        { args: { file_path: join(dir, `ch${i}.md`) }, output: "z".repeat(40_000) },
+      )
+    await new Promise((r) => setTimeout(r, 300))
+    expect(existsSync(marker)).toBe(false) // our own report never starts another pass over itself
+  } finally {
+    if (prevBun === undefined) delete process.env.FABULA_BUN_BIN
+    else process.env.FABULA_BUN_BIN = prevBun
+    rmSync(dir, { recursive: true, force: true })
+  }
 })
 
-// When the pipeline cannot own a task it hands the ORIGINAL text back so the model answers normally —
-// and that text still matches the detector. Without honouring the hand-back marker the next turn
-// intercepts it again, hands it back again, and never terminates: an infinite loop built out of the very
-// mechanism that exists to prevent one.
-test("HAND-BACK GUARD: a task already handed back to the model is not intercepted again", async () => {
+// When the pipeline cannot own a task (too small a corpus, no model reachable) it hands the ORIGINAL text
+// back so the model answers it normally — and the model then reads the same files again, which is the
+// same traversal. Without honouring the hand-back marker the next turn fires again, hands back again, and
+// never terminates: an infinite loop built out of the very mechanism that exists to prevent one.
+//
+// AND IT MUST NOT CANCEL. A suppressed trigger that still ended the model's next step would silence the
+// turn with nothing in its place — the reader's task simply dropped.
+test("HAND-BACK GUARD: work already handed back is not taken over again, and the turn still runs", async () => {
   const dir = mkdtempSync(join(tmpdir(), "corpus-handback-"))
+  const marker = join(dir, "argv.txt")
+  const fakeBun = join(dir, "fake-bun.sh")
+  writeFileSync(fakeBun, `#!/bin/sh\nprintf '%s\\n' "$@" > ${JSON.stringify(marker)}\nexit 0\n`)
+  chmodSync(fakeBun, 0o755)
+  for (let i = 0; i < 20; i++) writeFileSync(join(dir, `ch${i}.md`), "x")
   const store = join(process.env.XDG_DATA_HOME!, "fabula", "corpus")
   mkdirSync(store, { recursive: true })
   writeFileSync(join(store, `${accumulatorKey("s_hb", dir)}.handback.json`), JSON.stringify({ ts: 1 }))
-  const out: any = {}
-  await (await hooks(mockClient(), dir))["session.userQuery.pre"](
-    { sessionID: "s_hb", step: 1, query: "Прочитай все главы книги и сделай глубокий литературный анализ" },
-    out,
-  )
-  expect(out.cancel).toBeUndefined() // the model gets its turn; the cycle ends after one attempt
-  rmSync(dir, { recursive: true, force: true })
+  const prevBun = process.env.FABULA_BUN_BIN
+  process.env.FABULA_BUN_BIN = fakeBun
+  try {
+    const h = await hooks(mockClient(), dir)
+    await h["session.userQuery.pre"]({ sessionID: "s_hb", step: 1, query: "ну и?" }, {})
+    for (let i = 0; i < 6; i++)
+      await h["tool.execute.after"](
+        { sessionID: "s_hb", tool: "view" },
+        { args: { file_path: join(dir, `ch${i}.md`) }, output: "z".repeat(40_000) },
+      )
+    await new Promise((r) => setTimeout(r, 300))
+    expect(existsSync(marker)).toBe(false) // no second worker; the cycle ends after one attempt
+    const later: any = {}
+    await h["session.userQuery.pre"]({ sessionID: "s_hb", step: 2, query: "" }, later)
+    expect(later.cancel).toBeUndefined() // …and the model keeps its turn
+  } finally {
+    if (prevBun === undefined) delete process.env.FABULA_BUN_BIN
+    else process.env.FABULA_BUN_BIN = prevBun
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+// The two mechanisms have to compose. A result large enough to be held outside the context reaches this
+// hook already replaced by its descriptor — so measuring the STRING would report a 40 000-character
+// chapter as a few hundred, and the traversal would never see a corpus precisely BECAUSE the corpus was
+// too big to append. The real weight travels in the metadata.
+test("a chapter offloaded before this hook still counts for what it weighed", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "corpus-offloaded-"))
+  const marker = join(dir, "argv.txt")
+  const fakeBun = join(dir, "fake-bun.sh")
+  writeFileSync(fakeBun, `#!/bin/sh\nprintf '%s\\n' "$@" > ${JSON.stringify(marker)}\nexit 0\n`)
+  chmodSync(fakeBun, 0o755)
+  for (let i = 0; i < 20; i++) writeFileSync(join(dir, `ch${i}.md`), "x")
+  const prevBun = process.env.FABULA_BUN_BIN
+  process.env.FABULA_BUN_BIN = fakeBun
+  try {
+    const h = await hooks(mockClient(), dir)
+    await h["session.userQuery.pre"]({ sessionID: "s_off", step: 1, query: "ну и?" }, {})
+    for (let i = 0; i < 6; i++)
+      await h["tool.execute.after"](
+        { sessionID: "s_off", tool: "view" },
+        {
+          args: { file_path: join(dir, `ch${i}.md`) },
+          output: "[fabula-handle id=h-abc123]\n…", // what the context actually holds
+          metadata: { fabulaHandle: { id: "h-abc123", chars: 40_000 } }, // what it actually weighed
+        },
+      )
+    for (let i = 0; i < 40 && !existsSync(marker); i++) await new Promise((r) => setTimeout(r, 50))
+    expect(existsSync(marker)).toBe(true)
+  } finally {
+    if (prevBun === undefined) delete process.env.FABULA_BUN_BIN
+    else process.env.FABULA_BUN_BIN = prevBun
+    rmSync(dir, { recursive: true, force: true })
+  }
 })
 
 test("never throws on malformed input (fail-silent)", async () => {

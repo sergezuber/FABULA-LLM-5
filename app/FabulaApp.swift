@@ -1194,8 +1194,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
             }
             try? "[]".write(toFile: childReg, atomically: true, encoding: .utf8)
         }
-        // Belt: kill by script name too, so a spawn that never reached the registry still dies here.
-        shell("pkill -9 -f 'plugin/lib/corpus-worker' >/dev/null 2>&1")
+        // Belt: kill by script name too, so a spawn that never reached the registry still dies here —
+        // but ONLY this app's own workers. The pattern used to be the bare script name, which matches
+        // every worker on the machine whoever started it. Measured twice on 2026-07-28: an engine running
+        // alongside the app (a build being verified) had its map-reduce killed at 7 of 52 chapters, and
+        // again at 31 of 52, each time the app restarted. The work resumed from its accumulator, so
+        // nothing was lost but time — and "nothing FABULA starts may outlive FABULA" was never a licence
+        // to end what something ELSE started. Every worker carries the URL of the server it reports to
+        // (plugin/fabula-corpus spawnWorker, argv[4]), so this app's own are the ones bearing this port.
+        shell("pkill -9 -f 'plugin/lib/corpus-worker.*:\(PORT)' >/dev/null 2>&1")
         // 3) We own the DB, so once it closes we securely erase any deleted-chat residue (orphan
         // rows, FTS segments, freed pages via secure_delete+VACUUM, session memory, logs). Run
         // detached so quitting stays responsive; it waits for the port to free first. Runs even if

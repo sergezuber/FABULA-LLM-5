@@ -1,23 +1,30 @@
-// FABULA-LLM-5 — corpus map-reduce intercept (design: docs/research + live root-cause analysis of the
-// book-analysis compaction loop). RULE #9: the harness INTERCEPTS a "read all chapters / the whole book
-// and write a literary analysis" task deterministically — the model never chooses to load the raw corpus
-// into one context. RULE #13: nothing hardcodes a volume or a filename (discoverCorpus globs the task
-// directory; any book/document set is handled). RULE #14: model-agnostic — the worker calls whatever
-// model is in the socket through the :1235 adapter.
+// FABULA-LLM-5 — corpus map-reduce, fired by the SHAPE OF THE WORK. RULE #9: the harness decides
+// deterministically — the model never chooses to load a raw corpus into one context. RULE #13: nothing
+// hardcodes a volume or a filename (discoverCorpus globs the task directory; any book/document set is
+// handled). RULE #14: model-agnostic — the worker calls whatever model is in the socket through the
+// :1235 adapter.
+//
+// NOT A WORD IS READ. This plugin used to arm itself from a regex over the reader's wording, widened once
+// per unseen phrasing; the owner rejected that approach (2026-07-28) and was right to. The trigger is now
+// entirely lib/traversal: a turn reading file after file out of one directory, past what the MEASURED
+// window holds, with more files still unread, is covering a corpus — in any language, however phrased,
+// including phrasings nobody has written yet. That is the same answer Recursive Language Models
+// (arXiv:2512.24601v3) reach from the other end: keep the material out of the root and every task looks
+// identical at step one, so there is nothing left for a classifier to get wrong.
 //
 // WHY (the live failure). On a large corpus the model loads chapters one by one until the prune
 // threshold trips; compaction fires, the summarizer HIJACKS (continues the analysis instead of
 // summarizing), retries, fail, the engine inserts a deterministic rebuild boundary — and the model
 // re-reads the chapters from scratch because per-chapter progress was never persisted. Infinite loop,
-// no report ever produced. This intercept makes the loop structurally impossible:
-//   1. detect a corpus-analysis ask at the FIRST step of the turn (isCorpusAnalysisTask, narrow EN+RU);
-//   2. CANCEL the normal agent turn;
-//   3. SPAWN A DETACHED WORKER (lib/corpus-worker.ts) that survives the engine's 5s hook timeout AND a
+// no report ever produced. This makes the loop structurally impossible:
+//   1. WATCH the turn's own tool calls and measure what it has taken in (traversalVerdict);
+//   2. SPAWN A DETACHED WORKER (lib/corpus-worker.ts) that survives the engine's 5s hook timeout AND a
 //      headless-process exit; the worker discovers the corpus, map-reduces it (each batch an ISOLATED
 //      local-model call — the raw corpus never accumulates in one context, so compaction never triggers),
 //      PERSISTS each per-batch summary to a resume-safe accumulator, synthesizes the full report, and
-//      and delivers it as an ANSWER over HTTP (POST /session/{id}/assistant-message) — not as a user
-//      turn, which the chat would render as a narrow plain-text bubble with the machinery on show.
+//      delivers it as an ANSWER over HTTP (POST /session/{id}/assistant-message) — not as a user turn,
+//      which the chat would render as a narrow plain-text bubble with the machinery on show;
+//   3. END the model's own turn at its next step, so the reader gets ONE answer and not two racing ones.
 // fabula-attest's text-only path then verifies the report.
 
 import type { Plugin } from "@mimo-ai/plugin"
@@ -26,10 +33,9 @@ import { fileURLToPath } from "node:url"
 import { dirname, join } from "node:path"
 import { gate } from "./lib/manage"
 import { registerChild, unregisterChild, reapOrphans } from "./lib/childreg"
-import { isCorpusAnalysisTask, accumulatorKey } from "./lib/corpus"
+import { accumulatorKey } from "./lib/corpus"
 import { initTraversal, observeRead, traversalVerdict } from "./lib/traversal"
 import { probeWindow } from "./lib/ctxguard"
-import { dirname, join } from "node:path"
 import { readdirSync } from "node:fs"
 
 /** The file a read-family call actually pulled into the context, or nothing. Tools are named differently
@@ -118,16 +124,16 @@ try {
     console.error(`[fabula-corpus] reaped ${r.reaped.length} orphaned worker(s): ${r.reaped.map((x) => x.label).join(", ")}`)
 } catch { /* a safety net must never stop the plugin loading */ }
 
-/** What the turn has actually read, per session. Cleared when a new turn starts. */
-const traces = new Map<string, { state: ReturnType<typeof initTraversal>; task: string; fired: boolean }>()
+/** What the turn has actually read, per session. Cleared when a new turn starts.
+ *  `fired` — the verdict has been reached, so stop measuring.
+ *  `owned` — a worker really started, so the model's own turn should end at its next step. */
+const traces = new Map<string, { state: ReturnType<typeof initTraversal>; task: string; fired: boolean; owned: boolean }>()
 
 export const FabulaCorpus: Plugin = async (pluginInput) =>
   process.env.FABULA_CORPUS === "0" ? {} : gate("corpus", {
-    // WATCH WHAT THE TURN IS DOING. This is the trigger that owes nothing to the wording of the ask: a
-    // turn reading file after file out of one directory, past what the measured window holds, with more
-    // files still unread, is covering a corpus — in any language, however it was phrased, including
-    // phrasings nobody has written yet. The word-matching detector below is kept only as a fast path
-    // that saves the reader those first few reads; it is no longer what guarantees coverage.
+    // WATCH WHAT THE TURN IS DOING. This is the whole trigger, and it owes nothing to the wording of the
+    // ask: a turn reading file after file out of one directory, past what the measured window holds, with
+    // more files still unread, is covering a corpus. No text is inspected anywhere in this decision.
     "tool.execute.after": async (input: any, output: any) => {
       try {
         const sid = input?.sessionID
@@ -135,36 +141,52 @@ export const FabulaCorpus: Plugin = async (pluginInput) =>
         if (!t || t.fired) return
         const file = readTargetOf(input?.tool, output?.args ?? input?.args)
         if (!file) return
-        observeRead(t.state, { dir: dirname(file), path: file, chars: String(output?.output ?? "").length })
+        // WHAT THE FILE ACTUALLY WEIGHED, not what is left of it. A result large enough to be held outside
+        // the context (fabula-handle) reaches this hook already replaced by its descriptor, and measuring
+        // that would report a hundred-thousand-character chapter as a few hundred — the traversal would
+        // then never see a corpus precisely BECAUSE the corpus was too big to append.
+        const chars = Number(output?.metadata?.fabulaHandle?.chars) || String(output?.output ?? "").length
+        observeRead(t.state, { dir: dirname(file), path: file, chars })
         // The window is MEASURED from the runtime, never assumed; unmeasured decides nothing.
         const windowTokens = await probeWindow().catch(() => 0)
         const v = traversalVerdict(t.state, { windowTokens, filesInDir: countReadableFiles, taskRoot: pluginInput?.directory })
         if (!v.offload) return
+        // When the pipeline cannot own a task (corpus too small, no model reachable, nothing summarized)
+        // it hands the ORIGINAL text back so the model answers it normally — and the model then reads the
+        // same files again, which looks like the same traversal. Without a record of the hand-back the
+        // next turn fires again, falls back again, and never terminates. The worker leaves the marker;
+        // honouring it ends the cycle after exactly one attempt, per session and corpus.
+        // STOP WATCHING EITHER WAY, but only OWN the turn when a worker really started. A suppressed
+        // trigger that still cancelled the model's next step would silence the turn and put nothing in
+        // its place — the reader's task simply dropped, which is the worst outcome on offer.
         t.fired = true
+        if (handedBack(sid, v.dir)) return
+        t.owned = true
         console.error(`[fabula-corpus] traversal: ${v.reason}`)
         spawnWorker({ ...pluginInput, directory: v.dir }, sid, t.task || "")
       } catch {}
     },
-    // Intercept ONLY on the first step of a turn.
+    // Two jobs, neither of which reads the query for meaning.
+    //   step 1 — start watching this turn, and remember the reader's own words so the pipeline can serve
+    //            the actual ask. They are CARRIED, never classified.
+    //   later  — once the pipeline has taken the work over, end the model's own turn. Leaving it running
+    //            would have two producers writing one answer: the model appending chapters it can no
+    //            longer fit while the worker composes the report the reader will actually be shown.
     "session.userQuery.pre": async (input: any, output: any) => {
       try {
-        if (input?.step !== 1) return // not the first step — let the normal turn run
-        const text = typeof input?.query === "string" ? input.query : ""
-        if (text.startsWith(RECURSION_PREFIX)) return // never re-intercept our own re-inject
-        // Start watching this turn regardless of how it was phrased. Whether the fast path below fires or
-        // not, the traversal watcher above is now armed and will catch the same work by its shape.
-        if (input?.sessionID) traces.set(input.sessionID, { state: initTraversal(), task: text, fired: false })
-        if (!isCorpusAnalysisTask(text)) return // fast path only; the watcher is the guarantee
-        // When the pipeline cannot own a task (corpus too small, no model reachable, nothing summarized)
-        // it hands the ORIGINAL text back so the model answers it normally — and that text still matches
-        // this detector. Without a record of the hand-back the next turn intercepts it again, falls back
-        // again, and never terminates. The worker leaves the marker; honouring it ends the cycle after
-        // exactly one attempt, per session and corpus, with nothing shown to the reader.
         const sid = input?.sessionID
-        if (sid && handedBack(sid, pluginInput?.directory)) return
+        if (input?.step === 1) {
+          const text = typeof input?.query === "string" ? input.query : ""
+          if (text.startsWith(RECURSION_PREFIX)) return // never watch our own re-inject
+          if (sid) traces.set(sid, { state: initTraversal(), task: text, fired: false, owned: false })
+          return
+        }
+        if (!sid) return
+        const t = traces.get(sid)
+        if (!t?.owned) return
+        traces.delete(sid) // the turn is over; a later one starts its own trace at step 1
         output.cancel = true
-        output.cancelReason = "corpus map-reduce intercept — processing in the background"
-        if (sid) spawnWorker(pluginInput, sid, text)
+        output.cancelReason = "corpus map-reduce — the material is being covered in the background"
       } catch {}
     },
   })

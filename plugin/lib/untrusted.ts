@@ -31,6 +31,12 @@ export const UNTRUSTED_TOOLS = new Set<string>([
   "places_search", // Nominatim free-text fields
   "read_handoff",  // durable handoff content is attacker-influenceable; wrap+scan on read (no fs-read was untrusted before → laundering gap)
   "webfetch",      // native
+  // Material held outside the context (lib/handle) is whatever a tool brought back — a fetched page, an
+  // MCP payload, a file somebody else wrote. Coming back through a handle must not LAUNDER it: the wrap
+  // the original result would have carried is re-applied on the way out, so a detour through the store
+  // cannot strip it. handle_query is wrapped for the same reason — it answers about the material, and a
+  // sub-call can be talked into repeating what it was told.
+  "handle_peek", "handle_query",
   // headless browser pages are attacker-controlled too
   "browser_navigate", "browser_snapshot", "browser_click", "browser_type", "browser_scroll", "browser_vision",
   "browser_back", "browser_get_images", "browser_console", "browser_cdp",

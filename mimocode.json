@@ -1,0 +1,12 @@
+{
+  "$schema": "./fabula.config.schema.json",
+  "plugin": [
+    [
+      "shared-plugin@1.0.0",
+      {
+        "source": "global"
+      }
+    ],
+    "global-only@1.0.0"
+  ]
+}

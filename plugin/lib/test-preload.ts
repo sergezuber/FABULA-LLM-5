@@ -31,6 +31,9 @@ const data = mkdtempSync(join(tmpdir(), "fabula-test-data-"))
 process.env.FABULA_CHECKPOINT_DIR = join(data, "checkpoints")
 process.env.FABULA_HANDOFF_DIR = join(data, "handoff")
 process.env.FABULA_OPS_DIR = join(data, "ops")
+// The offload store holds whole tool results; a wiring test that fires the after-hook writes real bodies,
+// and they must land here rather than in the developer's live handles directory.
+process.env.FABULA_HANDLE_DIR = join(data, "handles")
 // NB the memory store is deliberately NOT pinned here. `storeDir()` carries its own test-runner guard
 // (no XDG_DATA_HOME + a test runner → tmpdir, never the developer's home), and pinning an ABSOLUTE
 // path here OUTRANKED that: a rig setting its own XDG_DATA_HOME had its writes land outside its own

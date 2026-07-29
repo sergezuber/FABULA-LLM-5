@@ -89,6 +89,34 @@ Keeps a single turn from ballooning past the socket's window: a 'read all chapte
 |---|---|---|---|---|
 | @mimo-ai/plugin | npm | **yes** | plugin SDK (tool/hook API) | `cd plugin && bun install` |
 
+## window — Context-window autoloader · core
+
+Loads the model at the widest context window it and this machine can actually hold, worked out when you switch models rather than typed into a config. The window used to be a number someone entered once: a model whose own maximum is 262144 was loaded at 65536 because that figure had been typed, so every request arrived far larger than the call could hold, half of it was re-processed on every step, and the app looked frozen when it was only queueing. Now the model's maximum is read from the serving runtime, the memory cost of one token of window is LEARNED from real loads on this machine, and the window is whichever of the two fits alongside the system and any other loaded model. Never probes: on a Mac an over-sized load does not fail cleanly, it drives the whole machine into swap — so an unfamiliar model is loaded small, measured, and raised once. Kill-switch: FABULA_AUTO_WINDOW=0.
+
+| Dependency | Kind | Required | Purpose | Install / note |
+|---|---|---|---|---|
+| @mimo-ai/plugin | npm | **yes** | plugin SDK (tool/hook API) | `cd plugin && bun install` |
+
+## handle — Context offloading · core
+
+Holds a tool result that no longer fits the turn OUTSIDE the context and gives the context a handle to it instead — type, size, a short prefix, and how to reach the rest. NOTHING OF THE REQUEST IS READ: a result is offloaded when appending it would put the turn past what the MEASURED window holds (probed from the runtime), so the same arithmetic answers for a Russian ask, an English one, and a phrasing nobody has written yet. Nothing is truncated and nothing is lost — the body is written whole, and `handle_query` asks a question of ALL of it through batched sub-calls over window-derived slices (map, then one merge), `handle_peek` reads a raw window, `handle_list` names what is held. This is the intervention measured on this engine class by Recursive Language Models (arXiv:2512.24601v3): context written to a file instead of into the prompt moved a agent of this class from 18 to 64 on CodeQA and 0 to 94 on BrowseComp-Plus. Complements lib/outputcap (which caps and spills a result); the query over the spilled material is what turns truncation into offloading. Model-agnostic. Kill-switch: FABULA_HANDLE=0; knobs FABULA_HANDLE_DIR / _SHARE / _PROMPT_CHARS.
+
+**Tools:** `handle_query`, `handle_peek`, `handle_list`
+
+| Dependency | Kind | Required | Purpose | Install / note |
+|---|---|---|---|---|
+| @mimo-ai/plugin | npm | **yes** | plugin SDK (tool/hook API) | `cd plugin && bun install` |
+| LM Studio (+ :1235 adapter) | service | **yes** | the local model the agent runs on | `Install LM Studio (https://lmstudio.ai), load a tool-calling model, then start proxy/lmstudio-adapter.py` |
+
+## corpus — Corpus map-reduce · core
+
+Resolves the book-analysis compaction loop at its root: covering a corpus, the model loads chapters one by one until the prune threshold trips, compaction fires, the summarizer HIJACKS (continues the analysis instead of summarizing), retries, fails, the engine rebuilds deterministically — and the model re-reads from scratch because per-chapter progress was never persisted. Infinite loop, no report ever produced. It fires on the SHAPE OF THE WORK, never on the wording of the ask: a turn reading file after file out of one directory, past the MEASURED window, with more files still unread, is covering a corpus in any language however phrased. It then runs a deterministic map-reduce in the background — discover the corpus (glob .md/.txt, chapter pattern — any volume, no hardcode), batch it against a budget DERIVED from the socket's window (each prompt packed close to capacity rather than to a fixed size, so a long chapter is read whole), summarize each batch as an ISOLATED call (that batch only — the raw corpus never accumulates in one context), PERSIST each summary to a resume-safe accumulator (an interruption mid-map resumes, progress is never lost), then synthesize the full report and deliver it — and it ends the model's own turn so ONE answer reaches the reader. Compaction never triggers because no single context holds the raw corpus. Fail-open: fewer than 2 files or no model → the task goes back to the normal agent turn, once. Model-agnostic — any model in the socket. Kill-switch: FABULA_CORPUS=0; knobs FABULA_CORPUS_BATCH_SIZE / _BATCH_CHARS / _CHAPTER_CAP / _SUMMARY_TOKENS / _SYNTH_TOKENS / _MIN.
+
+| Dependency | Kind | Required | Purpose | Install / note |
+|---|---|---|---|---|
+| @mimo-ai/plugin | npm | **yes** | plugin SDK (tool/hook API) | `cd plugin && bun install` |
+| LM Studio (+ :1235 adapter) | service | **yes** | the local model the agent runs on | `Install LM Studio (https://lmstudio.ai), load a tool-calling model, then start proxy/lmstudio-adapter.py` |
+
 ## ops — Scheduling & ops
 
 Recurring/one-off jobs via launchd, a run-ledger with overdue detection, notifications.

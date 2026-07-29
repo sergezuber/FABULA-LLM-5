@@ -493,11 +493,29 @@ export default function Page() {
     emptyUserMessages,
     { equals: same },
   )
+  // A TURN BELONGS TO A REQUEST THE READER MADE. The harness inserts user messages of its own to keep a
+  // turn going — goal-gate re-entries, compaction continuations, rebuild carriers, forced-verify
+  // reminders. Each one used to open a turn of its own with its own "Worked for Ns" fold, so a single
+  // question came back as several folds with the model's progress notes standing in the open between
+  // them (measured live 2026-07-28: three turn containers for one ask). They start no turn here; the
+  // preceding real turn collects their assistant work (see SessionTurn's span collection).
+  //
+  // NOTE FOR ANYONE EDITING THIS: there is a SECOND `visibleUserMessages` in
+  // pages/session/use-session-commands.tsx, used by the command palette. This one feeds the timeline.
+  // The first attempt at this change edited only that one and nothing moved on screen.
+  const syntheticOnlyUser = (m: UserMessage) => {
+    const parts = (sync.data.part?.[m.id] ?? []) as { type: string; synthetic?: boolean }[]
+    const texts = parts.filter((p) => p.type === "text")
+    // No text at all (a bare compaction/checkpoint carrier) is not a request either.
+    if (texts.length === 0) return parts.length > 0
+    return texts.every((p) => p.synthetic === true)
+  }
   const visibleUserMessages = createMemo(
     () => {
       const revert = revertMessageID()
-      if (!revert) return userMessages()
-      return userMessages().filter((m) => m.id < revert)
+      const own = userMessages().filter((m, i) => i === 0 || !syntheticOnlyUser(m))
+      if (!revert) return own
+      return own.filter((m) => m.id < revert)
     },
     emptyUserMessages,
     {

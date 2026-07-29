@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.76.0"
+export const FABULA_VERSION = "0.77.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.77.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Свёрнутый блок работы теперь действительно один — прошлая правка легла в файл, который лентой не используется. Правило то же: служебные сообщения обвязки не открывают собственного блока, вся работа собирается под единственный заголовок хода, а в чате остаются только он и готовый ответ.",
+        en: "There really is one folded work block now \u2014 the previous change landed in a file the timeline does not use. The rule is unchanged: the harness\u2019s own messages open no block of their own, all the work gathers under the single turn header, and the conversation shows only that and the finished answer.",
+      },
+    ],
+  },
   {
     version: "0.76.0",
     date: "2026-07-28",

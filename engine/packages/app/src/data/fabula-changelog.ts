@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.75.0"
+export const FABULA_VERSION = "0.76.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.76.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Один вопрос — один свёрнутый блок работы и один ответ. Обвязка вставляет собственные сообщения, чтобы продлить ход, и каждое такое открывало отдельный блок «Worked for…»: одна просьба возвращалась несколькими блоками, а между ними в открытую стояли заметки модели о ходе чтения — «продолжаю читать остальные главы», «у меня 14 из 22». Теперь служебные сообщения не начинают своего блока, вся работа собирается под единственный свёрнутый заголовок хода, а в ленте остаётся только он и готовый ответ. Захотите посмотреть, как всё делалось — разверните.",
+        en: "One question, one folded work block, one answer. The harness inserts its own messages to keep a turn alive, and each opened a separate \u201cWorked for\u2026\u201d block: a single request came back as several, with the model\u2019s progress notes standing in the open between them \u2014 \u201ccontinuing with the rest of the chapters\u201d, \u201c14 of 22 read\u201d. Those messages no longer start a block of their own; all the work gathers under the one folded turn header, and the conversation shows only that and the finished answer. Unfold it if you want to see how it was done.",
+      },
+    ],
+  },
   {
     version: "0.75.0",
     date: "2026-07-28",

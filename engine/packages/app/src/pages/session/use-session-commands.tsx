@@ -85,10 +85,22 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     return sync.data.message[id] ?? []
   }
   const userMessages = () => messages().filter((m) => m.role === "user") as UserMessage[]
+  // A turn belongs to a request the READER made. The harness inserts its own user messages to keep a
+  // turn alive (post-compaction continuations, rebuild blocks, forced-verify reminders, re-injections);
+  // rendering each as a turn of its own gave one question several "Worked for Ns" folds with the model's
+  // progress notes standing in the open between them. They are dropped here and their assistant work is
+  // absorbed by the preceding real turn (see SessionTurn's span collection).
+  const syntheticOnlyUser = (m: UserMessage) => {
+    const parts = (sync.data.part?.[m.id] ?? []) as { type: string; synthetic?: boolean }[]
+    const texts = parts.filter((p) => p.type === "text")
+    if (texts.length === 0) return parts.length > 0
+    return texts.every((p) => p.synthetic === true)
+  }
   const visibleUserMessages = () => {
     const revert = info()?.revert?.messageID
-    if (!revert) return userMessages()
-    return userMessages().filter((m) => m.id < revert)
+    const own = userMessages().filter((m, i) => i === 0 || !syntheticOnlyUser(m))
+    if (!revert) return own
+    return own.filter((m) => m.id < revert)
   }
 
   const showAllFiles = () => {

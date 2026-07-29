@@ -276,6 +276,15 @@ export function SessionTurn(
     setState("showAll", !showAll())
   }
 
+  /** A user message the READER never wrote: every text part on it is synthetic (harness continuations,
+   *  rebuild blocks, forced-verify reminders). Such a message must not open a turn of its own. */
+  const syntheticOnly = (messageID: string) => {
+    const ps = list(data.store.part?.[messageID], emptyParts)
+    const texts = ps.filter((p) => p.type === "text")
+    if (texts.length === 0) return ps.length > 0 // a bare compaction/checkpoint carrier is not a request
+    return texts.every((p) => (p as { synthetic?: boolean }).synthetic === true)
+  }
+
   const assistantMessages = createMemo(
     () => {
       const msg = message()
@@ -284,11 +293,30 @@ export function SessionTurn(
       const messages = allMessages() ?? emptyMessages
       if (messageIndex() < 0) return emptyAssistant
 
+      // ONE TURN PER REQUEST THE READER MADE — and therefore ONE spoiler. The harness inserts its own
+      // user messages to keep a turn going (post-compaction continuations, rebuild blocks, forced-verify
+      // reminders, re-injections). Each of those used to open a NEW turn with its own "Worked for Ns"
+      // fold, so a single question came back as several folds with the model's progress notes standing
+      // in the open between them (measured live 2026-07-28: two folds and four such notes for one ask).
+      // Their assistant work belongs to the request that started it: collect every assistant message from
+      // this user message up to the next one the READER actually wrote.
+      const spanEnd = (() => {
+        for (let i = messageIndex() + 1; i < messages.length; i++) {
+          const item = messages[i]
+          if (item?.role === "user" && !syntheticOnly(item.id)) return item.id
+        }
+        return undefined
+      })()
+      const inSpan = (parentID: string | undefined) => {
+        if (!parentID) return false
+        if (parentID === msg.id) return true
+        return parentID > msg.id && (spanEnd === undefined || parentID < spanEnd)
+      }
       const result: AssistantMessage[] = []
       for (let i = 0; i < messages.length; i++) {
         const item = messages[i]
         if (!item) continue
-        if (item.role !== "assistant" || item.parentID !== msg.id) continue
+        if (item.role !== "assistant" || !inSpan(item.parentID)) continue
         // A compaction summary is the harness writing to itself — "## Goal / ## Instructions" is a
         // rebuild brief, not an answer, and rendering it put that brief in the reader's chat (measured
         // live 2026-07-28). The "Session compacted" divider already tells the reader what happened.

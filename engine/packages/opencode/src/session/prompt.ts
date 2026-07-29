@@ -3114,6 +3114,18 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               agentID: lastUser.agentID,
             })
             trace("compaction.branch", { sid: sessionID, result, auto: compactionPart?.auto ?? false })
+            // A COMPACTION THAT RAN HAS ANSWERED THE CROSSING THAT ASKED FOR IT. maxThresholdCrossed is a
+            // STICKY FLAG — `maxCrossed.has(sessionID)` — set once when the conversation grows past the last
+            // threshold and held until something clears it. Until now only the FAILURE paths cleared it, so a
+            // compaction that SUCCEEDED left the flag standing: the next step saw the same crossing, compacted
+            // again, and again. Measured live 2026-07-28 on "сколько файлов в этой папке?" — twelve
+            // compactions, forty-eight messages, no answer, and the summarizer never even hijacking
+            // (hijacked:false throughout). Nothing was wrong except that the same question was being asked
+            // forever.
+            //
+            // The flag must mean "a crossing nobody has acted on yet". Once acted on, the next compaction has
+            // to be earned by NEW growth past a threshold, exactly as the first one was.
+            yield* prune.resetThresholds(sessionID)
             if (result === "stop") {
               // DETERMINISTIC RESCUE. Measured live on v0.3.4: an overflow 2.5 minutes into a
               // chapter-reading session found NO checkpoint yet (the writer had not completed), fell to

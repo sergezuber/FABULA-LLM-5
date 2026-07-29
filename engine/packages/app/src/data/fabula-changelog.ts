@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.84.0"
+export const FABULA_VERSION = "0.85.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.85.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Разговор сокращается один раз на одно переполнение, а не на каждом шаге после него. Отметка «беседа переросла порог» ставилась один раз и держалась: сокращение отрабатывало, отметка оставалась, и на следующем шаге всё повторялось. Живой замер: на вопрос «сколько файлов в этой папке?» — двенадцать сокращений, сорок восемь сообщений и ни одного ответа, причём ничего не ломалось — просто один и тот же вопрос задавался снова и снова. Сокращение, которое отработало, снимает отметку; следующее нужно заслужить новым ростом.",
+        en: "A conversation is shortened once per overflow, not on every step after it. The mark saying \u201cthe conversation outgrew its threshold\u201d was set once and held: shortening ran, the mark stayed, and the next step repeated it. Measured live on \u201chow many files are in this folder?\u201d \u2014 twelve shortenings, forty-eight messages and no answer, with nothing actually broken: the same question was simply being asked forever. A shortening that ran clears the mark; the next one has to be earned by new growth.",
+      },
+    ],
+  },
   {
     version: "0.84.0",
     date: "2026-07-29",

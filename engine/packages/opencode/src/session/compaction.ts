@@ -17,13 +17,17 @@ import { detectRepeatedCharShingle } from "./prompt/text-ngram-detection"
 import { Effect, Layer, Context } from "effect"
 import { InstanceState } from "@/effect"
 import { isOverflow as overflow, usable } from "./overflow"
-import { mechanicalSummary, compactionMadeRoom, replacedSize } from "./compaction-fallback"
+import { mechanicalSummary, compactionMadeRoom, replacedSize, summarizerSpent } from "./compaction-fallback"
 import { planFold, foldContinuation } from "./compaction-fold"
 import { makeRuntime } from "@/effect/run-service"
 import { fn } from "@/util/fn"
 import { trace } from "./trace"
 
 const log = Log.create({ service: "session.compaction" })
+
+/** Consecutive hijacked summaries per session. Cleared by a clean summary and by the stop it triggers,
+ *  so it never outlives the run of failures it counts. */
+const hijackRuns = new Map<string, number>()
 
 /**
  * Did the summarizer CONTINUE THE TASK instead of summarizing? Deterministic check, no model.
@@ -458,6 +462,8 @@ export const layer: Layer.Layer<
       // this project). A clean retry proceeds like any summary; a failed retry sets a VISIBLE error so
       // the session shows red instead of a fake-done ending on a garbage summary.
       let hijacked = attempt.result === "text-repeat" || summaryLooksHijacked(summaryText(msg.id))
+      // A clean summary means the summarizer is working again — the run of failures is broken.
+      if (!hijacked) hijackRuns.delete(input.sessionID)
       trace("compaction.summary", {
         sid: input.sessionID,
         result: attempt.result,
@@ -497,6 +503,25 @@ export const layer: Layer.Layer<
           // replaced freed nothing, so the context that triggered compaction is still there and the next
           // pass will fire on it again: that is the loop, and it ends here. A pass that DID free room has
           // earned its continuation, however many have come before.
+          // TWO INDEPENDENT REASONS TO STOP, both needed. Room-made asks whether the pass achieved
+          // anything; this asks whether the summarizer can still do the job at all. Measured live
+          // 2026-07-28: a hijacked summarizer produced a fallback that DID free room, so the room test
+          // passed and the loop ran on while every summary was garbage.
+          hijackRuns.set(input.sessionID, (hijackRuns.get(input.sessionID) ?? 0) + 1)
+          if (summarizerSpent(Array.from({ length: hijackRuns.get(input.sessionID)! }, () => ({ hijacked: true })))) {
+            log.warn("summarizer spent — ending the turn", {
+              sessionID: input.sessionID,
+              consecutive: hijackRuns.get(input.sessionID),
+            })
+            trace("compaction.fallback", { sid: input.sessionID, spent: true, consecutive: hijackRuns.get(input.sessionID) })
+            hijackRuns.delete(input.sessionID)
+            attempt.processor.message.error = new MessageV2.AbortedError({
+              message: "Compaction failed: the summarizer kept continuing the task instead of summarizing",
+            }).toObject()
+            attempt.processor.message.finish = "error"
+            yield* session.updateMessage(attempt.processor.message)
+            return "stop"
+          }
           const assembled = mechanicalSummary(modelMessages as never)
           const replaced = replacedSize(modelMessages as never)
           if (!compactionMadeRoom(replaced, assembled.length)) {

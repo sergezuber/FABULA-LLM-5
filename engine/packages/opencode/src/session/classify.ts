@@ -68,17 +68,23 @@ export function classifyAssistantStep(input: {
   // it fall through to `failed` at #5), and skip a stale/resumed turn the
   // conversation already moved past (mirrors the #4 staleness guard) so a
   // degraded turn left in history can't re-fire across turns/resumes.
+  // A TOOL CALL WRITTEN AS PROSE IS THE SAME DEFECT WHATEVER ITS DIALECT AND WHATEVER THE FINISH REASON
+  // SAYS. Measured live 2026-07-28, twice: the model emitted `<tool_call><function=read>…` as text and
+  // this branch never fired once. Both halves of the old test were the same mistake — matching a
+  // SPELLING rather than the thing. The finish reason was "stop", because a provider that did not parse
+  // a tool call has no reason to report one, so requiring "tool-calls" made the branch unreachable in
+  // exactly the case it exists for; and the dialect was `<tool_call>` / `<function=`, absent from the
+  // alternation. Six steps, six "continue", thirty-three messages on one question.
+  //
+  // The substance is: markup describing a tool invocation, with no tool part actually produced. A
+  // cut-off step ("length") is excluded — its markup may be merely unfinished rather than un-parsed.
   if (
-    assistant.finish === "tool-calls" &&
     !assistant.error &&
+    assistant.finish !== "length" &&
     input.lastUser.id < assistant.id &&
     !input.parts.some((part) => part.type === "tool") &&
     input.parts.some(
-      (part) =>
-        part.type === "text" &&
-        !part.synthetic &&
-        !part.ignored &&
-        /<invoke name=|<parameter name=|<\/invoke>|<function_calls>/.test(part.text),
+      (part) => part.type === "text" && !part.synthetic && !part.ignored && looksLikeWrittenToolCall(part.text),
     )
   )
     return { type: "text-tool-call" }
@@ -114,4 +120,24 @@ export function classifyAssistantStep(input: {
   if (input.parts.some((part) => part.type === "reasoning" && part.text.trim().length > 0))
     return { type: "think-only" }
   return { type: "invalid", reason: "empty output" }
+}
+
+/**
+ * Does this text DESCRIBE a tool invocation instead of being one? Dialect-agnostic by construction.
+ *
+ * Every serving stack spells this differently — `<tool_call>`, `<invoke name=…>`, `<function=read>`,
+ * `<function_calls>` — and a list of spellings is stale the day a new model ships. What they share is
+ * an XML-ish opening tag whose NAME says "call a tool/function", so the name is what is matched.
+ *
+ * Deliberately narrow in one respect: a tag alone is not enough when it could be ordinary prose about
+ * markup. The pairing that makes it an invocation — a call tag together with a named function or
+ * parameter — is required, which is why documentation mentioning `<tool_call>` in passing does not
+ * classify as one.
+ */
+export function looksLikeWrittenToolCall(text: string): boolean {
+  if (typeof text !== "string" || !text) return false
+  const callTag = /<\/?[a-z_]*(tool_?call|function_?calls?|invoke)[a-z_]*[\s>=]/i.test(text)
+  if (!callTag) return false
+  const names = /<(function|invoke|tool)[\s]*[=:]|<(function|invoke|tool)\s+name\s*=|<parameter[\s]*[=:]|<parameter\s+name\s*=/i.test(text)
+  return names
 }

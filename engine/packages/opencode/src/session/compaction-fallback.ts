@@ -135,3 +135,39 @@ export function replacedSize(messages: readonly unknown[]): number {
   }
   return n
 }
+
+// ── has the summarizer stopped being able to summarize? ───────────────────────────────────────────
+//
+// COMPLEMENTS compactionMadeRoom, does not replace it. Room-made answers "did this pass achieve
+// anything"; this answers a different question — "is the summarizer still capable of the job at all".
+// Both are needed: measured live 2026-07-28, a hijacked summarizer produced an assembled fallback that
+// DID free room, so the room test passed and the loop continued while every single summary was garbage.
+//
+// Not a tally of attempts across the turn: CONSECUTIVE failures. One derailment among successes is a
+// bad draw; an unbroken run of them is a summarizer that cannot do this job on this transcript, and no
+// further round will change that. A single clean summary resets the count to zero — the state is read
+// from the transcript, so nothing is remembered between calls.
+
+/** How many hijacked summaries in a row mean the summarizer is spent. POLICY: it names what "an
+ *  unbroken run" is, not how many attempts a turn is allowed in total. */
+export const CONSECUTIVE_HIJACKS_SPENT = 3
+
+/** Count hijacked summaries at the END of the run — a clean one anywhere resets it. PURE. */
+export function consecutiveHijacks(
+  summaries: readonly { hijacked: boolean }[],
+  ): number {
+  let n = 0
+  for (let i = summaries.length - 1; i >= 0; i--) {
+    if (!summaries[i].hijacked) break
+    n++
+  }
+  return n
+}
+
+/** Is the summarizer spent for this turn? */
+export function summarizerSpent(
+  summaries: readonly { hijacked: boolean }[],
+  max = CONSECUTIVE_HIJACKS_SPENT,
+): boolean {
+  return consecutiveHijacks(summaries) >= max
+}

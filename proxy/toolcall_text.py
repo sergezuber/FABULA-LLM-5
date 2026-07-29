@@ -46,17 +46,37 @@ def parse_text_tool_calls(content):
     if not blocks:
         return []
 
-    # Everything outside the blocks must be whitespace. A single word of prose means the model was
-    # TALKING about a call, and rewriting that into one would invent an action the reader never saw.
-    if _CALL.sub("", content).strip():
-        return []
+    # PROSE AROUND A COMPLETE BLOCK IS NORMAL; PROSE INSTEAD OF ONE IS NOT.
+    #
+    # The first version required everything outside the blocks to be whitespace, reasoning that any prose
+    # meant the model was TALKING about a call. That guard is right about the danger and wrong about the
+    # test: measured live 2026-07-28, the model wrote "Давай посмотрим, что в этой папке." and then a
+    # perfectly well-formed block, and this returned [] — so the recovery never fired in exactly the case
+    # it exists for, and the turn looped until it died.
+    #
+    # What separates a real call from a description of one is not the absence of surrounding words — it
+    # is whether the block is SYNTACTICALLY COMPLETE: opened and closed, naming a function, with each
+    # parameter opened and closed. Documentation quoting a fragment does not satisfy that; a model
+    # narrating its next step before emitting the call does. The completeness test lives in the parse
+    # below — a block we do not fully understand still disqualifies the whole content — so the guard here
+    # only needs to refuse content with NO complete block at all.
+    #
+    # One shape stays refused: prose that mentions the tags but closes nothing. That is caught by _FUNC
+    # failing to match inside the block, which returns [] for the whole content.
 
     calls = []
     for body in blocks:
         fn = _FUNC.search(body)
         if not fn:
             return []  # a block we do not fully understand disqualifies the whole content
-        args = {name: value for name, value in _PARAM.findall(fn.group(2))}
+        # Every parameter must be OPENED AND CLOSED. An unclosed one means the text was cut off or was
+        # never a call at all, and inventing arguments from a fragment is worse than not recovering.
+        body = fn.group(2)
+        opened = len(re.findall(r"<parameter=", body))
+        closed = len(re.findall(r"</parameter>", body))
+        if opened != closed:
+            return []
+        args = {name: value for name, value in _PARAM.findall(body)}
         calls.append({"name": fn.group(1), "arguments": args})
     return calls
 

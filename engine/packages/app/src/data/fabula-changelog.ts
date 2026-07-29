@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.81.0"
+export const FABULA_VERSION = "0.82.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.82.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Вызов инструмента, написанный текстом вместо настоящего вызова, теперь узнаётся и восстанавливается. Модель иногда описывает вызов прозой; ни одна из двух защит не срабатывала: движок требовал, чтобы причина остановки была «вызов инструмента» — но она такой не бывает, когда вызов не распознан, — и знал лишь один диалект разметки из нескольких. Адаптер же принимал вызов, только если во всём ответе не было ни слова прозы, а модель предваряет вызов фразой. Итог: один вопрос давал тридцать три сообщения и ход не доходил до ответа. Теперь распознаётся суть, а не написание, а вокруг полного блока допускается обычная речь.",
+        en: "A tool call written as text instead of being made is now recognised and recovered. The model sometimes describes a call in prose; neither guard fired: the engine required the finish reason to be \u201ctool call\u201d \u2014 which it never is when the call was not parsed \u2014 and knew one markup dialect out of several. The adapter accepted a call only when the whole reply contained no prose at all, while the model narrates before calling. One question produced thirty-three messages and never reached an answer. Substance is matched now rather than spelling, and ordinary speech around a complete block is allowed.",
+      },
+      {
+        ru: "Сводчик, который раз за разом срывается, признаётся неспособным. Проверка «освободило ли место» осталась, но её мало: сорванная сводка может освободить место и при этом быть мусором. Три срыва подряд — и ход завершается; одна удачная сводка обнуляет счёт.",
+        en: "A summarizer that keeps derailing is judged unable. The \u201cdid it free room\u201d test stays, but it is not enough on its own: a derailed summary can free room and still be garbage. Three derailments in a row end the turn; one clean summary resets the count.",
+      },
+    ],
+  },
   {
     version: "0.81.0",
     date: "2026-07-28",

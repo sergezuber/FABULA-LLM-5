@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { mechanicalSummary, compactionMadeRoom, replacedSize, ROOM_MADE_RATIO, LIST_LIMIT } from "../../src/session/compaction-fallback"
+import { mechanicalSummary, compactionMadeRoom, replacedSize, ROOM_MADE_RATIO, LIST_LIMIT, consecutiveHijacks, summarizerSpent } from "../../src/session/compaction-fallback"
 
 // The measured case: a conversation about reading a book, where the summariser kept reading instead of
 // summarising. Twice. The run then died and everything it had read was lost.
@@ -97,5 +97,31 @@ describe("continuing after a fallback is earned by making room", () => {
     const slice = Array.from({ length: 12 }, () => ({ parts: [{ type: "text", text: "глава ".repeat(2000) }] }))
     const summary = mechanicalSummary([{ role: "user", parts: [{ type: "text", text: "о чем книга" }] }] as never)
     expect(compactionMadeRoom(replacedSize(slice), summary.length)).toBe(true)
+  })
+})
+
+// COMPLEMENTS the room test, does not replace it. Measured live 2026-07-28: a hijacked summarizer
+// produced a fallback that DID free room, so the room test passed and the loop ran on while every
+// summary was garbage. One derailment among successes is a bad draw; an unbroken run of them is a
+// summarizer that cannot do this job on this transcript.
+describe("a summarizer that keeps derailing is spent", () => {
+  const run = (...flags: boolean[]) => flags.map((hijacked) => ({ hijacked }))
+  test("a clean run has spent nothing", () => {
+    expect(consecutiveHijacks(run(false, false, false))).toBe(0)
+    expect(summarizerSpent(run(false, false, false))).toBe(false)
+  })
+  test("one derailment among successes is a bad draw, not a verdict", () => {
+    expect(summarizerSpent(run(true, false, true))).toBe(false)
+  })
+  test("a clean summary anywhere resets the run", () => {
+    expect(consecutiveHijacks(run(true, true, true, false))).toBe(0)
+    expect(summarizerSpent(run(true, true, true, false))).toBe(false)
+  })
+  test("an unbroken run at the bound is spent", () => {
+    expect(summarizerSpent(run(true, true, true))).toBe(true)
+    expect(summarizerSpent(run(false, true, true, true))).toBe(true)
+  })
+  test("the six consecutive hijacks measured live are spent", () => {
+    expect(summarizerSpent(run(true, true, true, true, true, true))).toBe(true)
   })
 })

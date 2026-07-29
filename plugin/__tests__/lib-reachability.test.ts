@@ -127,7 +127,10 @@ function productionCorpus(): { file: string; text: string }[] {
 /** Exported names of a module, by declaration — not by re-export, which would count nothing as used. */
 function exportsOf(text: string): string[] {
   const out = new Set<string>()
-  const re = /^export\s+(?:async\s+)?(?:function|const|class|interface|type|enum)\s+([A-Za-z_$][\w$]*)/gm
+  // FUNCTIONS, CONSTANTS and CLASSES only — the things that DO something. A `type` or `interface` is a
+  // contract, routinely exported so the module's own signatures can name it, and flagging those buries
+  // the one signal worth reading (a helper nobody calls) under dozens that mean nothing.
+  const re = /^export\s+(?:async\s+)?(?:function|const|class|enum)\s+([A-Za-z_$][\w$]*)/gm
   for (const m of text.matchAll(re)) out.add(m[1])
   return [...out]
 }
@@ -169,6 +172,48 @@ test("every exported helper in lib/ is reachable from production, or declared un
   // The message has to be actionable, because the person who trips it did not write the orphan.
   expect(orphans, orphans.length
     ? `these exports have no production caller — wire them, delete them, or add them to DECLARED_UNREACHABLE with the reason:\n  ${orphans.join("\n  ")}`
+    : "").toEqual([])
+})
+
+test("no module is an ISLAND — internally cohesive, externally dead", () => {
+  // The per-symbol check above accepts a reference from anywhere, including the symbol's own file. That
+  // is right for a live module's internal helpers — and it is exactly how `lib/attest/attestation.ts`
+  // stayed invisible: written, tested, and never called from ANY other file, while its own exports
+  // referenced each other and made the whole thing look used. The question that catches an island is
+  // asked of the MODULE, not the symbol: does anything outside these bytes reach in?
+  const corpus = productionCorpus()
+  const islands: string[] = []
+
+  for (const file of [...listFiles(LIB_DIR, isProdTs), ...listFiles(join(LIB_DIR, "attest"), isProdTs)]) {
+    const base = file.slice(LIB_DIR.length + 1)
+    if (DECLARED_UNREACHABLE[base]) continue
+    const text = readFileSync(file, "utf8")
+    const names = exportsOf(text)
+    if (!names.length) continue
+    // A module can be reached WITHOUT a symbol reference: the worker modules are spawned as detached
+    // processes, so production names their PATH and never imports them. `fabula-ops.ts` builds
+    // `lib/jobpostrun.ts` exactly that way, and calling it dead would be wrong in the loud direction.
+    const stem = base.replace(/\.ts$/, "")
+    const byPath = corpus.some((c) => c.file !== file && c.text.includes(stem))
+    if (byPath) continue
+
+    // A name declared in SEVERAL modules proves nothing when found elsewhere — `sha256` is defined in
+    // five files here, so matching it anywhere made an untouched module look alive. Only names that are
+    // unique in this codebase can testify that someone reached in.
+    const declaredElsewhere = new Set<string>()
+    for (const c of corpus) {
+      if (c.file === file) continue
+      for (const n of exportsOf(c.text)) declaredElsewhere.add(n)
+    }
+    const unique = names.filter((n) => !declaredElsewhere.has(n))
+    if (!unique.length) continue // nothing here can speak either way; say nothing rather than guess
+
+    const outside = corpus.filter((c) => c.file !== file)
+    if (!unique.some((n) => usedInProduction(n, file, outside))) islands.push(base)
+  }
+
+  expect(islands, islands.length
+    ? `nothing outside these modules uses any of their exports — wire one entry point, delete them, or declare them in DECLARED_UNREACHABLE:\n  ${islands.join("\n  ")}`
     : "").toEqual([])
 })
 

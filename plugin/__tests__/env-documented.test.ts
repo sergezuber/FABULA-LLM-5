@@ -42,7 +42,13 @@ function namesReadByCode(): Set<string> {
     ...readAll(join(ROOT, "plugin")),
     ...readAll(join(ROOT, "proxy")),
     // Built from parts: the engine package name must not appear as a literal in a tracked file.
-    ...readAll(join(ROOT, "engine", "packages", ENGINE_PKG, "src", "session")),
+    //
+    // The WHOLE engine source, not one directory of it. Scanning only `session` accused five correctly
+    // documented settings of being promises the code does not keep — they are read from `cli/cmd` and
+    // `server/routes`, which the scan could not see. A guard whose reach is narrower than the codebase
+    // does not merely miss things: it points at correct work, and the obvious way to make it green
+    // again is to delete the documentation that was right.
+    ...readAll(join(ROOT, "engine", "packages", ENGINE_PKG, "src")),
     // The native host reads its own knobs — leaving it out of the scan made three legitimately
     // documented names look like promises the code does not keep.
     ...readAll(join(ROOT, "app")),

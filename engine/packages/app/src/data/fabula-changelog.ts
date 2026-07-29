@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.83.0"
+export const FABULA_VERSION = "0.84.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.84.0",
+    date: "2026-07-29",
+    items: [
+      {
+        ru: "Пять настроек, которые движок читал, названы в примере конфигурации. Проверка, следящая за этим, смотрела лишь в одну папку движка из многих — и обвиняла верно описанные настройки в том, что код их не читает; естественным ответом на такую жалобу было бы стереть правильное описание.",
+        en: "Five settings the engine reads are now named in the example configuration. The check that guards this looked at only one of the engine's directories, and accused correctly documented settings of being promises the code does not keep — the natural way to silence such a complaint is to delete the description that was right.",
+      },
+      {
+        ru: "Проверка достижимости помощников научилась видеть остров: модуль, чьи части ссылаются только друг на друга, снаружи мёртв, но выглядел живым. Она также перестала считать доказательством совпадение общего имени и больше не объявляет мёртвым то, что запускается по пути, а не по ссылке.",
+        en: "The reachability check now sees an island: a module whose parts reference only each other is dead from outside while looking alive. It also stopped treating a shared name as evidence, and no longer calls dead something that is launched by path rather than by reference.",
+      },
+    ],
+  },
   {
     version: "0.83.0",
     date: "2026-07-28",

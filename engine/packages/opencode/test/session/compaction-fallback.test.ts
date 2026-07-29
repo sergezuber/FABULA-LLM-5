@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { mechanicalSummary, LIST_LIMIT, MECHANICAL_SUMMARY_MARKER, MECHANICAL_FALLBACK_MAX, fallbacksUsed, fallbackExhausted } from "../../src/session/compaction-fallback"
+import { mechanicalSummary, compactionMadeRoom, replacedSize, ROOM_MADE_RATIO, LIST_LIMIT } from "../../src/session/compaction-fallback"
 
 // The measured case: a conversation about reading a book, where the summariser kept reading instead of
 // summarising. Twice. The run then died and everything it had read was lost.
@@ -62,39 +62,40 @@ describe("mechanicalSummary", () => {
   })
 })
 
-// A degradation that always continues is a loop, not a recovery. Measured live 2026-07-28: one question
-// ("что тут? о чем?") produced 10 compactions, 4 assembled summaries and 51 messages, and the model kept
-// generating long after the reader had their answer — because the mechanical fallback replaced the only
-// terminal condition the hijack path had with an unconditional "continue".
-describe("the mechanical fallback is bounded", () => {
-  test("the marker the loop counts is the summary's own opening line", () => {
-    const s = mechanicalSummary([{ role: "user", parts: [{ type: "text", text: "что тут?" }] }] as never)
-    expect(s.startsWith(MECHANICAL_SUMMARY_MARKER)).toBe(true)
-  })
-  const assembled = (n: number) =>
-    Array.from({ length: n }, () => ({
-      info: { role: "assistant", summary: true },
-      parts: [{ type: "text", text: MECHANICAL_SUMMARY_MARKER + "\n\nwhatever" }],
-    }))
-  const ordinary = [
-    { info: { role: "user" }, parts: [{ type: "text", text: "что тут?" }] },
-    { info: { role: "assistant" }, parts: [{ type: "text", text: "вот разбор" }] },
-    // a MODEL summary (not assembled) must not spend the allowance
-    { info: { role: "assistant", summary: true }, parts: [{ type: "text", text: "## Goal\nread" }] },
-  ]
 
-  test("an ordinary turn has spent nothing", () => {
-    expect(fallbacksUsed(ordinary as never)).toBe(0)
-    expect(fallbackExhausted(ordinary as never)).toBe(false)
+// CONTINUING IS EARNED, NOT ALLOWANCED. The first attempt at this bound was "at most two fallbacks" — a
+// decision taken before the situation exists, wrong in both directions: a turn still freeing room gets
+// stopped, a turn freeing nothing gets two pointless rounds first. What matters is whether the pass did
+// the one thing compaction is for. Measured live 2026-07-28: one question, ten compactions, fifty-one
+// messages, the model still generating after the answer had been delivered.
+describe("continuing after a fallback is earned by making room", () => {
+  test("a summary far smaller than what it replaced made room", () => {
+    expect(compactionMadeRoom(100_000, 3_000)).toBe(true)
   })
-  test("one assembled summary is not yet the bound — degrading beats dying", () => {
-    expect(fallbackExhausted([...ordinary, ...assembled(1)] as never)).toBe(false)
+  test("a summary the size of what it replaced made none — this is the loop", () => {
+    expect(compactionMadeRoom(100_000, 100_000)).toBe(false)
+    expect(compactionMadeRoom(100_000, 90_000)).toBe(false)
   })
-  test("at the bound the turn ends instead of degrading again", () => {
-    expect(fallbacksUsed(assembled(MECHANICAL_FALLBACK_MAX) as never)).toBe(MECHANICAL_FALLBACK_MAX)
-    expect(fallbackExhausted(assembled(MECHANICAL_FALLBACK_MAX) as never)).toBe(true)
+  test("the boundary is the stated ratio, not a count of attempts", () => {
+    expect(compactionMadeRoom(1000, 1000 * ROOM_MADE_RATIO - 1)).toBe(true)
+    expect(compactionMadeRoom(1000, 1000 * ROOM_MADE_RATIO)).toBe(false)
   })
-  test("the live loop — ten compactions, four assembled summaries — is stopped", () => {
-    expect(fallbackExhausted(assembled(4) as never)).toBe(true)
+  test("a hundredth pass that still frees room continues — there is no allowance to spend", () => {
+    for (let i = 0; i < 100; i++) expect(compactionMadeRoom(80_000, 2_000)).toBe(true)
+  })
+  test("an unmeasurable size never ends a turn (fail-open)", () => {
+    expect(compactionMadeRoom(0, 5_000)).toBe(true)
+    expect(compactionMadeRoom(-1, 5_000)).toBe(true)
+    expect(compactionMadeRoom(NaN, 5_000)).toBe(true)
+  })
+  test("size counts the whole serialised shape, tool payloads included", () => {
+    const withTool = [{ info: { role: "assistant" }, parts: [{ type: "tool", state: { output: "x".repeat(5000) } }] }]
+    expect(replacedSize(withTool)).toBeGreaterThan(5000)
+    expect(replacedSize([])).toBe(0)
+  })
+  test("the real shape: a book slice replaced by a page of prose continues", () => {
+    const slice = Array.from({ length: 12 }, () => ({ parts: [{ type: "text", text: "глава ".repeat(2000) }] }))
+    const summary = mechanicalSummary([{ role: "user", parts: [{ type: "text", text: "о чем книга" }] }] as never)
+    expect(compactionMadeRoom(replacedSize(slice), summary.length)).toBe(true)
   })
 })

@@ -34,13 +34,6 @@ function listOf(items: string[], limit = LIST_LIMIT): string {
  * Deliberately factual and dull: the user's own words, the files touched, the tools used, the last thing
  * said. A later turn reading this knows what was done and what was asked, which is what a summary is for.
  */
-/** The opening line of an assembled summary. Exported so the compaction loop can COUNT how many it has
- *  already produced this turn — a degradation that always continues is a loop, not a recovery. */
-export const MECHANICAL_SUMMARY_MARKER = "# Summary of the conversation so far"
-
-/** How many assembled summaries one turn may use before the hijack path gives up and ends the turn. */
-export const MECHANICAL_FALLBACK_MAX = 2
-
 export function mechanicalSummary(messages: readonly FallbackMessage[]): string {
   const msgs = messages ?? []
   const userTexts: string[] = []
@@ -66,7 +59,7 @@ export function mechanicalSummary(messages: readonly FallbackMessage[]): string 
   }
 
   const out: string[] = [
-    MECHANICAL_SUMMARY_MARKER,
+    "# Summary of the conversation so far",
     "",
     "_Assembled from what the conversation contains, because the summariser could not be persuaded to",
     "summarise. Factual rather than eloquent; nothing here is inferred._",
@@ -100,24 +93,45 @@ export function mechanicalSummary(messages: readonly FallbackMessage[]): string 
   return out.join("\n")
 }
 
-/** How many assembled summaries this turn has already used. PURE, so the bound is testable: the inline
- *  version of this count was covered by nothing, and a mutation removing the bound killed no test. */
-export function fallbacksUsed(
-  messages: readonly { info: { role: string; summary?: boolean }; parts: readonly { type: string; text?: string }[] }[],
-): number {
-  return messages.filter(
-    (m) =>
-      m.info.role === "assistant" &&
-      m.info.summary === true &&
-      m.parts.some((p) => p.type === "text" && (p.text ?? "").startsWith(MECHANICAL_SUMMARY_MARKER)),
-  ).length
+// ── is continuing still justified? ────────────────────────────────────────────────────────────────
+//
+// NOT A COUNT. "At most N fallbacks" is a decision taken before the situation exists, and it is wrong in
+// both directions: a turn that keeps freeing room is stopped for no reason, and a turn that frees nothing
+// is allowed N pointless rounds first. The question is not how many times this has happened — it is
+// whether the last compaction ACHIEVED anything.
+//
+// A compaction exists to make room. If the summary that replaces a slice of conversation is not
+// materially smaller than the slice it replaced, the cycle freed nothing, and the next one will free
+// nothing either: the context that triggered compaction is still there, so compaction fires again, and
+// the turn churns. Measured live 2026-07-28: one question produced ten compactions and fifty-one
+// messages this way, the model still generating long after the answer had been delivered.
+//
+// So the criterion is local, measured, and needs no memory of earlier rounds: room made → continue,
+// however many times; no room made → this path is spent, end the turn. Same principle as the loop guard
+// (identical work producing identical results is not progress) and the think-only bound (a step that
+// changed something does not spend the budget).
+
+/** Fraction of the replaced material a summary must fall under to count as having made room. POLICY, and
+ *  the only number here: it says what "materially smaller" means, not how many attempts are allowed. */
+export const ROOM_MADE_RATIO = 0.5
+
+/** Did this compaction actually free space? PURE — takes the sizes, decides nothing about counts.
+ *  Unknown sizes answer TRUE (fail-open): a measurement that could not be taken must never end a turn. */
+export function compactionMadeRoom(replacedChars: number, summaryChars: number, ratio = ROOM_MADE_RATIO): boolean {
+  if (!(replacedChars > 0) || !(summaryChars >= 0)) return true
+  return summaryChars < replacedChars * ratio
 }
 
-/** Has the turn spent its allowance of assembled summaries? Degrading beats dying; degrading FOREVER is
- *  a loop — measured live 2026-07-28 as 10 compactions and 51 messages on one question. */
-export function fallbackExhausted(
-  messages: readonly { info: { role: string; summary?: boolean }; parts: readonly { type: string; text?: string }[] }[],
-  max = MECHANICAL_FALLBACK_MAX,
-): boolean {
-  return fallbacksUsed(messages) >= max
+/** Size of the material a compaction pass replaced, in characters. Counts the whole serialised shape —
+ *  tool arguments and results are what actually fills a context, not just the prose a reader notices. */
+export function replacedSize(messages: readonly unknown[]): number {
+  let n = 0
+  for (const m of messages) {
+    try {
+      n += JSON.stringify(m)?.length ?? 0
+    } catch {
+      /* a message that cannot be serialised contributes what we can see of it: nothing */
+    }
+  }
+  return n
 }

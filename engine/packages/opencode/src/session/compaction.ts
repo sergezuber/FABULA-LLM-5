@@ -17,7 +17,7 @@ import { detectRepeatedCharShingle } from "./prompt/text-ngram-detection"
 import { Effect, Layer, Context } from "effect"
 import { InstanceState } from "@/effect"
 import { isOverflow as overflow, usable } from "./overflow"
-import { mechanicalSummary, fallbacksUsed, fallbackExhausted } from "./compaction-fallback"
+import { mechanicalSummary, compactionMadeRoom, replacedSize } from "./compaction-fallback"
 import { planFold, foldContinuation } from "./compaction-fold"
 import { makeRuntime } from "@/effect/run-service"
 import { fn } from "@/util/fn"
@@ -492,18 +492,20 @@ export const layer: Layer.Layer<
           // the conversation VERIFIABLY contains is worse prose than a model's but loses nothing, ends
           // the loop, and — since summary messages are no longer rendered (2026-07-28) — is INTERNAL:
           // the reader can never see it, which is the sin the first version of this fallback committed.
-          // BOUNDED. The first version of this fallback continued the turn every time, which removed the
-          // only terminal condition the hijack path had: measured live 2026-07-28, one question ("что
-          // тут? о чем?") produced 10 compactions, 4 mechanical summaries and 51 messages, and the model
-          // kept generating long after the reader had their answer. Degrading beats dying, but a
-          // degradation that always continues is a loop. Past the bound the turn ends as it used to.
-          const already = fallbacksUsed(input.messages as never)
-          if (fallbackExhausted(input.messages as never)) {
-            log.warn("mechanical fallback exhausted — ending the turn", {
+          // CONTINUE ONLY IF THIS PASS MADE ROOM. Not a count of attempts — a measurement of the one
+          // thing compaction exists to do. A summary that is not materially smaller than the slice it
+          // replaced freed nothing, so the context that triggered compaction is still there and the next
+          // pass will fire on it again: that is the loop, and it ends here. A pass that DID free room has
+          // earned its continuation, however many have come before.
+          const assembled = mechanicalSummary(modelMessages as never)
+          const replaced = replacedSize(modelMessages as never)
+          if (!compactionMadeRoom(replaced, assembled.length)) {
+            log.warn("compaction freed no room — ending the turn", {
               sessionID: input.sessionID,
-              used: already,
+              replaced,
+              summary: assembled.length,
             })
-            trace("compaction.fallback", { sid: input.sessionID, exhausted: true, used: already })
+            trace("compaction.fallback", { sid: input.sessionID, madeRoom: false, replaced, summary: assembled.length })
             attempt.processor.message.error = new MessageV2.AbortedError({
               message: "Compaction failed: the summarizer kept continuing the task instead of summarizing",
             }).toObject()
@@ -511,7 +513,6 @@ export const layer: Layer.Layer<
             yield* session.updateMessage(attempt.processor.message)
             return "stop"
           }
-          const assembled = mechanicalSummary(modelMessages as never)
           log.warn("summary hijacked twice — mechanical fallback summary used", { sessionID: input.sessionID })
           yield* session.removeMessage({ sessionID: input.sessionID, messageID: msg.id })
           msg = createSummaryMessage()
@@ -525,7 +526,7 @@ export const layer: Layer.Layer<
             text: assembled,
             time: { start: Date.now(), end: Date.now() },
           })
-          trace("compaction.fallback", { sid: input.sessionID, mechanical: true })
+          trace("compaction.fallback", { sid: input.sessionID, mechanical: true, replaced, summary: assembled.length })
           // Steer the existing downstream: a fallback summary continues the turn exactly as a clean one.
           attempt.result = "continue"
         }

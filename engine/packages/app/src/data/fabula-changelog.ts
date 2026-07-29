@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.79.0"
+export const FABULA_VERSION = "0.80.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.80.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Продолжать работу можно, только если сокращение разговора действительно освободило место. Прежняя граница — «не больше двух попыток» — была числом, выбранным заранее, и ошибалась в обе стороны: ход, который ещё расчищал место, останавливали без причины, а ход, не расчищавший ничего, получал две бесполезные попытки. Теперь меряется единственное, ради чего сокращение существует: если сводка не стала заметно меньше того, что заменила, места не появилось — следующий круг будет таким же, и ход завершается. Расчистило — продолжаем, сколько бы кругов ни прошло.",
+        en: "Work continues only when shortening the conversation actually freed space. The earlier bound \u2014 \u201cat most two attempts\u201d \u2014 was a number chosen in advance, and it was wrong in both directions: a turn still clearing room was stopped for nothing, and a turn clearing nothing was given two pointless rounds. What is measured now is the one thing shortening exists for: if the summary is not materially smaller than what it replaced, no space appeared, the next round will be the same, and the turn ends. If space did appear, work continues \u2014 however many rounds have passed.",
+      },
+    ],
+  },
   {
     version: "0.79.0",
     date: "2026-07-28",

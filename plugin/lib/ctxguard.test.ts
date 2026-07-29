@@ -1,7 +1,7 @@
 // Pure-core guards for the context-budget guard. The wiring test drives the REAL hook; this file pins the
 // decision logic — including the two properties that make it safe to ship default-on: it is INERT below
 // the high-water mark (the efficiency contract), and a bulk-read ask is recognised in EN and RU.
-import { test, expect } from "bun:test"
+import { test, expect, describe } from "bun:test"
 import {
   estimateTokens,
   estimateChars,
@@ -15,8 +15,7 @@ import {
   BOUNDED_MARKER,
   setLearnedWindow,
   learnedWindow,
-  LEARNED_TTL_MS,
-} from "./ctxguard"
+  LEARNED_TTL_MS, boundedReadDirective, BOUNDED_MARKER } from "./ctxguard"
 
 const msg = (role: string, text: string) => ({ info: { role }, parts: [{ type: "text", text }] })
 
@@ -110,4 +109,25 @@ test("a learned ceiling expires, so a model reload is noticed without a restart"
   // …and forgotten after it, so the next probe re-asks. The measured case: the model was reloaded from
   // 65536 to 262144 and a permanent cache kept the harness shedding against the old figure.
   expect(learnedWindow(t0 + LEARNED_TTL_MS + 1)).toBe(0)
+})
+
+// Batching is about MEMORY, never about coverage. Measured live 2026-07-28: asked to read a folder in
+// full, the model announced «читаю остальные главы выборочно» — reading the rest SELECTIVELY. It was
+// obeying: "process a handful of items" is what a sampling instruction sounds like. The directive must
+// demand complete coverage in the same breath as it bounds the context.
+describe("boundedReadDirective demands completeness, not a sample", () => {
+  const d = boundedReadDirective()
+  test("says every item is read and nothing is skipped or sampled", () => {
+    expect(d).toMatch(/EVERY item/)
+    expect(d).toMatch(/nothing is skipped/i)
+    expect(d).toMatch(/nothing is sampled/i)
+    expect(d).toMatch(/until NOTHING is left unread/i)
+  })
+  test("says outright that the batching is not permission to read less", () => {
+    expect(d).toMatch(/not permission to read less/i)
+  })
+  test("still carries the memory bound it exists for", () => {
+    expect(d).toMatch(/never accumulate the entire corpus/i)
+    expect(d).toContain(BOUNDED_MARKER)
+  })
 })

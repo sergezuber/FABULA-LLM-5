@@ -118,3 +118,27 @@ test("a control token WITH a payload is refused — the live case the first filt
 test("a tag without a payload is still prose", () => {
   expect(chooseTitle({ raw: "Как работает <div> в вёрстке", promptText: "", userText: "q" })).toContain("вёрстке")
 })
+
+// A reasoning marker is never a title, whatever dialect writes it. Measured live 2026-07-28: a chat was
+// named "<｜dsml:thinking>Let me explore the current folder structure…" — a FULLWIDTH pipe and no closing
+// tag, so the paired <think> strip never saw it and the echo test could not reach it either.
+describe("reasoning markers never become titles", () => {
+  const cases = [
+    "<｜dsml:thinking>Let me explore the current folder structure to understand what's in here.</｜dsml:thinking>",
+    "<|thinking|>First I should list the files",
+    "<think>planning the answer",
+    "<Thinking>считаю варианты",
+  ]
+  for (const raw of cases)
+    test(`falls back to the user's words for: ${raw.slice(0, 28)}…`, () => {
+      const title = chooseTitle({ raw, promptText: "", userText: "изучи, что в этой папке" })
+      expect(title).not.toContain("think")
+      expect(title).not.toContain("<")
+      expect(title).toContain("изучи")
+    })
+
+  test("a real title mentioning an HTML tag still survives", () => {
+    const title = chooseTitle({ raw: "Как работает <div> в вёрстке", promptText: "", userText: "x" })
+    expect(title).toBe("Как работает <div> в вёрстке")
+  })
+})

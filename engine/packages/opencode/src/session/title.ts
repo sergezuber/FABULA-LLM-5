@@ -72,6 +72,16 @@ export function chooseTitle(input: { raw: string; promptText?: string; userText?
   const lines = String(input.raw ?? "")
     .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
     .split("\n")
+    // A REASONING MARKER MEANS THE WHOLE LINE IS THINKING — so the line is DROPPED, not cleaned. The
+    // paired strip above only knows the plain `<think>` spelling, so a model opening with
+    // `<｜dsml:thinking>` — a fullwidth pipe, no closing tag — sailed through and named the chat after
+    // its own first thought (measured live 2026-07-28: "<｜dsml:thinking>Let me explore the current
+    // folder structure…"). Merely deleting the tag is not enough and the first attempt proved it: what
+    // remains is still inner monologue, in the model's own working language, about a conversation it has
+    // not had yet. Match the CONCEPT rather than a spelling — any tag whose name contains "think" is a
+    // reasoning delimiter in every dialect seen — and let the next real line, or the user's own words,
+    // name the chat.
+    .filter((l) => !/<[^<>]*think[^<>]*>/i.test(l))
     .map((l) => plainTitle(l))
     .filter((l) => l.length > 0)
   // Markup is not a title. Live, a session came back named `<tool_calls>` — the model emitted a control

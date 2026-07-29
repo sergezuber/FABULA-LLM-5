@@ -143,12 +143,19 @@ export function consolidationDirective(pct: number): string {
   )
 }
 export function boundedReadDirective(): string {
+  // BATCHING IS ABOUT MEMORY, NOT ABOUT COVERAGE — and the wording has to say so, because the model reads
+  // whatever this leaves ambiguous. Measured live 2026-07-28: asked to read a folder IN FULL, the model
+  // announced «читаю остальные главы выборочно» — reading the rest SELECTIVELY. It was not disobeying;
+  // "process a handful of items" is what a sampling instruction sounds like. Every item still gets read;
+  // what is bounded is how much raw text is held at once.
   return (
-    `\n\n${BOUNDED_MARKER} This asks you to read a large body of material. Read it in BOUNDED BATCHES, ` +
-    `not all at once: process a handful of items, write a compact running summary of the findings, then ` +
-    `move to the next batch keeping only the summary — never accumulate the entire corpus in one context. ` +
-    `Produce the final analysis from the accumulated summary. (Reading everything into a single context at ` +
-    `once exhausts the serving budget and ends the turn before you finish.)`
+    `\n\n${BOUNDED_MARKER} This asks you to read a large body of material. Read EVERY item — nothing is ` +
+    `skipped, nothing is sampled, and coverage must be complete — but hold only a little of it at a time: ` +
+    `read a few items, write a compact running summary of the findings, then move to the next few keeping ` +
+    `only the summary, until NOTHING is left unread. Never accumulate the entire corpus in one context. ` +
+    `Produce the final analysis from the accumulated summary. (The batching exists because holding it all ` +
+    `at once exhausts the serving budget and ends the turn before you finish — it is not permission to ` +
+    `read less. If you cannot cover everything, say so plainly rather than presenting a sample as the whole.)`
   )
 }
 

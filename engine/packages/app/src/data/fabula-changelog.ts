@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.74.0"
+export const FABULA_VERSION = "0.75.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.75.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Просьба прочесть всё больше не превращается в чтение выборочно. Указание держать в памяти понемногу звучало как «возьми несколько штук» — и на задаче «изучи папку» модель честно объявила, что читает главы выборочно. Дробление касается ПАМЯТИ, а не охвата: теперь сказано прямо — прочитать нужно каждый файл, ничего не пропуская и не выбирая, пока не останется непрочитанного; а если охватить всё не выходит, сказать об этом, а не выдавать образец за целое.",
+        en: "A request to read everything no longer turns into reading selectively. The instruction to hold little at a time sounded like \u201ctake a handful\u201d \u2014 and on a \u201cstudy this folder\u201d task the model duly announced it was reading chapters selectively. Batching is about MEMORY, not coverage: it now says outright that every file is read, nothing skipped or sampled, until nothing is left unread \u2014 and that failing to cover everything must be stated, never dressed up as the whole.",
+      },
+      {
+        ru: "Чат больше не называется мыслью модели. Заголовок «<｜dsml:thinking>Let me explore the current folder structure…» пережил очистку, потому что она знала только одно написание маркера размышления. Теперь строка с любым таким маркером отбрасывается целиком — не очищается: под маркером всё равно внутренний монолог, а не имя разговора.",
+        en: "A chat is no longer named after the model\u2019s own thought. The title \u201c<\uff5cdsml:thinking>Let me explore the current folder structure\u2026\u201d survived the cleaner because it knew only one spelling of a reasoning marker. A line carrying any such marker is now dropped whole rather than cleaned \u2014 what sits under the marker is still inner monologue, not the name of a conversation.",
+      },
+    ],
+  },
   {
     version: "0.74.0",
     date: "2026-07-28",

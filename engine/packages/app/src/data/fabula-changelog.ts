@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.80.0"
+export const FABULA_VERSION = "0.81.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.81.0",
+    date: "2026-07-28",
+    items: [
+      {
+        ru: "Ответила — значит закончила. Сокращение разговора существует, чтобы дать место работе, которая ещё идёт, и больше не воскрешает ход, который модель уже завершила: раньше длинная беседа оставалась выше порога навсегда, сокращение срабатывало на каждом шаге и каждый раз говорило «продолжай» — модель считала спустя долгое время после того, как ответ был на экране. Признак берётся у самой модели: шаг остановился сам, оставил текст и ни одного незавершённого инструмента. Размер ответа при этом ничем не ограничен — одна строка и двадцать страниц одинаково считаются ответом; сколько нужно вопросу, решает модель, а не обвязка.",
+        en: "Answered means done. Shortening the conversation exists to make room for work still going, and no longer resurrects a turn the model already finished: a long conversation used to sit above the threshold permanently, so shortening fired on every step and each pass said \u201ccontinue\u201d — the model computing long after the answer was on screen. The signal comes from the model itself: a step that stopped of its own accord, left text, and has no tool still pending. Nothing bounds the answer\u2019s size — one line and twenty pages are equally answers; what the question deserves is the model\u2019s call, not the harness\u2019s.",
+      },
+    ],
+  },
   {
     version: "0.80.0",
     date: "2026-07-28",

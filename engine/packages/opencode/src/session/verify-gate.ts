@@ -444,3 +444,33 @@ export function postCompactionStall(messages: ReadonlyArray<PostCompactionScanMe
   if (k < 0) return false
   return messages[k].parts.some((p) => p.type === "tool")
 }
+
+// ── did this turn end with an ANSWER? ─────────────────────────────────────────────────────────────
+//
+// The model's own signal, not a threshold and not a count. A step that stopped of its own accord and
+// left a final text with no tool call still pending IS the end of the work: the reader has their answer.
+// Nothing here bounds the answer's size — a one-line reply and a twenty-page report are both answers,
+// and which one the question deserved is the model's business, not the harness's.
+//
+// Measured live 2026-07-28: a conversation that stayed permanently above the last checkpoint threshold
+// made compaction fire on every step after the answer, and each pass returned "continue" — ten
+// compactions and fifty-one messages on one question, the model still generating long after the answer
+// was on screen. Room for the NEXT turn is made when that turn starts.
+
+/** Finish reasons that mean the model chose to stop rather than being cut off. */
+const ANSWERED_FINISH = new Set(["stop", "end_turn", "stop_sequence"])
+
+export function turnEndedWithAnswer(
+  assistant: { finish?: string; error?: unknown; summary?: boolean } | undefined,
+  parts: readonly { type: string; text?: string; synthetic?: boolean; state?: { status?: string } }[],
+): boolean {
+  if (!assistant || assistant.error || assistant.summary === true) return false
+  if (!ANSWERED_FINISH.has(String(assistant.finish ?? ""))) return false
+  // A tool still pending or running means the work is not finished, whatever the finish reason said.
+  const toolPending = parts.some(
+    (p) => p.type === "tool" && (p.state?.status === "pending" || p.state?.status === "running"),
+  )
+  if (toolPending) return false
+  // The answer itself: real text the reader can read. Synthetic text is the harness talking to the model.
+  return parts.some((p) => p.type === "text" && !p.synthetic && (p.text ?? "").trim().length > 0)
+}

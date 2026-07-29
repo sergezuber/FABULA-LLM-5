@@ -7,7 +7,7 @@ import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
 import { classifyAssistantStep } from "./classify"
 import * as InvalidOutput from "./invalid-output"
-import { needsForcedVerify, hasVerifyCommand, goalStopLayerFires, sessionShowsTaskEvidence, trajectoryFeatures, badDynamicsSignature, postCompactionStall, FORCE_VERIFY_REMINDER, FORCE_VERIFY_NOT_DONE, type ScanMessage } from "./verify-gate"
+import { needsForcedVerify, hasVerifyCommand, goalStopLayerFires, sessionShowsTaskEvidence, trajectoryFeatures, badDynamicsSignature, postCompactionStall, FORCE_VERIFY_REMINDER, FORCE_VERIFY_NOT_DONE, type ScanMessage, turnEndedWithAnswer } from "./verify-gate"
 import { auditEntry, mcpSourceFor, schemaTokenBreakdown, renderBreakdown, type ToolAuditEntry } from "./tool-audit"
 import { beltFor, beltMasks, beltVisible, stashShadow, NEVER_MASK, type ShadowTool } from "./belt"
 import { readdir } from "node:fs/promises"
@@ -3274,9 +3274,22 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               .pipe(Effect.ignore)
           }
 
+          // ANSWERED MEANS DONE. Compaction exists to make room for work that is still going; it must
+          // never resurrect a turn the model already finished. Measured live 2026-07-28: the reader asked
+          // "что тут? о чем?", the model answered, and because the conversation stayed permanently above
+          // the last checkpoint threshold (39 745 tokens against 15 243) compaction fired on every step
+          // afterwards and each pass returned "continue" — ten compactions, fifty-one messages, the model
+          // still generating long after the answer was on screen.
+          //
+          // The signal is the model's own: a step that finished with an ANSWER — a final text and no tool
+          // call left to run — is the end of the work, whatever the thresholds say. The answer's size is
+          // whatever the question deserved; nothing here bounds it. Room for the NEXT turn is made when
+          // that turn starts, on a conversation that is genuinely continuing.
+          const answered = turnEndedWithAnswer(lastFinished, MessageV2.parts(lastFinished?.id ?? ("" as never)))
           if (
             !skipOverflowCheck &&
             !isBoundedComputation &&
+            !answered &&
             lastFinished &&
             lastFinished.summary !== true &&
             (overflowCheck({ cfg: yield* config.get(), tokens: lastFinished.tokens, model }) ||

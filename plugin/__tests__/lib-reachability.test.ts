@@ -69,7 +69,9 @@ const DECLARED_UNREACHABLE: Record<string, string> = {
 
   // ── Honest debt: written for a caller that was never built ─────────────────
   "witness.ts:pickLocalWitness": "the second resident does not fit on this machine (priced by planWindow, measured 2026-07-26), so nothing consults it yet",
-  "witness.ts:groundingBlock": "same: the local cross-family review is proven by construction, not by a completed two-model run",
+  // groundingBlock is no longer listed here: witnessPrompt now takes GroundingEvidence and renders it,
+  // and fabula-witness.ts supplies the Go static-analysis floor as that evidence (2026-07-30). It was
+  // debt for twelve days — declared, tested, and called by nothing.
   "witness.ts:WitnessRecord": "type of the side-car record, read only where the record is written",
   "handoff.ts:handoffHistory": "no tool surfaces handoff history — save/read/list are the shipped three",
   "recheck.ts:renderGate": "the gate vocabulary reaches the artifact through renderRecheck; this renderer has no call site",

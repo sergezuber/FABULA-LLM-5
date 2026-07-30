@@ -8,6 +8,7 @@
 // All args are strings; taskText is passed base64-encoded by the spawner to survive shell quoting.
 // The worker is fully self-contained: it imports only the pure core (corpus.ts) + node:fetch.
 
+import { DEFAULT_CHARS_PER_TOKEN as CHARS_PER_TOKEN } from "./ctxguard"
 import { discoverCorpus, planBatches, chapterSummaryPrompt, synthesizeReportPrompt, synthesizeWithFallback, cleanAnswer, accumulatorKey, seedAccumulator, markDone, pendingBatches, doneSummaries, emptyBatchCount, clearAccumulator, synthTokensFor, corpusBudgets } from "./corpus"
 import { budgetWindow } from "./handle"
 import { probeWindow } from "./ctxguard"
@@ -283,8 +284,13 @@ async function main(): Promise<number> {
   // the chat: a failed flat synthesis reduces hierarchically (groups → internal partials → final), and
   // if no report can be produced at all, the task is handed back to the ordinary agent — silence, never
   // work-in-progress presented as an answer.
-  let budget = synthTokensFor(summaries.length, process.env)
-  const streamed = await streamAnswer(model, synthesizeReportPrompt(summaries, taskText), budget)
+  // The report's room comes from the window it has to come back through, less the prompt that asks for
+  // it — not from a constant. `windowTokens` is already what the socket reported for this run.
+  const synthPrompt = synthesizeReportPrompt(summaries, taskText)
+  const promptTokens = Math.ceil(synthPrompt.length / CHARS_PER_TOKEN)
+  let budget = synthTokensFor(summaries.length, process.env, windowTokens, promptTokens)
+  hb("reduce", { summaries: summaries.length, budget, promptTokens, windowTokens })
+  const streamed = await streamAnswer(model, synthPrompt, budget)
   if (streamed && !streamed.truncated && streamed.text.trim()) {
     clearAccumulator(key)
     hb("done", { reportChars: streamed.text.length, streamed: true })

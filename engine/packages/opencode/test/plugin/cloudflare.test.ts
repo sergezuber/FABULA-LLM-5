@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { CloudflareAIGatewayAuthPlugin } from "@/plugin/cloudflare"
+import { ProviderTransform } from "@/provider"
 
 const pluginInput = {
   client: {} as never,
@@ -35,8 +36,12 @@ function makeHookInput(overrides: { providerID?: string; apiId?: string; reasoni
   }
 }
 
+// A non-zero marker that the plugin either clears (reasoning on cloudflare) or leaves.
+// Drawn from the live default so the test tracks the real value rather than a stale 32K.
+const KEPT = ProviderTransform.OUTPUT_TOKEN_MAX
+
 function makeHookOutput() {
-  return { temperature: 0, topP: 1, topK: 0, maxOutputTokens: 32_000 as number | undefined, options: {} }
+  return { temperature: 0, topP: 1, topK: 0, maxOutputTokens: KEPT as number | undefined, options: {} }
 }
 
 test("omits maxOutputTokens for openai reasoning models on cloudflare-ai-gateway", async () => {
@@ -50,19 +55,19 @@ test("keeps maxOutputTokens for openai non-reasoning models", async () => {
   const hooks = await CloudflareAIGatewayAuthPlugin(pluginInput)
   const out = makeHookOutput()
   await hooks["chat.params"]!(makeHookInput({ apiId: "openai/gpt-4-turbo", reasoning: false }), out)
-  expect(out.maxOutputTokens).toBe(32_000)
+  expect(out.maxOutputTokens).toBe(KEPT)
 })
 
 test("keeps maxOutputTokens for non-openai reasoning models on cloudflare-ai-gateway", async () => {
   const hooks = await CloudflareAIGatewayAuthPlugin(pluginInput)
   const out = makeHookOutput()
   await hooks["chat.params"]!(makeHookInput({ apiId: "anthropic/claude-sonnet-4-5", reasoning: true }), out)
-  expect(out.maxOutputTokens).toBe(32_000)
+  expect(out.maxOutputTokens).toBe(KEPT)
 })
 
 test("ignores non-cloudflare-ai-gateway providers", async () => {
   const hooks = await CloudflareAIGatewayAuthPlugin(pluginInput)
   const out = makeHookOutput()
   await hooks["chat.params"]!(makeHookInput({ providerID: "openai", apiId: "gpt-5.2-codex", reasoning: true }), out)
-  expect(out.maxOutputTokens).toBe(32_000)
+  expect(out.maxOutputTokens).toBe(KEPT)
 })

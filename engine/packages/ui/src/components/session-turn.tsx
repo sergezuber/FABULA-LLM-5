@@ -343,6 +343,21 @@ export function SessionTurn(
     // = say that instead. An EMPTY string = say NOTHING: the caller knows this turn was not interrupted in
     // any sense the reader cares about — the harness moved the work elsewhere and it arrived — and a
     // divider claiming otherwise sits directly above the answer that disproves it.
+    // OUT-OF-BAND WORK IS NOT ALWAYS AN INTERRUPT, and tying the label to `interrupted()` hid it in the
+    // one case it was written for. `interrupted()` means an assistant message carries MessageAbortedError;
+    // the corpus producer cancels the turn from `session.userQuery.pre`, BEFORE any assistant message
+    // exists, so that error is never recorded and the flag stays false.
+    //
+    // SEEN ON SCREEN 2026-07-30: "Worked for 2m 51s", then nothing at all for seventeen minutes while
+    // twenty-eight chapters were being read. The endpoint was answering `{"active":true,"state":"map",
+    // "done":15,"total":28}` the whole time and the label function was returning "Reading 15 of 28
+    // chapters" — it simply had nowhere to render. Everything worked except the one thing the reader
+    // could see.
+    //
+    // The label is the stronger signal, so it is asked FIRST: the caller only produces one while work is
+    // genuinely running, which is a narrower condition than "some message was aborted".
+    const running = props.interruptedLabel?.()
+    if (running) return running
     if (interrupted()) {
       // The bare word is gone entirely (owner, 2026-07-28: it answered nothing — a reader asking "what
       // is Interrupted? why am I shown this?" is the proof). While out-of-band work runs, the caller

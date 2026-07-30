@@ -95,7 +95,9 @@ export const DEFAULT_CHAPTER_CAP = 8000 // chars per chapter inside an isolated 
 export const DEFAULT_SUMMARY_TOKENS = 900
 export const DEFAULT_SYNTH_TOKENS = 1400 // FLOOR for the synthesis, not the budget — see synthTokensFor
 export const SYNTH_TOKENS_PER_BATCH = 260 // room the report earns for each batch of source it covers
-export const DEFAULT_SYNTH_TOKENS_MAX = 6000 // ceiling; stays clear of the adapter's output clamp
+export const DEFAULT_SYNTH_TOKENS_MAX = 6000 // ceiling ONLY when the window is unknown — see synthTokensFor
+/** Room left for the prompt and the runtime's own overhead when the ceiling is derived from the window. */
+export const SYNTH_WINDOW_RESERVE = 2048
 
 /** How much room the final report gets. A FIXED budget is a hardcoded volume: it is generous for three
  *  files and truncates a real book — observed live, a 28-chapter corpus produced a report chopped
@@ -103,12 +105,36 @@ export const DEFAULT_SYNTH_TOKENS_MAX = 6000 // ceiling; stays clear of the adap
  *  cover (one entry per batch that was actually summarized), with a floor so a tiny corpus still gets a
  *  whole report, and a ceiling so a huge one cannot ask for more than the socket will return. Both ends
  *  are env-overridable; nothing here knows how big "a book" is. Pure. */
-export function synthTokensFor(batchCount: number, env: Record<string, string | undefined> = {}): number {
+export function synthTokensFor(
+  batchCount: number,
+  env: Record<string, string | undefined> = {},
+  windowTokens = 0,
+  promptTokens = 0,
+): number {
   const floor = Math.max(1, parseInt(env.FABULA_CORPUS_SYNTH_TOKENS || "", 10) || DEFAULT_SYNTH_TOKENS)
-  const ceiling = Math.max(floor, parseInt(env.FABULA_CORPUS_SYNTH_MAX || "", 10) || DEFAULT_SYNTH_TOKENS_MAX)
   const perBatch = Math.max(0, parseInt(env.FABULA_CORPUS_SYNTH_PER_BATCH || "", 10) || SYNTH_TOKENS_PER_BATCH)
   const n = Number.isFinite(batchCount) && batchCount > 0 ? Math.floor(batchCount) : 1
-  return Math.min(ceiling, floor + perBatch * n)
+  const earned = floor + perBatch * n
+
+  // AN EXPLICIT OVERRIDE IS A DECISION AND WINS. Everything else is derived.
+  const override = parseInt(env.FABULA_CORPUS_SYNTH_MAX || "", 10)
+  if (Number.isFinite(override) && override > 0) return Math.min(Math.max(floor, override), earned)
+
+  // THE CEILING COMES FROM THE WINDOW, not from a number somebody typed.
+  //
+  // MEASURED 2026-07-30, and it is the same defect this file already names one docstring below for the
+  // INPUT side: "a hardcoded volume wearing a cap's clothing, and it truncates in exactly the case the
+  // pipeline exists for". The input was derived from the window (sliceBudgetChars) and the OUTPUT was
+  // left at a typed 6000. A 28-chapter book earned 8680 tokens of report, was handed 6000, and the
+  // reader watched the analysis stop mid-word — "Для читателя, привыкшего к динами".
+  //
+  // What actually bounds a report is the window it has to come back through, less the prompt that asked
+  // for it and a margin for the runtime's own overhead. Where there is a lot of material there is a lot
+  // of room, which is the whole point; the typed constant survives only for the case where nothing
+  // reported a window at all.
+  const room = Math.floor(windowTokens) - Math.max(0, Math.floor(promptTokens)) - SYNTH_WINDOW_RESERVE
+  const ceiling = room > floor ? room : DEFAULT_SYNTH_TOKENS_MAX
+  return Math.max(floor, Math.min(ceiling, earned))
 }
 
 /**

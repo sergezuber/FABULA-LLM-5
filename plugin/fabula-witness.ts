@@ -23,10 +23,45 @@ import {
   isIndependent,
   witnessEntry,
   upsertWitness,
+  type GroundingEvidence,
   type WitnessTarget,
 } from "./lib/witness"
+import { goFloorBlock, goSourceEdits } from "./lib/gofloor"
+import { findGoModuleRoot, floorEnabled, runFloor, spawnExec } from "./lib/gofloorrun"
 
 const z = tool.schema
+
+/** Files the diff touches, read off the `+++ b/<path>` headers. Lexical: no git call, no fs. */
+function diffFiles(diff: string): string[] {
+  const out: string[] = []
+  for (const m of String(diff ?? "").matchAll(/^\+\+\+ (?:b\/)?(.+)$/gm)) {
+    const f = m[1]?.trim()
+    if (f && f !== "/dev/null") out.push(f)
+  }
+  return [...new Set(out)]
+}
+
+/**
+ * Static-analysis evidence for the reviewer, when this is a Go change in a Go module.
+ *
+ * Fail-open in every direction: not Go, no go.mod, floor disabled, tools absent or a thrown error all
+ * return `undefined`, and the review then proceeds exactly as it did before this existed. An audit that
+ * could not run must never be able to make a verdict look better-grounded than it is.
+ */
+async function goFloorEvidence(dir: string, diff: string): Promise<GroundingEvidence | undefined> {
+  try {
+    if (!floorEnabled(process.env)) return undefined
+    if (!goSourceEdits(diffFiles(diff)).length) return undefined
+    const root = await findGoModuleRoot(dir)
+    if (!root) return undefined
+    const r = await runFloor({ dir: root, exec: spawnExec(), env: process.env })
+    if (!r.ran.length && !r.missing.length) return undefined
+    const block = goFloorBlock(r)
+    return block ? { sast: block } : undefined
+  } catch {
+    return undefined
+  }
+}
 
 function configPath(): string {
   if (process.env.MIMOCODE_CONFIG) return process.env.MIMOCODE_CONFIG
@@ -126,9 +161,15 @@ export const FabulaWitness: Plugin = async (input: any) => {
           if ("error" in res) return `witness_diff: ${res.error}`
           const { target, apiKey } = res
           const timeoutMs = Math.max(10000, parseInt(process.env.FABULA_WITNESS_TIMEOUT_MS || "120000", 10) || 120000)
+          // Ground the verdict in what a PROGRAM observed, not only in the reviewer's reading. Measured:
+          // static-analysis cross-referencing is the strongest defence for an AI security reviewer —
+          // 96.9% detection, +47% of baseline misses recovered (arXiv:2602.16741) — and the effect is
+          // largest exactly for a weak witness (53-72% open-weight vs 89-96% commercial), i.e. the
+          // any-model socket. Fail-open: no floor, no block, review proceeds as before.
+          const evidence = await goFloorEvidence(dir, diff)
           let review: string
           try {
-            review = await callWitness(target, apiKey, witnessPrompt(diff, args?.task ? String(args.task) : undefined), timeoutMs)
+            review = await callWitness(target, apiKey, witnessPrompt(diff, args?.task ? String(args.task) : undefined, evidence), timeoutMs)
           } catch (e: any) {
             return `witness_diff: could not reach witness ${target.providerId}/${target.model} — ${e?.message || e}. Proceed, but this change has no independent witness.`
           }

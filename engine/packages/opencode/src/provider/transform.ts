@@ -34,8 +34,13 @@ function supportsImageInput(model: Provider.Model): boolean {
   return model.capabilities.input.image
 }
 
-export const OUTPUT_TOKEN_MAX = Flag.MIMOCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
-const MIMO_OUTPUT_TOKEN_MAX = 128_000
+// The last wall. A turn that has not said "stop" above this is a runaway, not an
+// answer, and is cut off — a guard against a looping model, never the length a real
+// answer is meant to fit. Measured live: answers end well below it when the model is
+// free to stop on its own; the wall only matters when something has gone wrong. The
+// flag lifts or lowers it without a code change.
+const OUTPUT_SAFETY_WALL = 256_000
+export const OUTPUT_TOKEN_MAX = Flag.MIMOCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || OUTPUT_SAFETY_WALL
 
 // Maps npm package to the key the AI SDK expects for providerOptions
 function sdkKey(npm: string): string | undefined {
@@ -1165,9 +1170,12 @@ export function providerOptions(model: Provider.Model, options: { [x: string]: a
 }
 
 export function maxOutputTokens(model: Provider.Model): number {
-  if (model.providerID === "mimo" || model.providerID === "xiaomi" || model.id.toLowerCase().includes("mimo")) {
-    return MIMO_OUTPUT_TOKEN_MAX
-  }
+  // One path for every model: the passport's own output window, bounded only by the
+  // runaway wall. The local model no longer gets a smaller hard cap than its passport
+  // advertises, and a cloud model no longer gets 32K when its passport offers more —
+  // an answer runs as long as it needs to and stops when the model says stop. The wall
+  // is the only ceiling, and it is the guard against a looping model, not the length an
+  // answer is meant to fit.
   return Math.min(model.limit.output, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
 }
 

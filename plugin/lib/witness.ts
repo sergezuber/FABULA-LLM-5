@@ -9,7 +9,7 @@ export type WitnessTarget = { providerId: string; model: string; baseURL: string
 
 // The review prompt. The witness is told the code was written by a DIFFERENT model and must try to
 // break it. The first line is a machine-parseable verdict so the harness never guesses the outcome.
-export function witnessPrompt(diff: string, task?: string): { role: string; content: string }[] {
+export function witnessPrompt(diff: string, task?: string, evidence?: GroundingEvidence): { role: string; content: string }[] {
   const system =
     "You are an INDEPENDENT code reviewer. The unified diff below was written by a DIFFERENT AI model. " +
     "Your job is to catch its mistakes, not to be agreeable. Decide whether the change correctly and " +
@@ -18,7 +18,16 @@ export function witnessPrompt(diff: string, task?: string): { role: string; cont
     "Answer with EXACTLY this shape:\n" +
     "First line: `VERDICT: CONFIRMED` (the change is correct and safe) or `VERDICT: DISPUTED` (there is a real problem).\n" +
     "Then 2-4 lines: the specific reason — name the concrete risk if DISPUTED, or why it holds if CONFIRMED."
-  const user = (task ? `Task the change claims to accomplish:\n${task}\n\n` : "") + "Unified diff to review:\n\n```diff\n" + diff + "\n```"
+  // Evidence goes BEFORE the diff on purpose: a reviewer that has already read what a program observed
+  // cross-references instead of re-deriving, which is the measured +47%-recovered-misses effect
+  // (arXiv:2602.16741). Omitted entirely when nothing was executed, so a bare review is unchanged.
+  const grounding = evidence ? groundingBlock(evidence) : ""
+  const user =
+    (task ? `Task the change claims to accomplish:\n${task}\n\n` : "") +
+    (grounding ? grounding + "\n\n" : "") +
+    "Unified diff to review:\n\n```diff\n" +
+    diff +
+    "\n```"
   return [
     { role: "system", content: system },
     { role: "user", content: user },
@@ -247,6 +256,16 @@ export interface GroundingEvidence {
   verify?: { ran: boolean; passed: boolean; output?: string }
   /** Whether the change compiles / typechecks, if that was established. */
   compiled?: boolean
+  /**
+   * Static-analysis findings on this diff, already rendered (lib/gofloor.ts `goFloorBlock` for Go).
+   *
+   * WHY IT IS HERE — measured, not assumed. arXiv:2602.16741 ran 9,366 review trials over 8 models plus
+   * 4,646 defence trials and found static-analysis cross-referencing to be the BEST of every defence
+   * tried: 96.9% detection, recovering 47% of the reviewer's baseline misses. The same study measured
+   * 89-96% detection for commercial models against 53-72% for open-weight ones — so the weaker the
+   * witness in the socket, the more this block carries, which is exactly the any-model case (RULE #14).
+   */
+  sast?: string
 }
 
 export function groundingBlock(e: GroundingEvidence | undefined): string {
@@ -255,11 +274,20 @@ export function groundingBlock(e: GroundingEvidence | undefined): string {
     bits.push(`- the project's own tests were RUN and ${e.verify.passed ? "PASSED" : "FAILED"}${e.verify.output ? `:\n${e.verify.output.slice(0, 1200)}` : ""}`)
   }
   if (typeof e?.compiled === "boolean") bits.push(`- the change ${e.compiled ? "compiles" : "does NOT compile"}`)
+  const sast = typeof e?.sast === "string" ? e.sast.trim() : ""
+  if (sast) bits.push(`- static analysis was RUN on this change:\n${sast.slice(0, 4000)}`)
   if (!bits.length) {
     return (
       "EVIDENCE: none was supplied. Nothing here was executed, so anything you conclude is an OPINION " +
       "about the diff, not a finding about the change. Say so explicitly in your verdict."
     )
   }
-  return `EVIDENCE the graph cannot fabricate (this happened outside the conversation):\n${bits.join("\n")}`
+  // The same study refutes the intuitive hardening step: adversarial comments do NOT move detection
+  // (McNemar p>0.21), while STRIPPING comments measurably hurts weaker models. So the reviewer is told
+  // to read the diff as written — sanitising it would remove context the weak-witness case needs.
+  const note = sast
+    ? "\nRead the diff WITH its comments and cross-reference the findings above: a defect a tool already " +
+      "located needs confirming, not rediscovering, and a verdict that contradicts a tool needs a stated reason."
+    : ""
+  return `EVIDENCE the graph cannot fabricate (this happened outside the conversation):\n${bits.join("\n")}${note}`
 }

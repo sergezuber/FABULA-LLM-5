@@ -31,7 +31,7 @@ The system is composed of four cooperating layers.
                           │                                           │
                           │   ┌─────────────────────────────────┐    │
                           │   │ PLUGIN LAYER (plugin/fabula-*.ts) │   │
-                          │   │ 38 plugins · shared plugin/lib/   │   │
+                          │   │ 40 plugins · shared plugin/lib/   │   │
                           │   └─────────────────────────────────┘    │
                           └───────┬───────────────────────┬──────────┘
                                   │ chat + structured     │ MCP
@@ -175,7 +175,7 @@ Therefore:
 
 ## 3. The Plugins
 
-There are 38 plugins. Each file exports one `Fabula*` factory. The table below is a representative
+There are 40 plugins. Each file exports one `Fabula*` factory. The table below is a representative
 subset (the always-on core); the full, current map of every plugin and tool — including the six
 off-by-default **proof-economy** plugins (`registry`, `witness`, `daemon`, `relay`, `coordinator`,
 `buddy`) — lives in [`docs/PLUGINS.md`](PLUGINS.md), generated against the manifest.

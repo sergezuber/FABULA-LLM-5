@@ -25,7 +25,7 @@ import {
   type CorpusFile,
   emptyBatchCount,
   chapterSummaryPrompt,
-  MAP_PREAMBLE, synthesizeWithFallback, groupSummaries } from "./corpus"
+  MAP_PREAMBLE, synthesizeWithFallback, groupSummaries, DEFAULT_SYNTH_TOKENS_MAX } from "./corpus"
 
 // ── test workspace helpers ─────────────────────────────────────────────────
 
@@ -515,5 +515,49 @@ describe("synthesizeWithFallback — the finished answer or nothing", () => {
       const g = groupSummaries(Array.from({ length: n }, (_, i) => i), 8)
       for (const grp of g) expect(grp.length).toBeGreaterThanOrEqual(2)
     }
+  })
+})
+
+// ── The report's room comes from the window (measured 2026-07-30) ────────────
+// A 28-chapter book earned 8680 tokens of report and was handed a typed 6000, so the analysis stopped
+// mid-word: "Для читателя, привыкшего к динами". The input side of this file was derived from the window
+// one docstring earlier; the output side was still a constant.
+describe("synthTokensFor scales with the material, bounded by the window", () => {
+  test("a real window gives the material everything it earned", () => {
+    // 28 batches earn 1400 + 260*28 = 8680, and a 135168 window has room for all of it.
+    expect(synthTokensFor(28, {}, 135168, 13000)).toBe(8680)
+  })
+
+  test("the typed ceiling no longer decides when a window is known", () => {
+    expect(synthTokensFor(28, {}, 135168, 13000)).toBeGreaterThan(DEFAULT_SYNTH_TOKENS_MAX)
+  })
+
+  test("more material, more room — the whole point", () => {
+    const small = synthTokensFor(3, {}, 135168, 4000)
+    const big = synthTokensFor(100, {}, 135168, 40000)
+    expect(big).toBeGreaterThan(small * 5)
+  })
+
+  test("a small corpus does not get a book-sized budget", () => {
+    expect(synthTokensFor(3, {}, 135168, 4000)).toBeLessThan(3000)
+  })
+
+  test("the window BOUNDS it — a report cannot ask for more than can come back", () => {
+    // 400 batches would earn 105 400; a 32k window with a 20k prompt cannot return that.
+    const b = synthTokensFor(400, {}, 32768, 20000)
+    expect(b).toBeLessThan(32768 - 20000)
+  })
+
+  test("no window reported falls back to the constant, never to nonsense", () => {
+    expect(synthTokensFor(28, {})).toBe(DEFAULT_SYNTH_TOKENS_MAX)
+    expect(synthTokensFor(28, {}, 0, 0)).toBe(DEFAULT_SYNTH_TOKENS_MAX)
+  })
+
+  test("an explicit override is a decision and wins", () => {
+    expect(synthTokensFor(28, { FABULA_CORPUS_SYNTH_MAX: "2000" }, 135168, 13000)).toBe(2000)
+  })
+
+  test("a window fully consumed by its own prompt still returns a usable floor", () => {
+    expect(synthTokensFor(28, {}, 10000, 9999)).toBeGreaterThan(0)
   })
 })

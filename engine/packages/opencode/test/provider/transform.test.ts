@@ -147,30 +147,30 @@ describe("ProviderTransform.maxOutputTokens", () => {
     release_date: "2026-01-01",
   }
 
-  test("uses 128K for mimo provider models", () => {
+  test("the local model gets its passport window, not a smaller hard cap", () => {
+    // The passport advertises 131_072; the answer may run the full window and stop on its own.
     expect(
       ProviderTransform.maxOutputTokens({
         ...baseModel,
         id: ModelID.make("mimo-auto"),
         providerID: ProviderID.make("mimo"),
+        limit: { context: 262_144, output: 131_072 },
       }),
-    ).toBe(128_000)
+    ).toBe(131_072)
   })
 
-  test("uses 128K for xiaomi provider models", () => {
-    expect(
-      ProviderTransform.maxOutputTokens({
-        ...baseModel,
-        id: ModelID.make("mimo-coder"),
-        providerID: ProviderID.make("xiaomi"),
-      }),
-    ).toBe(128_000)
-  })
-
-  test("keeps the default cap for non-mimo models", () => {
+  test("a cloud model gets its passport, not a fixed 32K", () => {
+    // Passport < wall ⇒ the answer runs to the passport and the wall never binds.
     expect(ProviderTransform.maxOutputTokens({ ...baseModel, limit: { context: 1_000_000, output: 64_000 } })).toBe(
-      32_000,
+      64_000,
     )
+  })
+
+  test("the runaway wall caps a passport larger than it", () => {
+    // A turn that has not said stop above the wall is a runaway, not an answer.
+    expect(
+      ProviderTransform.maxOutputTokens({ ...baseModel, limit: { context: 2_000_000, output: 1_000_000 } }),
+    ).toBe(ProviderTransform.OUTPUT_TOKEN_MAX)
   })
 })
 

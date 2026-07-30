@@ -202,4 +202,62 @@ describe("groundingBlock — a verdict rests on what was executed", () => {
   test("a suite that was never run is not presented as if it had been", () => {
     expect(groundingBlock({ verify: { ran: false, passed: false } })).toContain("OPINION")
   })
+
+  // Static-analysis cross-referencing is the measured strongest defence for an AI security reviewer:
+  // 96.9% detection, +47% of baseline misses recovered (arXiv:2602.16741, 9,366 trials over 8 models).
+  // The effect is largest for a weak reviewer (53-72% open-weight vs 89-96% commercial), i.e. the
+  // any-model socket — so this block is load-bearing precisely where the socket is weakest.
+  test("static-analysis findings are carried as evidence", () => {
+    const b = groundingBlock({ sast: "STATIC-ANALYSIS EVIDENCE:\n  · HIGH gosec/G201 store/q.go:42 — sqli" })
+    expect(b).toContain("static analysis was RUN")
+    expect(b).toContain("gosec/G201")
+    expect(b).not.toContain("OPINION")
+  })
+
+  test("with SAST present the reviewer is told to cross-reference rather than rediscover", () => {
+    const b = groundingBlock({ sast: "x" })
+    expect(b).toContain("cross-reference")
+    expect(b).toContain("needs confirming, not rediscovering")
+  })
+
+  // The same study refutes the intuitive hardening step: adversarial comments do NOT move detection
+  // (McNemar p>0.21), while STRIPPING comments measurably hurts weaker models. So the instruction is to
+  // read the diff as written.
+  test("the reviewer is told to keep the comments, never to strip them", () => {
+    const b = groundingBlock({ sast: "x" })
+    expect(b).toContain("WITH its comments")
+    expect(b.toLowerCase()).not.toContain("strip the comments")
+  })
+
+  test("an empty or whitespace-only sast string adds nothing", () => {
+    expect(groundingBlock({ sast: "   " })).toContain("OPINION")
+    expect(groundingBlock({ sast: "" })).toContain("OPINION")
+  })
+
+  test("SAST composes with the test result rather than replacing it", () => {
+    const b = groundingBlock({ verify: { ran: true, passed: true }, sast: "findings here" })
+    expect(b).toContain("PASSED")
+    expect(b).toContain("findings here")
+  })
+})
+
+describe("witnessPrompt carries the evidence", () => {
+  const DIFF = "--- a/x.go\n+++ b/x.go\n+bad()"
+
+  test("evidence precedes the diff, so the reviewer cross-references instead of re-deriving", () => {
+    const user = witnessPrompt(DIFF, "task", { sast: "STATIC-ANALYSIS EVIDENCE: HIGH gosec/G201 x.go:1" })[1]!.content
+    expect(user).toContain("gosec/G201")
+    expect(user.indexOf("gosec/G201")).toBeLessThan(user.indexOf("```diff"))
+  })
+
+  test("without evidence the prompt is unchanged — a bare review pays nothing", () => {
+    const bare = witnessPrompt(DIFF, "task")[1]!.content
+    expect(bare).not.toContain("EVIDENCE")
+    expect(bare).toContain("```diff")
+  })
+
+  test("evidence with nothing in it still marks the verdict an opinion", () => {
+    const user = witnessPrompt(DIFF, undefined, {})[1]!.content
+    expect(user).toContain("OPINION")
+  })
 })

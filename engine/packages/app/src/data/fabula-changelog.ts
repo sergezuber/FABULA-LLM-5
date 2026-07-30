@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.85.0"
+export const FABULA_VERSION = "0.91.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,82 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.91.0",
+    date: "2026-07-30",
+    items: [
+      {
+        ru: "Панель больше не выдаёт окно за предел разговора. Строки назывались «лимит контекста» и «использование», и это читалось как стена, к которой беседа подходит: две трети пройдено, треть осталась. Стены там нет — когда окно заполняется, работает сжатие, и разговор идёт дальше. Теперь строки называют то, чем являются: размер окна одного вызова и то, насколько оно заполнено сейчас.",
+        en: "The panel no longer presents the window as a limit on the conversation. The rows were called context limit and usage, which read as a wall the conversation is approaching — two thirds gone, one third left. There is no wall: when the window fills, compaction runs and the conversation continues. The rows now name what they are — the size of one call's window, and how full it is right now.",
+      },
+    ],
+  },
+  {
+    version: "0.90.0",
+    date: "2026-07-30",
+    items: [
+      {
+        ru: "Список зависимостей в настройках больше не пугает зря. Часть инструментов ставится в собственный каталог, который приложение, открытое двойным щелчком, не видит: панель показывала их как отсутствующие, хотя проверка их находила и запускала. Владелец переустанавливал уже установленное. Теперь панель смотрит туда же, куда смотрит сама проверка, и обе говорят одно.",
+        en: "The dependency list in the settings no longer raises false alarms. Some tools install into their own directory, which an application opened by double-click does not see: the panel showed them as absent even though the check found and ran them. That had the owner reinstalling what was already there. The panel now looks where the check itself looks, and the two agree.",
+      },
+      {
+        ru: "Проверено, что при запуске из Finder работает каждый плагин, а не только те, что попались под руку. Все объявленные зависимости всех сорока плагинов прогнаны в том окружении, которое приложение получает от системы — оно беднее, чем в терминале. Обязательных пропусков не осталось; браузерный плагин требовал разовой загрузки браузера, она сделана. Три оставшихся пропуска необязательны и названы прямо: без одного не работает распознавание речи, у остальных есть штатная замена.",
+        en: "Every plugin was checked under a Finder launch, not just the ones that came to hand. All declared dependencies of all forty plugins were run in the environment the system actually gives the application — a poorer one than a terminal has. No required dependency is missing any more; the browser plugin needed a one-time browser download and it has been done. The three remaining gaps are optional and named outright: without one of them speech recognition does not work, the others have a built-in substitute.",
+      },
+    ],
+  },
+  {
+    version: "0.89.0",
+    date: "2026-07-30",
+    items: [
+      {
+        ru: "Проверка Go теперь честно говорит, где она работает и что ей нужно. В описании плагина, в настройках и в документации прямо сказано: это только для проектов на Go — в репозитории без go.mod она не делает ничего и ничего не стоит. Там же перечислено, что установить, чтобы она заработала, и что именно теряется без каждого инструмента: без одного из них исчезает проверка известных уязвимостей целиком. Отсутствующие инструменты и раньше назывались в самом отчёте, чтобы узкая проверка не читалась как чистая; теперь это видно ещё до первого запуска.",
+        en: "The Go check now says plainly where it works and what it needs. The plugin description, the settings entry and the documentation all state it outright: this is for Go projects only — in a repository with no go.mod it does nothing and costs nothing. The same places list what to install for it to work at all, and what is lost without each tool: without one of them the known-vulnerability check disappears entirely. Missing tools were already named inside the report so a narrow check could not read as a clean one; now that is visible before the first run.",
+      },
+      {
+        ru: "Инструменты проверки Go находятся и тогда, когда приложение запущено из Finder. Программы, устанавливаемые командой go install, кладутся в отдельный каталог, а сам Go — ещё в один; приложение, открытое двойным щелчком, не наследует пользовательские пути и нашло бы только один инструмент из шести, сообщив, что остальных нет. Теперь проверка сама добавляет эти каталоги к своему пути поиска, а выбор, сделанный вручную, остаётся главнее.",
+        en: "The Go analysers are found even when the application is launched from Finder. Programs installed with go install go into their own directory, and Go itself into another; an application opened by double-click inherits no user paths and would have found one tool out of six, reporting the rest as absent. The check now adds those directories to its own search path, while a path chosen by hand still wins.",
+      },
+    ],
+  },
+  {
+    version: "0.88.0",
+    date: "2026-07-30",
+    items: [
+      {
+        ru: "Go-код теперь проверяют программы, а не только рассуждение. Когда правка на Go закончена и тесты позеленели, по модулю один раз прогоняются его собственные анализаторы; если они не чисты, «готово» забирается назад и показывается, что именно нашли — с файлом и строкой. Известная уязвимость останавливает работу только тогда, когда уязвимая функция действительно вызывается: та, что просто лежит в списке зависимостей, не мешает. Отдельно проверяется то, что ни один анализатор решить не может — чтение мимо транзакции, утечка горутины, молча пропущенная ветка, запрос без предела, слишком ранний коммит смещения, объект из пула без сброса; всё, что и так ловит анализатор, у модели не спрашивают.",
+        en: "Go code is now checked by programs, not by reasoning alone. When a Go change is finished and the tests go green, the module's own analysers run over it once; if they are not clean, \"done\" is taken back and what they found is shown with file and line. A known vulnerability stops the work only when the vulnerable function is actually called — one that merely sits in the dependency list does not get in the way. Separately, the things no analyser can decide are checked: a read that escapes its transaction, a leaked goroutine, a silently skipped branch, a query with no limit, an offset committed too early, a pooled object reused without a reset; anything an analyser already catches is never put to the model.",
+      },
+      {
+        ru: "Независимый рецензент изменений больше не читает один текст. Ему передают то, что установили программы — результат прогонов и находки анализа, — и это лежит перед самим изменением, чтобы он сверялся, а не выводил заново. Замерено на девяти тысячах проверок: такая сверка возвращает почти половину того, что рецензент пропускает сам, и выигрыш тем больше, чем скромнее модель. Комментарии в коде при этом не вырезаются: их удаление измеримо ухудшает результат у более слабых моделей.",
+        en: "The independent reviewer of a change no longer reads text alone. What programs established — the run results and the analysis findings — is handed to it, placed ahead of the change itself so it cross-references instead of re-deriving. Measured over nine thousand trials: that cross-reference recovers almost half of what the reviewer misses on its own, and the gain is larger the more modest the model. Comments in the code are not stripped out for it: removing them measurably worsens the result for weaker models.",
+      },
+      {
+        ru: "Ответ больше не обрезается на записанном числе. Ход ограничивался двумя жёсткими потолками, не связанными с тем, сколько ответу нужно места: облачная модель получала тридцать две тысячи токенов, локальная — сто двадцать восемь тысяч, хотя её паспорт предлагал больше, а адаптер поверх того резал каждый ответ до восьми тысяч. Теперь потолка у хода нет — он длится столько, сколько нужно, и останавливается сам; единственная оставшаяся стена в двести пятьдесят шесть тысяч охраняет только от зависшего хода, который никогда не скажет «стоп». Окно ввода и физика памяти при этом не пострадали: потолок вывода в адаптере по-прежнему считается так, чтобы запрос и ответ вместе поместились в загруженное окно — иначе сервер падал при выделении памяти.",
+        en: "An answer is no longer cut off at a written-down number. A turn was bounded by two hard caps unrelated to how much room the answer needed: a cloud model got thirty-two thousand tokens, the local one got a hundred and twenty-eight thousand though its passport offered more, and the adapter on top of that cut every reply to eight thousand. Now a turn has no cap — it runs as long as it needs to and stops on its own; the one wall left, at two hundred fifty-six thousand, guards only against a runaway turn that never says stop. The input window and the physics of memory are untouched: the adapter's output ceiling is still computed so the request and the reply fit the loaded window together — otherwise the server crashed allocating memory.",
+      },
+    ],
+  },
+  {
+    version: "0.87.0",
+    date: "2026-07-30",
+    items: [
+      {
+        ru: "Разбор большого материала больше не обрывается на полуслове. Длина итогового текста росла вместе с объёмом источника, но упиралась в записанное число: книга из двадцати восьми глав заработала место на восемь с половиной тысяч слов-единиц, получила шесть, и разбор остановился посреди фразы. Теперь предел выводится из того окна, через которое ответ должен вернуться, за вычетом самого запроса — где материала много, там и места много, а где мало, там короче.",
+        en: "Work on large material no longer stops mid-word. The length of the final text grew with the size of the source but ran into a written-down number: a twenty-eight chapter book earned room for eight and a half thousand units, was given six, and the analysis stopped mid-sentence. The limit is now derived from the window the answer has to come back through, less the request itself — where there is a lot of material there is a lot of room, and where there is little it is shorter.",
+      },
+    ],
+  },
+  {
+    version: "0.86.0",
+    date: "2026-07-30",
+    items: [
+      {
+        ru: "Разбор большого материала снова виден. Работа шла в фоне и сообщала о себе — сколько частей прочитано из скольких, — но эта строка выводилась только рядом с пометкой о прерванном ходе, а такой пометки в этом случае не возникает. На экране оставалось «поработал две минуты» и пустота, пока в фоне читались двадцать восемь глав. Теперь строка о ходе работы показывается всегда, пока работа идёт.",
+        en: "Work on large material is visible again. It was running in the background and reporting itself — how many parts had been read of how many — but that line was only shown beside the interrupted-turn marker, and in this case no such marker ever appears. The screen kept saying it had worked for two minutes and then showed nothing, while twenty-eight chapters were being read. The progress line is now shown whenever work is actually running.",
+      },
+    ],
+  },
   {
     version: "0.85.0",
     date: "2026-07-28",

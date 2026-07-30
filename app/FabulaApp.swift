@@ -41,7 +41,12 @@ let WORKSPACE_DIR = "\(HOME)/FABULA"
 // (~/.zshrc etc.), so bare `bun`/`fabula`/`node` are not found — the Plugins menu then
 // shows "(could not load plugins — is bun installed?)". Prepend the common install
 // dirs so every shell-out resolves these tools regardless of the login shell config.
-let PATH_PREFIX = "export PATH=\"$HOME/.bun/bin:/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:$PATH\"; "
+// A Finder-launched app inherits launchd's minimal PATH, not the user's shell PATH — so every install
+// location the engine, the plugins and the MCP servers might need has to be named here. `$HOME/go/bin`
+// is where `go install` puts binaries (govulncheck, gosec, staticcheck, nilaway) and is in NO login
+// file by default: measured 2026-07-30 with `env -i PATH=/usr/bin:/bin ... bash -lc`, it was the one
+// directory missing, so the Plugins panel reported four installed tools as absent.
+let PATH_PREFIX = "export PATH=\"$HOME/.bun/bin:/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:${GOBIN:-${GOPATH:-$HOME/go}/bin}:$PATH\"; "
 
 @discardableResult
 func shell(_ cmd: String) -> Int32 {

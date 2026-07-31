@@ -18,11 +18,12 @@
 // raise once. Small-then-up, never big-then-sorry.
 
 import { spawn, execFileSync } from "node:child_process"
-import { readFileSync, writeFileSync, mkdirSync, renameSync } from "node:fs"
+import { readFileSync, writeFileSync, mkdirSync, renameSync, readdirSync, statSync } from "node:fs"
 import { join, dirname } from "node:path"
 import { homedir, totalmem } from "node:os"
 import { planWindow, DEFAULT_POLICY, type Resident, type WindowPlan } from "./windowplan"
 import { fitCost, fitCostFromSamples, addObservation, safeSecondWindow, MIN_SIGNAL_TOKENS, type Observation, type KvSample } from "./kvcost"
+import { resolveModelDir } from "./modeldigest"
 
 /** GUI-launched apps do not inherit the shell PATH, so a bare `lms` is not found — the same trap the
  *  other shell-outs in this project already carry a prefix for. */
@@ -123,6 +124,38 @@ export function weightsBytesOf(modelId: string): number {
     /* fall through */
   }
   return 0
+}
+
+/**
+ * Weights of a model that is NOT loaded: the sum of its files on disk.
+ *
+ * MEASURED GAP 2026-07-31: switching TO a model refused with "the serving runtime reported none" —
+ * `lms ps` only lists LOADED models, and the serving API answers size_bytes: null for a not-loaded one.
+ * So the one moment the plan is most needed (before a load) was the one moment the weight had no source.
+ * For MLX the on-disk bytes ARE what the load will wire into memory (verified: 21,930,054,115 bytes on
+ * disk = the 20.42 GiB the runtime reports once loaded), so the model's own directory is an honest
+ * source, resolved with the same quant-suffix-tolerant matcher the weights digest already uses.
+ */
+export function weightsOnDisk(modelId: string): number {
+  try {
+    // Overridable so a test never reads the developer's real model store — the guard test for unknown
+    // weights failed the moment this source landed, because "kat" prefix-matched the real kat-coder dir.
+    const root = process.env.FABULA_MODELS_ROOT || join(homedir(), ".lmstudio", "models")
+    const dir = resolveModelDir(modelId, root)
+    if (!dir) return 0
+    let sum = 0
+    const walk = (d: string) => {
+      for (const e of readdirSync(d, { withFileTypes: true })) {
+        const p = join(d, e.name)
+        if (e.isDirectory()) walk(p)
+        else sum += statSync(p).size
+      }
+    }
+    walk(dir)
+    return sum
+  } catch {
+    return 0
+  }
 }
 
 export interface ServedModel {
@@ -544,7 +577,7 @@ export async function ensureLoadedAtPlannedWindow(
     //
     // Zero still refuses rather than plans. A missing weight silently read as zero would hand the planner
     // the model's entire footprint as free memory — the one arithmetic mistake here that ends in swap.
-    const weights = weightsBytesOf(modelId) || cost.weightsBytes || me.bytes
+    const weights = weightsBytesOf(modelId) || weightsOnDisk(modelId) || cost.weightsBytes || me.bytes
     if (!(weights > 0)) {
       return {
         acted: false,

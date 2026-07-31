@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.91.0"
+export const FABULA_VERSION = "0.92.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.92.0",
+    date: "2026-07-31",
+    items: [
+      {
+        ru: "Переключение НА ещё не загруженную модель снова считает окно. Вес загруженной модели сообщает рантайм, но для незагруженной он отвечает пустотой — и расчёт отказывался ровно в тот момент, ради которого существует: перед загрузкой. Теперь вес берётся из файлов самой модели на диске — для этого движка это в точности то, что ляжет в память. Побочный выигрыш: точный вес с диска дал окно 147 456 вместо прежних 135 168.",
+        en: "Switching TO a not-yet-loaded model computes its window again. The runtime reports the weight of a loaded model, but answers nothing for an unloaded one — so the plan refused at exactly the moment it exists for: before the load. The weight now comes from the model's own files on disk, which for this engine is precisely what the load will put in memory. A side gain: the exact on-disk weight yields a 147,456 window where the previous figure gave 135,168.",
+      },
+    ],
+  },
   {
     version: "0.91.0",
     date: "2026-07-30",

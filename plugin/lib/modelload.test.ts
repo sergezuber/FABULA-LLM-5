@@ -318,6 +318,11 @@ exit 0
   })
 
   test("refuses to plan when the weights are unknown, instead of treating them as free memory", async () => {
+    // Point the on-disk weights source at an empty root: on the developer's machine the model id "kat"
+    // prefix-matches a REAL downloaded model, and a hermetic test must not read it.
+    const emptyRoot = join(tmpdir(), `models-empty-${process.pid}`)
+    require("node:fs").mkdirSync(emptyRoot, { recursive: true })
+    process.env.FABULA_MODELS_ROOT = emptyRoot
     const SAMPLES = join(tmpdir(), `kvs-nw-${process.pid}.json`)
     const MARKER = join(tmpdir(), `lms-nw-${process.pid}.sh`)
     process.env.FABULA_KVSAMPLE_FILE = SAMPLES
@@ -332,6 +337,7 @@ exit 0
     expect(r.acted).toBe(false)
     expect(r.plan).toBeUndefined()
     expect(r.reason).toContain("weights")
+    delete process.env.FABULA_MODELS_ROOT
     for (const f of [SAMPLES, MARKER]) rmSync(f, { force: true })
     delete process.env.FABULA_LMS_BIN
     delete process.env.FABULA_KVSAMPLE_FILE
@@ -368,3 +374,31 @@ exit 0
     rmSync(MARKER, { force: true })
   })
 })
+
+  test("a NOT-loaded model is sized from its files on disk — the moment the plan matters most", async () => {
+    // The measured gap: `lms ps` lists only loaded models and the API says size_bytes:null when
+    // not-loaded, so switching TO a model refused with "the runtime reported none". The files on disk
+    // ARE what the load will wire in; a fake model dir stands in for the store.
+    const root = join(tmpdir(), `models-disk-${process.pid}`)
+    const dir = join(root, "pub", "katx-4bit")
+    require("node:fs").mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, "model.safetensors"), Buffer.alloc(1024, 1)) // size is what matters, not content
+    process.env.FABULA_MODELS_ROOT = root
+    const SAMPLES = join(tmpdir(), `kvs-disk-${process.pid}.json`)
+    process.env.FABULA_KVSAMPLE_FILE = SAMPLES
+    writeFileSync(SAMPLES, JSON.stringify({ katx: [{ contextTokens: 131021, kvBytes: Math.round(12.59 * GIB) }] }))
+    const MARKER = join(tmpdir(), `lms-disk-${process.pid}.sh`)
+    writeFileSync(MARKER, `#!/bin/sh\nexit 0\n`) // ps answers nothing — the model is not loaded
+    require("node:fs").chmodSync(MARKER, 0o755)
+    process.env.FABULA_LMS_BIN = MARKER
+    serve([{ id: "katx", type: "llm", state: "not-loaded", loaded_context_length: 0, max_context_length: 262144, size_bytes: null }])
+    const r = await ensureLoadedAtPlannedWindow("katx", { loadTimeoutMs: 5000 })
+    // With disk weights known the plan EXISTS (tiny weights -> full passport fits); without the disk
+    // source this refuses with "reported none" — which is exactly the mutation this test kills.
+    expect(r.plan).toBeDefined()
+    expect(r.reason).not.toContain("without knowing its weights")
+    delete process.env.FABULA_MODELS_ROOT
+    delete process.env.FABULA_KVSAMPLE_FILE
+    delete process.env.FABULA_LMS_BIN
+    rmSync(root, { recursive: true, force: true }); rmSync(SAMPLES, { force: true }); rmSync(MARKER, { force: true })
+  })

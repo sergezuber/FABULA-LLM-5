@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.92.0"
+export const FABULA_VERSION = "0.93.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,24 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.93.0",
+    date: "2026-07-31",
+    items: [
+      {
+        ru: "Замер стоимости памяти под контекст больше не обманывается тёплым кэшем. Прежде он делал один запрос и смотрел, насколько выросла память; но выделяет память только первый запрос после загрузки, а следующие обслуживаются из уже готового — и тот же замер на той же модели давал то втрое больше, то втрое меньше. Теперь берутся две пробы разного размера и считается разница между ними: всё уже готовое обслуживает обе и в разнице сокращается. Результат сошёлся с другой моделью того же устройства с точностью до пяти процентов.",
+        en: "The measurement of what context costs in memory is no longer fooled by a warm cache. It used to make one request and watch how much memory grew; but only the first request after a load allocates, later ones are served from what is already there — and the same measurement on the same model returned three times more, then three times less. It now takes two probes of different sizes and uses the difference between them: whatever is already there serves both and cancels out. The result agreed with another model of the same design to within five percent.",
+      },
+      {
+        ru: "Требование к размеру пробы применялось не к тому числу. Оно проверялось на запрошенном объёме текста по записанной оценке, а записывался настоящий счёт, который сообщает сама модель — и у модели с более плотным счётом каждая проба выходила ниже требования и отбрасывалась. Оценка теперь измеряется у самой модели, требование проверяется на том, что записывается, а негодная проба не сохраняется вовсе: раньше такие вытесняли годные и создавали видимость согласия.",
+        en: "The size requirement for a probe was applied to the wrong number. It was checked against the amount of text requested using a written-down estimate, while what got recorded was the real count the model itself reports — and on a model that counts more densely every probe came out under the requirement and was thrown away. The estimate is now measured from the model itself, the requirement is checked against what is recorded, and an unusable probe is not stored at all: previously such probes evicted good ones and created an appearance of agreement.",
+      },
+      {
+        ru: "Загрузчик проверяет, послушался ли его сервер. Команда загрузки может завершиться успешно и оставить окно прежним — так и произошло с одной моделью, чья собственная настройка перебивает переданное значение. Раньше сообщалось, что окно понижено, хотя оно не менялось; теперь это называется отказом, и превышение оценивается в гигабайтах.",
+        en: "The loader checks whether the server obeyed it. A load command can succeed and leave the window unchanged — which is what happened with one model whose own configuration outranks the value passed to it. It used to report the window as lowered when nothing had changed; that is now named as a refusal, and the excess is priced in gigabytes.",
+      },
+    ],
+  },
   {
     version: "0.92.0",
     date: "2026-07-31",

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { fitCost, fitCostFromSamples, addObservation, safeSecondWindow, MIN_WINDOW_SPREAD, type Observation } from "./kvcost"
+import { fitCost, fitCostFromSamples, addObservation, safeSecondWindow, MIN_WINDOW_SPREAD, type Observation, marginalCost } from "./kvcost"
 
 const GIB = 1024 ** 3
 // The owner's real model. Measured live: 36.49 GiB at a 262144 window, 20.44 GiB of weights.
@@ -208,5 +208,51 @@ describe("fitCostFromSamples", () => {
     ])
     expect(fit.bytesPerToken).toBe(0)
     expect(fit.reason).toContain("rising line")
+  })
+})
+
+// ── The marginal, which is what the calibration actually rests on ────────────
+describe("marginalCost", () => {
+  const G = 1024 ** 3
+  test("a warm pool cancels: the same constant in both readings does not change the answer", () => {
+    // The measured failure it exists for: a pool serves both readings, so an ABSOLUTE reading reports
+    // the pool plus the cache and lands far off, while the difference recovers the true per-token cost.
+    const PER = 100_000, POOL = 5 * G
+    const a = { tokens: 40_000, bytes: POOL + 40_000 * PER }
+    const b = { tokens: 90_000, bytes: POOL + 90_000 * PER }
+    expect(marginalCost(a, b).bytesPerToken).toBe(PER)
+    // …and the pool size is irrelevant: double it, same answer.
+    const a2 = { tokens: 40_000, bytes: 2 * POOL + 40_000 * PER }
+    const b2 = { tokens: 90_000, bytes: 2 * POOL + 90_000 * PER }
+    expect(marginalCost(a2, b2).bytesPerToken).toBe(PER)
+  })
+
+  test("the real numbers from this machine come back", () => {
+    // Ornith, measured 2026-07-31: 6.09 GiB over 50 391 extra tokens.
+    const r = marginalCost({ tokens: 20_000, bytes: 2 * G }, { tokens: 70_391, bytes: Math.round(2 * G + 6.09 * G) })
+    expect(r.bytesPerToken).toBeGreaterThan(125_000)
+    expect(r.bytesPerToken).toBeLessThan(135_000)
+  })
+
+  test("order does not matter — the caller may hand them over either way", () => {
+    const a = { tokens: 40_000, bytes: 1 * G }, b = { tokens: 90_000, bytes: 6 * G }
+    expect(marginalCost(a, b).bytesPerToken).toBe(marginalCost(b, a).bytesPerToken)
+  })
+
+  test("readings too close together are refused: that gap measures drift, not cache", () => {
+    const r = marginalCost({ tokens: 60_000, bytes: 7 * G }, { tokens: 61_000, bytes: 7.1 * G })
+    expect(r.bytesPerToken).toBe(0)
+    expect(r.reason).toContain("floor")
+  })
+
+  test("a larger context that allocated nothing more says nothing, and admits it", () => {
+    const r = marginalCost({ tokens: 40_000, bytes: 6 * G }, { tokens: 90_000, bytes: 6 * G })
+    expect(r.bytesPerToken).toBe(0)
+    expect(r.reason).toContain("no more memory")
+  })
+
+  test("a SHRINKING reading is refused rather than turned into a negative cost", () => {
+    const r = marginalCost({ tokens: 40_000, bytes: 8 * G }, { tokens: 90_000, bytes: 6 * G })
+    expect(r.bytesPerToken).toBe(0)
   })
 })

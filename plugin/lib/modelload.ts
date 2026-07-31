@@ -22,7 +22,7 @@ import { readFileSync, writeFileSync, mkdirSync, renameSync, readdirSync, statSy
 import { join, dirname } from "node:path"
 import { homedir, totalmem } from "node:os"
 import { planWindow, DEFAULT_POLICY, type Resident, type WindowPlan } from "./windowplan"
-import { fitCost, fitCostFromSamples, addObservation, safeSecondWindow, MIN_SIGNAL_TOKENS, type Observation, type KvSample } from "./kvcost"
+import { fitCost, fitCostFromSamples, addObservation, safeSecondWindow, marginalCost, MIN_SIGNAL_TOKENS, type Observation, type KvSample } from "./kvcost"
 import { resolveModelDir } from "./modeldigest"
 
 /** GUI-launched apps do not inherit the shell PATH, so a bare `lms` is not found — the same trap the
@@ -227,8 +227,17 @@ function writeSamples(s: SampleStore): void {
 }
 
 /** Fold in one request-time reading, newest last, bounded. */
+/** One repeat of the calibration filler. Ordinary prose, so a tokenizer treats it the way it treats
+ *  real text; its LENGTH is what matters, and the ratio to tokens is measured per model, never assumed. */
+const FILLER_UNIT = "the quarterly inventory audit completed without material discrepancy. "
+
 export function recordKvSample(modelId: string, sample: KvSample, cap = 8): void {
   if (!(sample?.contextTokens > 0 && sample?.kvBytes > 0)) return
+  // A reading the fit will discard must never be WRITTEN. Storing it accomplishes nothing and does real
+  // harm: the store is FIFO-capped, so sub-floor readings evict good ones, and a run of them looks like
+  // agreement to the dispersion guard. Measured 2026-07-31: six discarded readings accumulated for one
+  // model while the fit reported "no readings", and four more would have evicted the only true one.
+  if (sample.contextTokens < MIN_SIGNAL_TOKENS) return
   const store = readSamples()
   store[modelId] = [...(store[modelId] ?? []), sample].slice(-cap)
   writeSamples(store)
@@ -250,7 +259,7 @@ export function recordKvSample(modelId: string, sample: KvSample, cap = 8): void
  */
 export async function calibrateCost(
   modelId: string,
-  opts: { tokens?: number; endpoint?: string; timeoutMs?: number } = {},
+  opts: { tokens?: number; endpoint?: string; timeoutMs?: number; settleMs?: number } = {},
 ): Promise<{ ok: boolean; sample?: KvSample; reason: string }> {
   // Below the floor the reading measures drift rather than cache — measured, see MIN_SIGNAL_TOKENS.
   // A caller asking for less gets the floor: a cheap wrong number is worse than a slower right one.
@@ -263,71 +272,108 @@ export async function calibrateCost(
   if (underTest && !opts.endpoint) {
     return { ok: false, reason: "calibration skipped under a test runner (no endpoint named)" }
   }
-  const tokens = Math.max(MIN_SIGNAL_TOKENS, Math.floor(opts.tokens ?? MIN_SIGNAL_TOKENS))
   const url = (opts.endpoint || process.env.FABULA_GRAPH_URL || "http://localhost:1235/v1").replace(/\/+$/, "")
-  // Measured on this machine: 5.306 characters per token for ordinary prose. The exact ratio does not
-  // matter — the sample records the prompt_tokens the runtime ITSELF reports, not this estimate.
-  const filler = "the quarterly inventory audit completed without material discrepancy. ".repeat(
-    Math.ceil((tokens * 5.306) / 70),
-  )
-  // WARM FIRST, and this was learned by getting it wrong twice. A model sitting idle has its weights
-  // COMPRESSED; the first request forces them back to wired, and because compressed pages hold less than
-  // the pages they expand into, that transition reads as memory growth. Measured: a calibration whose
-  // baseline was taken while the model was idle reported 485 248 bytes per token — four and a half times
-  // the truth — because 22 GiB of weights coming back from compression landed in the number as if it
-  // were cache. The careful reading that gave the right answer took its baseline AFTER the model was
-  // already resident. So: one throwaway request to bring the weights in, then the baseline, then the
-  // measurement. The warm-up is deliberately tiny — it exists to move weights, not to allocate cache.
+  const deadline = opts.timeoutMs ?? 600_000
+  // How long to let memory stop moving before taking a baseline. Real-world value; overridable so a test
+  // can exercise the LOGIC without waiting out three settles.
+  const settleMs = opts.settleMs ?? 3000
+
+  /** One sized request: returns what the runtime says it held and what the machine grew by. */
+  const probe = async (chars: number): Promise<{ tokens: number; grew: number } | null> => {
+    const filler = FILLER_UNIT.repeat(Math.max(1, Math.ceil(chars / FILLER_UNIT.length)))
+    // Settle before the baseline: memory keeps moving for a moment after the previous request.
+    await new Promise((r) => setTimeout(r, settleMs))
+    const before = usedBytes()
+    let peak = before
+    const ticker = setInterval(() => {
+      const now = usedBytes()
+      if (now > peak) peak = now
+    }, 750)
+    try {
+      const res = await fetch(`${url}/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: modelId,
+          messages: [{ role: "user", content: `${filler}\n\nReply with one word: ok` }],
+          max_tokens: 8, temperature: 0, stream: false,
+        }),
+        signal: AbortSignal.timeout(deadline),
+      })
+      if (!res.ok) return null
+      const body: any = await res.json()
+      const tokens = Number(body?.usage?.prompt_tokens) || 0
+      const now = usedBytes()
+      if (now > peak) peak = now
+      return tokens > 0 ? { tokens, grew: peak - before } : null
+    } catch {
+      return null
+    } finally {
+      clearInterval(ticker)
+    }
+  }
+
+  // WARM FIRST. A model sitting idle has its weights COMPRESSED; the first request forces them back to
+  // wired, and because compressed pages hold less than the pages they expand into, that transition reads
+  // as memory growth. Measured: a baseline taken while idle reported 485 248 bytes per token — four and a
+  // half times the truth — because 22 GiB of weights coming back from compression landed in the number as
+  // if it were cache.
   try {
     await fetch(`${url}/chat/completions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ model: modelId, messages: [{ role: "user", content: "hi" }], max_tokens: 1, temperature: 0, stream: false }),
-      signal: AbortSignal.timeout(opts.timeoutMs ?? 600_000),
+      signal: AbortSignal.timeout(deadline),
     })
   } catch {
-    /* the warm-up is an optimisation of the baseline; a failure here just leaves it cold and the
-       dispersion guard will refuse the reading rather than trust it */
+    /* the warm-up only improves the baseline; a failure leaves it cold and the guards below refuse */
   }
-  // Let the transition settle before reading: memory moves for a moment after a request finishes.
-  await new Promise((r) => setTimeout(r, 3000))
 
-  const before = usedBytes()
-  let peak = before
-  const ticker = setInterval(() => {
-    const now = usedBytes()
-    if (now > peak) peak = now
-  }, 1500)
-  try {
-    const res = await fetch(`${url}/chat/completions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: modelId,
-        messages: [{ role: "user", content: `${filler}\n\nReply with one word: ok` }],
-        max_tokens: 8,
-        temperature: 0,
-        stream: false,
-      }),
-      signal: AbortSignal.timeout(opts.timeoutMs ?? 600_000),
-    })
-    if (!res.ok) return { ok: false, reason: `calibration request returned HTTP ${res.status}` }
-    const body: any = await res.json()
-    // The runtime's own count, never our estimate — the whole point is to measure, not to assume.
-    const measured = Number(body?.usage?.prompt_tokens) || 0
-    const now = usedBytes()
-    if (now > peak) peak = now
-    const grew = peak - before
-    if (!(measured > 0 && grew > 0)) {
-      return { ok: false, reason: `nothing measurable: ${measured} tokens, ${grew} bytes of growth` }
-    }
-    const sample: KvSample = { contextTokens: measured, kvBytes: grew }
-    recordKvSample(modelId, sample)
-    return { ok: true, sample, reason: `${measured} tokens allocated ${(grew / 1024 ** 3).toFixed(2)} GiB of cache` }
-  } catch (e: any) {
-    return { ok: false, reason: `calibration failed: ${String(e?.message ?? e).slice(0, 160)}` }
-  } finally {
-    clearInterval(ticker)
+  // LEARN THIS MODEL'S OWN CHARACTERS-PER-TOKEN, never assume it.
+  //
+  // MEASURED 2026-07-31: the floor was enforced on the REQUESTED size using a written-down 5.306
+  // chars/token, while the sample recorded the runtime's own prompt_tokens. Ornith tokenizes this filler
+  // at 7.77 chars/token, so every calibration asked for 32 768 and produced 22 373 — below the floor that
+  // discards it. Six readings were written, every one thrown away, and the cold-start branch re-fired on
+  // every call: an unbounded loop burning a 22k-token prefill each time, which can never converge.
+  const cal = await probe(4096)
+  if (!cal) return { ok: false, reason: "calibration probe produced no usable reading" }
+  const charsPerToken = Math.max(1, 4096 / cal.tokens)
+
+  // TWO SIZES, AND THE MARGINAL BETWEEN THEM — this is the correction that matters.
+  //
+  // MEASURED 2026-07-31 on this machine: two back-to-back calibrations of the SAME resident model at the
+  // SAME size, seconds apart with no reload between, reported 3.44 GiB and then 1.22 GiB — 2.8x apart.
+  // Only the FIRST request after a load allocates; every later one is served from a warm pool, so an
+  // absolute single-point reading measures a cache HIT and reports a cost far below the truth. Six such
+  // readings clustered near 60 000 B/token against a first-reading truth of 165 058.
+  //
+  // Under-reading is the DANGEROUS direction: at 60 000 the planner grants the full 262 144 passport,
+  // which at the real cost needs 59.3 GiB of weights+cache on a 48 GiB Mac — precisely the drive-the-
+  // desktop-into-swap failure this module exists to prevent.
+  //
+  // The marginal is immune to the pool: whatever is already warm serves BOTH requests, so it cancels,
+  // and the extra tokens still have to be allocated from somewhere. This is also the method behind the
+  // one measurement on record that ever agreed with itself (60 332 and 131 021 tokens, marginal 108 910).
+  // The DELTA is what has to clear the floor, so the second probe carries headroom. Measured 2026-07-31:
+  // sizing large = small x2 produced a delta of 31 491 tokens against a 32 768 floor — four percent
+  // short, and the reading was correctly refused. The ratio learned from a short probe underestimates
+  // how densely a tokenizer packs a long repeated passage, so the gap must not be sized to land exactly
+  // on the floor.
+  const small = Math.round(MIN_SIGNAL_TOKENS * charsPerToken)
+  const large = Math.round(small * 2.6)
+  const a = await probe(small)
+  const b = await probe(large)
+  if (!a || !b) return { ok: false, reason: "one of the two sized calibration requests failed" }
+
+  // The arithmetic lives in the pure core, where it is tested exactly; this function only obtains the
+  // two readings and hands them over.
+  const m = marginalCost({ tokens: a.tokens, bytes: a.grew }, { tokens: b.tokens, bytes: b.grew })
+  if (!(m.bytesPerToken > 0)) return { ok: false, reason: m.reason }
+  const sample: KvSample = { contextTokens: m.deltaTokens, kvBytes: m.deltaBytes }
+  recordKvSample(modelId, sample)
+  return {
+    ok: true, sample,
+    reason: `${m.reason} (${m.bytesPerToken.toLocaleString()} B/token)`,
   }
 }
 
@@ -639,9 +685,36 @@ export async function ensureLoadedAtPlannedWindow(
       writeStore(s2)
     }
 
+    // DID THE RUNTIME ACTUALLY DO IT? A load command that returns success is not a window that changed.
+    //
+    // MEASURED 2026-07-31: `lms load ornith-1.0-35b --context-length 143360` exited 0, printed no error,
+    // and left the model at 183 296 — the flag was accepted and silently ignored (that model's own config
+    // carries a preferred window the CLI does not override; the same flag is honoured for other models).
+    // The old text then reported "lowered 183296 -> 183296", which is the loader announcing an action it
+    // did not perform. Worse, the refusal is the DANGEROUS direction: the runtime keeps a window WIDER
+    // than the plan, so the machine carries an over-commit the planner believes it removed.
+    //
+    // So the result now states the refusal and prices it, rather than reporting a number nobody honoured.
+    const got = after?.loadedWindow ?? 0
+    const overshoot = got > 0 && plan.tokens > 0 ? got / plan.tokens : 1
+    if (got > 0 && overshoot > 1 + OVERSHOOT_MARGIN) {
+      const perTok = cost.bytesPerToken || 0
+      const needGiB = perTok > 0 ? ((weights + got * perTok) / 1024 ** 3).toFixed(1) : "?"
+      return {
+        acted: true,
+        window: got,
+        plan,
+        reason:
+          `the runtime REFUSED the window: asked for ${plan.tokens}, it loaded at ${got} ` +
+          `(${overshoot.toFixed(2)}x the plan). Nothing here can lower it — that model's own configuration ` +
+          `outranks the load flag. At the measured cost this provisioning needs ${needGiB} GiB, and the ` +
+          `machine is sized for ${((totalmem() - DEFAULT_POLICY.systemReserveBytes) * DEFAULT_POLICY.commitFraction / 1024 ** 3).toFixed(1)} GiB.`,
+      }
+    }
+
     return {
       acted: true,
-      window: after?.loadedWindow ?? plan.tokens,
+      window: got || plan.tokens,
       plan,
       reason: `${me.loadedWindow && plan.tokens < me.loadedWindow ? "lowered" : "raised"} ${me.loadedWindow || "unloaded"} -> ${after?.loadedWindow ?? plan.tokens}: ${plan.reason}`,
     }

@@ -295,3 +295,38 @@ export function safeSecondWindow(
   const next = Math.min(w * 2, passport)
   return next > w ? next : 0
 }
+
+/**
+ * The marginal cost between two sized readings taken in the SAME warm state. PURE.
+ *
+ * MEASURED 2026-07-31, and this is the correction the whole calibration rests on: two absolute readings
+ * of the SAME model at the SAME size, seconds apart with no reload between, reported 3.44 GiB and then
+ * 1.22 GiB — 2.8x apart. Only the FIRST request after a load allocates; every later one is served from a
+ * warm pool, so a single absolute reading measures a cache HIT and reports a cost far below the truth.
+ * Six such readings clustered near 60 000 B/token against a first-reading truth of 165 058, and the
+ * marginal method recovered 129 801 — within 5% of the same-architecture reference (123 758).
+ *
+ * Whatever is already warm serves BOTH readings, so it CANCELS in the difference, and the extra tokens
+ * still have to be allocated from somewhere. The floor applies to the token DELTA, because that delta is
+ * the only signal here: two large readings a few hundred tokens apart measure drift, not cache.
+ */
+export function marginalCost(
+  a: { tokens: number; bytes: number },
+  b: { tokens: number; bytes: number },
+): { bytesPerToken: number; deltaTokens: number; deltaBytes: number; reason: string } {
+  const lo = a.tokens <= b.tokens ? a : b
+  const hi = a.tokens <= b.tokens ? b : a
+  const deltaTokens = hi.tokens - lo.tokens
+  const deltaBytes = hi.bytes - lo.bytes
+  if (deltaTokens < MIN_SIGNAL_TOKENS) {
+    return { bytesPerToken: 0, deltaTokens, deltaBytes, reason: `the two readings differ by only ${deltaTokens} tokens, under the ${MIN_SIGNAL_TOKENS} floor where drift outweighs the cache` }
+  }
+  if (!(deltaBytes > 0)) {
+    return { bytesPerToken: 0, deltaTokens, deltaBytes, reason: `the larger context allocated no more memory (${deltaBytes} bytes) — the reading says nothing` }
+  }
+  return {
+    bytesPerToken: Math.round(deltaBytes / deltaTokens),
+    deltaTokens, deltaBytes,
+    reason: `marginal over ${deltaTokens} extra tokens: ${(deltaBytes / 1024 ** 3).toFixed(2)} GiB`,
+  }
+}

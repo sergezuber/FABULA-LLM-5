@@ -6,7 +6,7 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 import { rmSync, writeFileSync, readFileSync } from "node:fs"
-import { ensureLoadedAtPlannedWindow, readServed, residentsOther, syncEngineLimit, plannedSlots, recordKvSample, readSamples } from "./modelload"
+import { ensureLoadedAtPlannedWindow, readServed, residentsOther, syncEngineLimit, plannedSlots, recordKvSample, readSamples, calibrateCost } from "./modelload"
 
 const GIB = 1024 ** 3
 const STORE = join(tmpdir(), `kvcost-test-${process.pid}.json`)
@@ -402,3 +402,65 @@ exit 0
     delete process.env.FABULA_LMS_BIN
     rmSync(root, { recursive: true, force: true }); rmSync(SAMPLES, { force: true }); rmSync(MARKER, { force: true })
   })
+
+describe("calibration records only what the fit can use", () => {
+  const S = join(tmpdir(), `kvs-floor-${process.pid}.json`)
+  beforeEach(() => { process.env.FABULA_KVSAMPLE_FILE = S; rmSync(S, { force: true }) })
+  afterEach(() => { delete process.env.FABULA_KVSAMPLE_FILE; rmSync(S, { force: true }) })
+
+  test("a sub-floor reading is never written — it would evict good ones and fake agreement", () => {
+    // The measured loop: six readings at 22,373 tokens accumulated for one model while the fit reported
+    // "no readings", and the FIFO cap of 8 meant four more would have evicted the only true reading.
+    recordKvSample("m", { contextTokens: 22_373, kvBytes: Math.round(1.22 * GIB) })
+    expect(readSamples()["m"] ?? []).toHaveLength(0)
+  })
+
+  test("an at-or-above-floor reading is written", () => {
+    recordKvSample("m", { contextTokens: 32_768, kvBytes: Math.round(3.9 * GIB) })
+    expect(readSamples()["m"] ?? []).toHaveLength(1)
+  })
+
+  test("a good reading cannot be evicted by a run of junk", () => {
+    recordKvSample("m", { contextTokens: 40_949, kvBytes: Math.round(4.72 * GIB) }) // the true one
+    for (let i = 0; i < 12; i++) recordKvSample("m", { contextTokens: 22_373, kvBytes: Math.round(1.22 * GIB) })
+    const kept = readSamples()["m"] ?? []
+    expect(kept).toHaveLength(1)
+    expect(kept[0].contextTokens).toBe(40_949)
+  })
+})
+
+describe("a load command that succeeded is not a window that changed", () => {
+  test("a runtime that keeps a WIDER window than asked is reported as a refusal, with the cost named", async () => {
+    // Measured 2026-07-31: `lms load --context-length 143360` exited 0 and left the model at 183296.
+    // The old text said "lowered 183296 -> 183296" — announcing an action nobody performed.
+    const SAMPLES = join(tmpdir(), `kvs-refuse-${process.pid}.json`)
+    const MARKER = join(tmpdir(), `lms-refuse-${process.pid}.sh`)
+    process.env.FABULA_KVSAMPLE_FILE = SAMPLES
+    writeFileSync(SAMPLES, JSON.stringify({ kat: [{ contextTokens: 50_391, kvBytes: Math.round(6.09 * GIB) }] }))
+    // Stateful, like the real CLI: after `unload` the model is GONE from ps (so the resident guard is
+    // satisfied), and after `load` it is back — at 183296, the window the runtime insisted on.
+    const STATE = join(tmpdir(), `lms-state-${process.pid}`)
+    rmSync(STATE, { force: true })
+    writeFileSync(MARKER, [
+      "#!/bin/sh",
+      `case "$1" in`,
+      `  unload) : > ${STATE} ;;`,
+      `  load) rm -f ${STATE} ;;`,
+      `  ps) [ -f ${STATE} ] || echo "kat  kat  LOADED  20.00 GB  183296  1  Local" ;;`,
+      "esac",
+      "exit 0",
+    ].join("\n"))
+    require("node:fs").chmodSync(MARKER, 0o755)
+    process.env.FABULA_LMS_BIN = MARKER
+    // The API keeps answering 183296 both before and AFTER the load — the runtime ignored the flag.
+    serve([KAT("loaded", 183_296, 20 * GIB)])
+    const r = await ensureLoadedAtPlannedWindow("kat", { loadTimeoutMs: 8000 })
+    expect(r.plan!.tokens).toBeLessThan(183_296)      // the plan wanted less
+    expect(r.reason).toContain("REFUSED")             // and says so, rather than claiming success
+    expect(r.reason).not.toContain("lowered 183296 -> 183296")
+    expect(r.reason).toMatch(/GiB/)                   // the over-commit is priced, not just named
+    delete process.env.FABULA_LMS_BIN
+    delete process.env.FABULA_KVSAMPLE_FILE
+    for (const f of [SAMPLES, MARKER, STATE]) rmSync(f, { force: true })
+  })
+})

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.101.1"
+export const FABULA_VERSION = "0.102.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.102.0",
+    date: "2026-08-01",
+    items: [
+      {
+        ru: "Красная точка у одного из подключаемых серверов означала не поломку, а стёртую папку. Движок сообщал «нет такого файла» и называл при этом команду — а команда была на месте и отвечала за полсекунды; отсутствовал рабочий каталог, из которого её пытались запустить (остатки прогонов и удалённая тестовая папка). Система сообщает об этом одинаково в обоих случаях, поэтому читающий шёл проверять исправный файл. Теперь каталог проверяется до запуска, и в сообщении стоит то, чего действительно нет.",
+        en: "A red dot beside one of the connected servers meant a deleted folder, not a broken server. The engine reported \"no such file\" and named the command — while that command was present and answered a handshake in half a second; what was missing was the working directory it was being started from (leftovers of finished runs, and a deleted test folder). The system reports both cases identically, so whoever read it went to check a file that was fine. The directory is now checked before starting, and the message names what is actually absent.",
+      },
+    ],
+  },
   {
     version: "0.101.1",
     date: "2026-08-01",

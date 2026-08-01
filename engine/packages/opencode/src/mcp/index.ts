@@ -18,6 +18,7 @@ import { Installation } from "../installation"
 import { InstallationVersion } from "../installation/version"
 import { withTimeout } from "@/util/timeout"
 import { AppFileSystem } from "@mimo-ai/shared/filesystem"
+import * as nodeFs from "node:fs"
 import { McpOAuthProvider } from "./oauth-provider"
 import { McpOAuthCallback } from "./oauth-callback"
 import { McpAuth } from "./auth"
@@ -403,6 +404,29 @@ export const layer = Layer.effect(
     ) {
       const [cmd, ...args] = mcp.command
       const cwd = yield* InstanceState.directory
+
+      // SAY WHAT IS ACTUALLY MISSING.
+      //
+      // MEASURED 2026-08-01: three startup failures in the live log read
+      // `ENOENT: no such file or directory, posix_spawn '<the command>'` — and the command was present
+      // and healthy the whole time (0.5s to a full MCP handshake). What was gone was the WORKING
+      // DIRECTORY: two leftover bench dirs and one test dir that had been deleted. `posix_spawn` reports
+      // ENOENT for a missing cwd exactly as it does for a missing binary, and the message carries the
+      // binary's path, so anyone reading it goes and checks a file that is fine. Proven by running
+      // `/bin/echo` — which certainly exists — in a deleted directory: same ENOENT, same shape.
+      //
+      // A session whose directory has been removed is an ordinary thing (a bench run cleaned up, a
+      // branch worktree deleted), so this is not an error to be surprised by — it just has to name
+      // itself. Checked BEFORE spawning, because afterwards the two causes are indistinguishable.
+      if (!nodeFs.existsSync(cwd)) {
+        const error =
+          `the working directory no longer exists: ${cwd}. The server itself was not started and is ` +
+          `probably fine — this session points at a directory that has been removed. Open the project ` +
+          `again from a path that exists.`
+        log.info("local mcp not started: working directory is gone", { key, cwd })
+        return { client: undefined as MCPClient | undefined, status: { status: "failed", error } as Status }
+      }
+
       const transport = new StdioClientTransport({
         stderr: "pipe",
         command: cmd,
@@ -426,8 +450,14 @@ export const layer = Layer.effect(
         })),
         Effect.catch((error): Effect.Effect<{ client: MCPClient | undefined; status: Status }> => {
           const msg = error instanceof Error ? error.message : String(error)
-          log.error("local mcp startup failed", { key, command: ConfigMCP.redactCommand(mcp.command), cwd, error: msg })
-          return Effect.succeed({ client: undefined, status: { status: "failed", error: msg } })
+          // The cwd was there a moment ago (checked above) but a spawn ENOENT still names the command —
+          // so if the directory vanished in between, say so rather than accusing the binary again.
+          const cwdGone = /ENOENT/.test(msg) && !nodeFs.existsSync(cwd)
+          const reported = cwdGone
+            ? `${msg} — but that command exists; what is missing is the working directory ${cwd}, which was removed while starting.`
+            : msg
+          log.error("local mcp startup failed", { key, command: ConfigMCP.redactCommand(mcp.command), cwd, error: reported })
+          return Effect.succeed({ client: undefined, status: { status: "failed", error: reported } })
         }),
       )
     })

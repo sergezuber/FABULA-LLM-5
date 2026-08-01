@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.93.0"
+export const FABULA_VERSION = "0.94.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.94.0",
+    date: "2026-08-01",
+    items: [
+      {
+        ru: "Разрешение на уведомления больше не спрашивается при запуске. Приложение подписано локально, и такая подпись меняется при каждой сборке, поэтому система считала обновлённое приложение новым и просила разрешение заново — окно ждало человека у клавиатуры, а если он отошёл, оно висело до его возвращения. Теперь при запуске только проверяется, выдано ли разрешение раньше, и ничего не спрашивается; сам вопрос задаётся один раз по пункту меню «Включить уведомления», то есть тогда, когда человек только что сам его выбрал. Если разрешение было отклонено ранее, открывается страница настроек — единственное место, где это ещё можно изменить.",
+        en: "The notification permission is no longer requested at startup. The app is signed locally, and such a signature changes with every build, so the system treated an updated app as a new one and asked again — the dialog waited for someone at the keyboard, and if they had stepped away it hung until they returned. Startup now only checks whether permission was granted earlier and asks nothing; the question itself is asked once, from the menu item “Enable Notifications”, that is at the moment a person has just chosen it. If permission was refused earlier, the settings page opens — the only place where that can still be changed.",
+      },
+      {
+        ru: "Замеры продукта теперь идут через само приложение, запущенное как из Finder, а не через отдельный вызов движка из терминала. Разница оказалась существенной: приложение передаёт движку навигацию по коду, отбор инструментов под задачу и проверку выполнения цели, а отдельный вызов не передавал ничего из этого. То есть прежние замеры относились не к той программе, которую запускает пользователь.",
+        en: "Product measurements now go through the app itself, launched the way Finder launches it, rather than through a separate engine invocation from the terminal. The difference turned out to be substantial: the app hands the engine code navigation, per-task tool selection and goal-completion checking, and the separate invocation handed it none of these. The earlier measurements therefore described a different program from the one a user runs.",
+      },
+    ],
+  },
   {
     version: "0.93.0",
     date: "2026-07-31",

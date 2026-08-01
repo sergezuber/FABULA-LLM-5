@@ -106,18 +106,58 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
         buildWindow()
         startPolling()
         // System notifications (agent finished / permission asked / errors — toggles in Settings).
+        //
+        // NEVER prompt on launch. The bundle is ad-hoc signed (app/build.sh `--sign -`), so its
+        // cdhash changes on EVERY deploy — every rebuild recompiles the Swift binary and writes a
+        // fresh CFBundleVersion. macOS keys an ad-hoc app's identity on that cdhash, so a redeploy
+        // reads as a NEW app and the notification grant is void: the system dialog reappears after
+        // each deploy and BLOCKS until someone is at the keyboard to dismiss it. An operator who
+        // stepped away comes back to a waiting modal instead of a running app.
+        //
+        // So authorization is now REQUESTED ONLY on the explicit menu action (FABULA ▸ Enable
+        // Notifications). At launch we merely OBSERVE the current status: already granted → wire
+        // the delegate and deliver; anything else → stay silent. The fine-grained choice lives in
+        // the menu, which is where a choice belongs; nothing at startup can wait on a human.
         if canUseSystemNotifications {
-            let center = UNUserNotificationCenter.current()
-            center.delegate = self
-            center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+            UNUserNotificationCenter.current().delegate = self
+            refreshNotificationAuthorization()
         } else {
             NSLog("FABULA: no bundle identifier — system notifications disabled (rebuild the bundle with app/build.sh)")
         }
     }
 
+    // Cached authorization status. `deliverNotification` posts only when this is `.authorized`, so a
+    // revoked or forgotten grant degrades to silence — never to a dialog the user did not ask for.
+    var notificationsAuthorized = false
+
+    func refreshNotificationAuthorization() {
+        guard canUseSystemNotifications else { return }
+        UNUserNotificationCenter.current().getNotificationSettings { [weak self] settings in
+            let ok = settings.authorizationStatus == .authorized
+            DispatchQueue.main.async { self?.notificationsAuthorized = ok }
+        }
+    }
+
+    // The ONLY caller of requestAuthorization: a deliberate menu action. macOS shows its dialog
+    // once, with the user already at the keyboard because they just clicked the item.
+    @objc func enableNotifications() {
+        guard canUseSystemNotifications else { return }
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { [weak self] granted, _ in
+            DispatchQueue.main.async {
+                self?.notificationsAuthorized = granted
+                if !granted {
+                    // Already denied once: macOS will not show the dialog again, so point at the
+                    // one place that can still change it rather than silently doing nothing.
+                    NSWorkspace.shared.open(
+                        URL(string: "x-apple.systempreferences:com.apple.preference.notifications")!)
+                }
+            }
+        }
+    }
+
     // MARK: - System notifications (fabulaNotify bridge)
     func deliverNotification(title: String, body: String, href: String) {
-        guard canUseSystemNotifications else { return }
+        guard canUseSystemNotifications, notificationsAuthorized else { return }
         let content = UNMutableNotificationContent()
         content.title = title
         if !body.isEmpty { content.body = body }
@@ -781,6 +821,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
         let wipe = NSMenuItem(title: "Clear Cached Chat Data", action: #selector(clearCachedChatData), keyEquivalent: "k")
         wipe.keyEquivalentModifierMask = [.command, .shift]
         appMenu.addItem(wipe)
+        // The fine-grained notification choice lives HERE, in the menu — never as a modal at launch.
+        let notif = NSMenuItem(title: uiLang == "ru" ? "Включить уведомления" : "Enable Notifications",
+                               action: #selector(enableNotifications), keyEquivalent: "")
+        notif.target = self
+        appMenu.addItem(notif)
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(withTitle: "Hide FABULA-LLM-5", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(withTitle: "Quit FABULA-LLM-5", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")

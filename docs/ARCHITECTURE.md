@@ -95,8 +95,20 @@ point every request passes:
 
 4. **Declarative reasoning-level control (opt-in) + telemetry.** A config table
    (`proxy/reasoning-map.json`) can patch a request's reasoning knobs per model/level when
-   a level is supplied (`X-Fabula-Reasoning` / env); the adapter also logs KV-cache prefix
-   breaks (the measured #1 cost) and context-overflow classification for visibility.
+   a level is supplied (`X-Fabula-Reasoning` / env); a level a model does not define falls
+   through to the `*` table **per level**, so adding one level for a model does not silently
+   cancel the others. The adapter also logs KV-cache prefix breaks (the measured #1 cost)
+   and classifies context overflow — including the two *silent* cases, prompt truncation and
+   an over-length prompt accepted without complaint. Those need to know the window, and the
+   window is **asked of the serving runtime** rather than configured: a number typed into
+   `FABULA_CONTEXT_WINDOW` goes stale the first time a model is reloaded, and left unset (the
+   normal case) the classification would never fire at all. Set it only to override.
+
+   The diagnostic log is **bounded**: past `FABULA_ADAPTER_LOG_MAX` (20 MB) the adapter copies
+   it to `<path>.1` and truncates in place — in place, because launchd opened that file with
+   `O_APPEND` and renaming it would leave the process writing where nobody is reading. A client
+   hanging up on a keep-alive connection is reported in one line, not as a stack trace; it is
+   an ordinary event, and this is the log you are asked to read first when something hangs.
 
 5. **Admission control.** This serving class collapses under concurrent prefill
    (measured below), and every session, background pass and witness call
@@ -184,7 +196,7 @@ off-by-default **proof-economy** plugins (`registry`, `witness`, `daemon`, `rela
 
 | Plugin (file)              | Factory             | Responsibility |
 |----------------------------|---------------------|----------------|
-| `fabula-tools.ts`          | `FabulaTools`       | The **core tool belt**: `web_fetch` (URL→markdown, incl. PDF), `web_search` + `image_search` (via SearXNG MCP), `bash_tool` / `execute_code` (sandboxed shell), `view` / `str_replace` / `create_file` / `note_append` (file ops), `present_files`, `verify_done`, `weather_fetch`, `places_search`, `mixture_of_agents` (fan out to N models + synthesize), `session_search`, `save_skill`, `cost_report`, `batch_run`, `search_mcp_registry`, `suggest_connectors`, `recommend_LLM_apps`, `fetch_sports_data`. |
+| `fabula-tools.ts`          | `FabulaTools`       | The **core tool belt**: `web_fetch` (URL→markdown, incl. PDF), `web_search` + `image_search` (via SearXNG MCP), `bash_tool` / `execute_code` (shell and code; `execute_code` prefers a Docker container, falls back to the macOS kernel profile, and *refuses* rather than downgrading when isolation was explicitly asked for), `view` / `str_replace` / `create_file` / `note_append` (file ops), `present_files`, `verify_done`, `weather_fetch`, `places_search`, `mixture_of_agents` (fan out to N models + synthesize), `session_search`, `save_skill`, `cost_report`, `batch_run`, `search_mcp_registry`, `suggest_connectors`, `recommend_LLM_apps`, `fetch_sports_data`. |
 | `fabula-graph.ts`          | `FabulaGraph`       | The **`workflow_graph`** orchestrator: planner → ≤5 isolated subtasks → synthesize, with an opt-in local→cloud router. The edge between steps is a contract — a step that produced nothing arrives as an absence, a cut declares itself, an unusable output is retried once then marked empty — and every step shares one opening block so the serving cache is reused. `workflow_graph` is the light single-pass orchestrator; the engine's own `workflow` tool is the full one — typed contracts, conditional routing, convergence loops. See §4. |
 | `fabula-handoff.ts`        | `FabulaHandoff`     | Durable structured **handoff artifacts** between steps/sessions: `save_handoff` / `read_handoff` / `list_handoffs`. Threat-scanned and size-capped. |
 | `fabula-reliability.ts`    | `FabulaReliability` | **Loop-guard** that hard-stops repeated no-progress tool calls (throws in `tool.execute.before`), tool-arg **repair**, outbound **push notifications via ntfy**, and optional terse role preambles for actor subagents (`FABULA_SOULS=1`). |

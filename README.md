@@ -90,7 +90,9 @@ The receipt format is an open specification any agent can implement — [verifie
 | **escalate** | Looping on a dead end — when measured evidence says another local attempt is not worth its cost, the harness itself fetches one cloud second opinion; the local model keeps driving. |
 | **memory** | Memory you trust instead of check — a memory is bound to the code it came from and re-verified against your real tree before it is ever served back. Ships off by default; its decisions start in shadow until you have read them. |
 
-Around the gates: web research, shell, sandboxed code execution, drift-tolerant file edits, browser automation, durable hand-offs, checkpoints and undo, and SSRF / redaction / injection defense at the tool boundary. The full map — 40 plugins, 85 tools: [`docs/PLUGINS.md`](docs/PLUGINS.md).
+Around the gates: web research, shell, sandboxed code execution, drift-tolerant file edits, browser automation, durable hand-offs, checkpoints and undo, and SSRF / redaction / injection defense.
+
+Those last guards cover **three doors, not one**. A rule that stops a tool also stops the same thing done through the shell, and code run without a container runs under the OS kernel profile — because a path a *program* computes is invisible to anything that reads arguments. That is not theory: with the tool guards closed, a local model asked to install a startup item did it anyway through the shell, then through code it wrote itself, and reported both plainly. It was not attacking anything — it was finishing its task, which is exactly the behaviour a guard has to survive. The full map — 40 plugins, 85 tools: [`docs/PLUGINS.md`](docs/PLUGINS.md).
 
 An optional **proof economy** builds on the receipt — publish to a content-addressed registry, cross-model witness attestation, a proof tree for team work. Off by default: [the disrupt layer](docs/PLUGINS.md#the-disrupt-layer--turning-a-proof-of-done-into-a-proof-economy-experimental-off-by-default).
 

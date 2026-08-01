@@ -29,6 +29,11 @@ const KAT = (state: string, loaded: number, bytes: number) => ({
 // A stub `lms`, so the guard that asks "is anything still resident?" asks THIS and not the real machine.
 // Without it the tests read the developer's own loaded model and every load correctly refuses — the guard
 // working exactly as designed, on the wrong subject.
+// A test must be allowed to wait LONGER than the budget it hands the code. MEASURED 2026-08-01: seven
+// tests here passed `loadTimeoutMs` of 3-8s while running under bun's 5s default, so three of them asked
+// the code for more time than the harness was willing to give. They passed only while the machine was
+// idle and the marker script returned instantly, and flaked the moment the suite ran under load — which
+// reads as "the code is flaky" when the contradiction is in the test. Each now declares budget + 12s.
 const STUB = join(tmpdir(), `lms-stub-${process.pid}.sh`)
 writeFileSync(STUB, "#!/bin/sh\nif [ \"$1\" = ps ]; then echo IDENTIFIER; fi\nexit 0\n", { mode: 0o755 })
 
@@ -281,7 +286,7 @@ describe("what actually reaches `lms load`", () => {
     expect(argv[at + 1]).toBe("2")
     // And the window is still passed, so this test cannot pass by the command being empty.
     expect(argv).toContain("--context-length")
-  })
+  }, 20000)
 })
 
 // ── Request-time cost readings ───────────────────────────────────────────────
@@ -355,7 +360,7 @@ describe("request-time cache cost", () => {
     expect(r.plan).toBeDefined()
     // At ~108 900 B/token the ceiling cannot reach the passport; at the load-time line it easily would.
     expect(r.plan!.ceilingTokens).toBeLessThan(262144)
-  })
+  }, 15000)
 })
 
 describe("a window above the ceiling is corrected, not respected", () => {
@@ -390,7 +395,7 @@ exit 0
     for (const f of [SAMPLES, ARGV, MARKER]) rmSync(f, { force: true })
     delete process.env.FABULA_LMS_BIN
     delete process.env.FABULA_KVSAMPLE_FILE
-  })
+  }, 20000)
 
   test("refuses to plan when the weights are unknown, instead of treating them as free memory", async () => {
     // Point the on-disk weights source at an empty root: on the developer's machine the model id "kat"
@@ -416,7 +421,7 @@ exit 0
     for (const f of [SAMPLES, MARKER]) rmSync(f, { force: true })
     delete process.env.FABULA_LMS_BIN
     delete process.env.FABULA_KVSAMPLE_FILE
-  })
+  }, 17000)
 })
 
 describe("never a second copy", () => {
@@ -447,7 +452,7 @@ exit 0
     // and the load command was never issued — the machine was never asked to hold two copies
     expect(require("node:fs").existsSync(ARGV)).toBe(false)
     rmSync(MARKER, { force: true })
-  })
+  }, 15000)
 })
 
   test("a NOT-loaded model is sized from its files on disk — the moment the plan matters most", async () => {
@@ -476,7 +481,7 @@ exit 0
     delete process.env.FABULA_KVSAMPLE_FILE
     delete process.env.FABULA_LMS_BIN
     rmSync(root, { recursive: true, force: true }); rmSync(SAMPLES, { force: true }); rmSync(MARKER, { force: true })
-  })
+  }, 17000)
 
 describe("calibration records only what the fit can use", () => {
   const S = join(tmpdir(), `kvs-floor-${process.pid}.json`)
@@ -537,5 +542,5 @@ describe("a load command that succeeded is not a window that changed", () => {
     delete process.env.FABULA_LMS_BIN
     delete process.env.FABULA_KVSAMPLE_FILE
     for (const f of [SAMPLES, MARKER, STATE]) rmSync(f, { force: true })
-  })
+  }, 20000)
 })

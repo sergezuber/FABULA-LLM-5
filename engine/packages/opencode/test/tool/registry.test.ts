@@ -16,6 +16,10 @@ afterEach(async () => {
   await Instance.disposeAll()
 })
 
+// Each of these creates a temp instance and loads tools from disk; the file takes ~4.5s ALONE, which is
+// within a whisker of bun's 5s per-test default, so under a full parallel run they timed out and read as
+// "the loader is flaky". A test must be allowed to wait longer than the work it asks for; 30s is well
+// past what the work needs and well short of hiding a real hang.
 describe("tool.registry", () => {
   it.live("loads tools from .mimocode/tool (singular)", () =>
     provideTmpdirInstance((dir) =>
@@ -43,6 +47,7 @@ describe("tool.registry", () => {
         expect(ids).toContain("hello")
       }),
     ),
+    30_000,
   )
 
   it.live("loads tools from .mimocode/tools (plural)", () =>
@@ -71,6 +76,7 @@ describe("tool.registry", () => {
         expect(ids).toContain("hello")
       }),
     ),
+    30_000,
   )
 
   it.live("loads tools with external dependencies without crashing", () =>
@@ -148,6 +154,7 @@ describe("tool.registry", () => {
         expect(ids).toContain("cowsay")
       }),
     ),
+    30_000,
   )
 
   it.live("todowrite tool is not registered; task is", () =>
@@ -160,5 +167,6 @@ describe("tool.registry", () => {
         expect(ids).toContain("task")
       }),
     ),
+    30_000,
   )
 })

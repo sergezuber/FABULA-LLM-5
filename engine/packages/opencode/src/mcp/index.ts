@@ -553,6 +553,28 @@ export const layer = Layer.effect(
                 return
               }
 
+              // A SERVER DECLARED IN ANOTHER TOOL'S CONFIG IS NOT STARTED BY OPENING THE PROJECT.
+              //
+              // These entries are merged from a `.claude.json` found in the project directory, and that
+              // file belongs to whoever wrote the repository — `mcpServers` in it is an arbitrary command
+              // line. Starting them on open would mean cloning a repository is enough to run a command
+              // its author chose, before anyone has read a line of it. So they wait: `pending` until
+              // someone connects them deliberately, which is what `mcp.connect(name)` is for.
+              //
+              // `pending` was already in the status schema and was assigned NOWHERE — declared and not
+              // wired, so the test asserting this behaviour had been failing against a product that
+              // connected them at boot. The origin stamp is set by the config merge (mcp_origins), which
+              // is the only thing that can tell an entry the owner wrote from one that arrived with a
+              // checkout.
+              if (cfg.mcp_origins?.[key]?.type === "claude") {
+                log.info("mcp server waits to be connected: it comes from a config file in the project", {
+                  key,
+                  source: cfg.mcp_origins[key]!.source,
+                })
+                s.status[key] = { status: "pending" }
+                return
+              }
+
               const result = yield* create(key, mcp).pipe(Effect.catch(() => Effect.void))
               if (!result) return
 

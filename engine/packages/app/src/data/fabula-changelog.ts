@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.101.0"
+export const FABULA_VERSION = "0.101.1"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.101.1",
+    date: "2026-08-01",
+    items: [
+      {
+        ru: "Публичный счёт инструментов исправлен с 85 на 89. Команда, которой число выводилось, не учитывала инструменты с цифрой в имени — четыре выпадали из счёта, и витрина занижала собственный продукт. Команда исправлена в самом источнике, чтобы дефект не вернулся.",
+        en: "The public tool count was corrected from 85 to 89. The command that derived the number missed tools with a digit in their name — four fell out of the count, and the storefront undersold its own product. The command itself was corrected at the source so the defect cannot return.",
+      },
+    ],
+  },
   {
     version: "0.101.0",
     date: "2026-08-01",

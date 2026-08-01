@@ -34,6 +34,40 @@ export function defaultSandboxConfig(home: string): SandboxConfig {
   }
 }
 
+/**
+ * The HARDLINE set only — the persistence and credential PATHS `lib/pathguard.ts` already refuses —
+ * with none of the file-extension rules.
+ *
+ * This is the profile the SHELL runs under, and the difference from `defaultSandboxConfig` is the whole
+ * point. `execute_code` is for untrusted or experimental code, so denying it every `.env`/`.key`/`.pem`
+ * write is right. `bash_tool` is the main working tool, and writing a `.env` in your own project is
+ * ordinary work — a guard that refuses it is one that gets switched off. So the kernel is asked to
+ * enforce exactly what the in-process rules already declare, and nothing more.
+ *
+ * MEASURED 2026-08-01 by an independent review, and it is why this exists at all: the shell extractor
+ * reads a command's TEXT, so three spellings of one write walked past it — `P=<path>; echo hi > "$P"`,
+ * a glob, and `python3 -c "open(<path>,'w')"`. All three were allowed while the literal spelling was
+ * blocked. No amount of parsing closes that: a path a program computes has no text to read. The kernel
+ * does not care how a path was arrived at, which is the one property that makes the claim true rather
+ * than nearly true.
+ */
+export function hardlineSandboxConfig(home: string): SandboxConfig {
+  return {
+    home,
+    // Reads are NOT restricted here. The shell legitimately reads everything; the claim being enforced
+    // is about WRITES, and widening it silently would break ordinary work in a way nobody asked for.
+    denyReadPaths: [],
+    denyWriteRegex: [
+      "/LaunchAgents/", "/LaunchDaemons/",
+      "authorized_keys",
+      "/\\.ssh/id_",
+      "/etc/sudoers", "/etc/passwd", "/etc/shadow",
+      "/cron(tab|\\.d)", "/var/at/", "/var/spool/cron/",
+      "fabula-permissions\\.json$", "fabula-state\\.json$",
+    ],
+  }
+}
+
 /** Escape a path for an SBPL STRING literal (`"..."`), where a backslash is itself an escape. */
 function sbpl(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')

@@ -108,6 +108,25 @@ for base in "$DATA/memory/projects" "$DATA/snapshot"; do
   done
 done
 
+# Corpus map-reduce residue. This store holds a finished analysis in full — the per-batch summaries
+# verbatim in the accumulator, and since the delivery-safety change the REPORT itself, written to disk
+# before it is handed over and kept whenever the handover fails. Found by an independent review: the
+# store had grown to four artifacts per run while both purge paths still knew about two places, so a
+# deleted chat left the whole text of its analysis behind. Names are `<sessionID-with-punctuation-
+# stripped>-<dir-slug>.<kind>`, so the id has to be stripped the same way before matching.
+if [ -d "$DATA/corpus" ]; then
+  for f in "$DATA/corpus"/*; do
+    [ -e "$f" ] || continue
+    key=$(basename "$f")
+    keep=""
+    for sid in $LIVE_IDS; do
+      stripped=$(printf '%s' "$sid" | tr -cd 'a-zA-Z0-9-')
+      case "$key" in "$stripped"*) keep=1; break ;; esac
+    done
+    [ -n "$keep" ] || { rm -rf "$f"; echo "  – removed corpus residue $key"; }
+  done
+fi
+
 # Debug logs mix all sessions and are regenerable — clear them so no chat text lingers.
 if [ -d "$DATA/log" ]; then rm -f "$DATA"/log/*.log 2>/dev/null || true; echo "  – cleared debug logs"; fi
 

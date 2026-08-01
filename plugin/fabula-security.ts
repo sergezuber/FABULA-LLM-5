@@ -67,13 +67,18 @@ export const FabulaSecurity: Plugin = async () => gate("security", ({
       // redirect and with curl, reporting each as completed. Not an attack: an agent routing around a
       // refusal to finish its task, which is the behaviour a guard has to survive. The rules were always
       // right; the shell simply never consulted them.
-      for (const p of shellWriteTargets(cmd)) {
+      // A KILL-SWITCH, because every other guard in this project ships one and a refusal with no
+      // documented recourse is one a user reads as a bug. It turns off THIS DOOR only — the tool guards
+      // and the kernel profile are untouched — so the honest description is "the shell stops asking",
+      // not "the guards are off".
+      const shellDoorOn = process.env.FABULA_SHELL_GUARD !== "0"
+      for (const p of shellDoorOn ? shellWriteTargets(cmd) : []) {
         const wv = checkWritePath(p)
         if (wv.blocked && (wv.code === "supervision_state" || !editsPreApproved())) {
           throw new Error(writeBlockedMessage(wv, p) + `\n(via the shell: ${String(cmd).slice(0, 160)})`)
         }
       }
-      for (const u of shellUrls(cmd)) {
+      for (const u of shellDoorOn ? shellUrls(cmd) : []) {
         const uv = await checkUrl(u)
         if (uv.blocked) throw new Error(ssrfBlockedMessage(uv, u) + `\n(via the shell: ${String(cmd).slice(0, 160)})`)
       }

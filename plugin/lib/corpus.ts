@@ -342,6 +342,31 @@ export function accumulatorPath(key: string): string {
   return join(accumulatorDir(), `${key}.json`)
 }
 
+/**
+ * Everything this store holds ABOUT ONE SESSION, so a deleted chat can leave none of it behind.
+ *
+ * MEASURED 2026-08-01 by an independent review of the wave that introduced the last of these files:
+ * the store had grown to four artifacts per run — the accumulator (every per-batch summary verbatim),
+ * the heartbeat, the handback marker, and, newly, the finished REPORT written to disk before delivery —
+ * while the purge hook removed only `memory/sessions/<id>` and the handoffs. So deleting a chat left the
+ * full text of its analysis on disk, in the store whose stated guarantee is that nothing is retained.
+ * The same wave had just closed exactly this class for the handoff archive and walked past its sibling.
+ *
+ * The key is session-derived (see accumulatorKey), so a prefix match names this session's files and
+ * nobody else's. Listing the names in ONE place is what keeps the purge from going stale the next time
+ * a file is added — a new artifact goes here, and the purge picks it up without being edited.
+ */
+export function sessionArtifacts(sessionID: string): string[] {
+  if (!sessionID) return []
+  const dir = accumulatorDir()
+  const prefix = sessionID.replace(/[^a-z0-9-]/gi, "")
+  if (!prefix) return []
+  let names: string[] = []
+  try { names = readdirSync(dir) } catch { return [] }
+  // accumulatorKey is `<sessionID>-<dir-slug>`, so every artifact of this session starts with the id.
+  return names.filter((n) => n.startsWith(prefix)).map((n) => join(dir, n))
+}
+
 /** Read an existing accumulator (or null). Tolerant of missing/corrupt files — never throws. */
 export function readAccumulator(key: string): Accumulator | null {
   try {

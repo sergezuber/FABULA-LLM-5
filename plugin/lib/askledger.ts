@@ -46,7 +46,13 @@ export interface AskLedger {
 }
 
 export const DEFAULT_LEDGER_CAP = 2000
-export const LEDGER_ENV = "FABULA_ASK_LEDGER"
+/** The ONE name of the ask-ledger override, so the constant and the reader cannot disagree.
+ *
+ *  MEASURED 2026-08-01 by an independent review: this named the variable without its _FILE suffix while `askLedgerPath`
+ *  below reads `FABULA_ASK_LEDGER_FILE` — a constant naming a variable nothing consults, with a
+ *  reachability entry asserting it was "used through askLedgerPath". Two names for one knob is the
+ *  same drift this module was written to prevent between its writer and its readers. */
+export const LEDGER_ENV = "FABULA_ASK_LEDGER_FILE"
 
 export function initLedger(cap: number = DEFAULT_LEDGER_CAP): AskLedger {
   const c = Number.isFinite(cap) && cap > 0 ? Math.floor(cap) : DEFAULT_LEDGER_CAP
@@ -188,7 +194,7 @@ export function askF1(ledger: unknown): AskF1 {
 export function askLedgerPath(env: Record<string, string | undefined> = process.env as any): string {
   const nodePath = require("node:path") as typeof import("node:path")
   const nodeOs = require("node:os") as typeof import("node:os")
-  const override = (env.FABULA_ASK_LEDGER_FILE || "").trim()
+  const override = (env[LEDGER_ENV] || "").trim()
   if (override && nodePath.isAbsolute(override)) return override
   const xdg = (env.XDG_DATA_HOME || "").trim()
   if (!xdg && (env.NODE_ENV === "test" || env.BUN_TEST || env.FABULA_TEST)) {

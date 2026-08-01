@@ -503,3 +503,54 @@ describe("bash_tool.execute() — real shell", () => {
     results.forEach((r, i) => expect(outOf(r)).toContain(`CONCUR_${i}`))
   })
 })
+
+// MEASURED 2026-08-01 by an independent review, against documentation that claimed more than the code
+// did. The shell door reads a command's TEXT, so three spellings of one write walked past it while the
+// literal spelling was blocked: `P=<path>; echo hi > "$P"`, a glob, and `python3 -c "open(<path>,'w')"`.
+// No parser closes that — a path a program COMPUTES has no text to read. bash therefore runs under a
+// kernel profile carrying exactly the hardline PATHS lib/pathguard.ts already refuses.
+//
+// The CONTROLS carry the weight: the profile deliberately omits the file-extension rules execute_code
+// gets, because writing a `.env` in your own project is ordinary work and a guard that refuses it is one
+// that gets switched off.
+describe("the kernel enforces what the shell rules declare", () => {
+  const hasSbx = existsSync("/usr/bin/sandbox-exec")
+  const target = path.join(os.homedir(), "Library", "LaunchAgents", "zz-fabula-kernel-probe.plist")
+
+  test.if(hasSbx)("no spelling of a guarded write lands on disk", async () => {
+    const h: any = await (FabulaTools as any)({ directory: os.tmpdir() })
+    const ctx = { directory: os.tmpdir(), sessionID: "s" }
+    const spellings = [
+      `echo hi > ${target}`,
+      `P="${target}"; echo hi > "$P"`,
+      `echo hi > ${path.join(os.homedir(), "Library")}/LaunchAgent*/zz-fabula-kernel-probe.plist`,
+      `python3 -c "open('${target}','w').write('x')"`,
+      `node -e "require('fs').writeFileSync('${target}','x')"`,
+    ]
+    for (const cmd of spellings) {
+      try { await h.tool.bash_tool.execute({ command: cmd }, ctx) } catch {}
+      const landed = existsSync(target)
+      if (landed) rmSync(target, { force: true })
+      expect(`${cmd.slice(0, 40)}:${landed}`).toBe(`${cmd.slice(0, 40)}:false`)
+    }
+  })
+
+  test.if(hasSbx)("ordinary work is untouched — including writing a .env in your own project", async () => {
+    const h: any = await (FabulaTools as any)({ directory: os.tmpdir() })
+    const d = mkdtempSync(path.join(os.tmpdir(), "kernel-floor-"))
+    const ctx = { directory: d, sessionID: "s" }
+    try {
+      for (const [cmd, file] of [
+        [`echo K=1 > ${d}/.env`, `${d}/.env`],
+        [`echo hi > ${d}/notes.txt`, `${d}/notes.txt`],
+        [`echo x > ${d}/key.pem`, `${d}/key.pem`],
+        [`cd ${d} && git --version > git.txt`, `${d}/git.txt`],
+      ] as [string, string][]) {
+        await h.tool.bash_tool.execute({ command: cmd }, ctx)
+        expect(`${cmd.slice(0, 30)}:${existsSync(file)}`).toBe(`${cmd.slice(0, 30)}:true`)
+      }
+    } finally {
+      rmSync(d, { recursive: true, force: true })
+    }
+  })
+})

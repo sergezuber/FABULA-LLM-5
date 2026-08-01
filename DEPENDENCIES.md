@@ -20,7 +20,7 @@ The core tool belt: web, shell/code, file edits, search, weather, places, mixtur
 | linkedom | npm | **yes** | web_fetch DOM parsing | `cd plugin && bun install` |
 | unpdf | npm | **yes** | web_fetch PDF extraction | `cd plugin && bun install` |
 | SearXNG | service | optional | web_search / image_search backend | `Run a SearXNG instance (docker run searxng/searxng) and set SEARXNG_URL` |
-| Docker | docker | optional | execute_code sandbox (FABULA_CODE_SANDBOX=docker) | `brew install --cask docker  # then launch Docker Desktop once` |
+| Docker | docker | optional | execute_code isolation — optional for the default path (without it, code runs locally under the macOS kernel profile), REQUIRED for an explicit sandbox:true, which is refused rather than run on the host | `brew install --cask docker  # then launch Docker Desktop once` |
 
 ## graph — Workflow graph · core
 
@@ -65,7 +65,7 @@ Loop-guard, tool-arg repair, ntfy push notifications, optional actor role preamb
 
 ## security — Security · core
 
-SSRF guards, secret redaction, untrusted-result wrapping, command/approval guards, permission modes.
+SSRF guards, secret redaction, untrusted-result wrapping, write-path guards and permission modes. The write and fetch rules are asked on THREE doors from one definition — the tools (including patch-style edits, whose targets are read out of the patch body), the shell (a redirect, tee, cp/mv/ln, sed -i or a curl target is extracted from the command), and code (execute_code without a container runs under the macOS kernel profile, because a path a program COMPUTES is invisible to anything that reads arguments). Two decisions are the owner's alone and cannot be taken from inside a run: the bypass mode, and a per-command allowance — allow_command records the request and reports that it is not in effect. An explicit sandbox:true is refused when isolation is unavailable rather than downgraded to the host.
 
 **Tools:** `set_permission_mode`, `allow_command`
 

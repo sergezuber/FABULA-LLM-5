@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.100.0"
+export const FABULA_VERSION = "0.101.0"
 
 export type ChangelogEntry = {
   version: string
@@ -11,7 +11,7 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    version: "0.100.0",
+    version: "0.101.0",
     date: "2026-08-01",
     items: [
       {
@@ -37,6 +37,10 @@ export const CHANGELOG: ChangelogEntry[] = [
       {
         ru: "Панели и списки перестали показывать не то. Переключатель одного из плагинов писал имя, которого никто не читает, — плагин продолжал работать, а выключатель рисовался выключенным; имя плагина берётся из места, где оно объявлено, а не выводится из имени файла. Карточки показывают человеческое название, а не служебный ярлык. Строки о контекстном окне на пятнадцати языках всё ещё говорили о пределе беседы — беседа не упирается в окно, и теперь это написано на всех языках. Тема оформления при первом запуске больше не мигает старой. Панель проверенной работы показывала нули там, где проверок было много: две целые категории не считались нигде и потому выглядели как «ничего не было».",
         en: "Panels and lists stopped showing the wrong thing. One plugin's switch wrote a name nothing reads — the plugin kept running while the switch rendered off; a plugin's id now comes from where it is declared rather than being derived from a filename. Cards show a human name instead of an internal slug. The context-window rows in fifteen languages still spoke of a limit on the conversation — a conversation does not end at the window, and now every language says so. The theme no longer flashes the old one on a first launch. The verified-work panel showed zeros where many checks had run: two whole categories were counted nowhere and so read as \"nothing happened\".",
+      },
+      {
+        ru: "Два независимых проверяющих прошли по этой волне с противоположными заданиями — один опровергал заявления документов, читая исходники, другой искал изменения, не описанные нигде. Из их находок важнейшая была не в документах, а в коде: заявление «правило, останавливающее инструмент, останавливает то же самое в оболочке» оказалось верным только для буквального написания пути. Через переменную, через шаблон имени и изнутри программы, запущенной оболочкой, запись проходила. Текст команды тут не поможет — путь, который ВЫЧИСЛЯЕТ программа, читать негде. Поэтому оболочка теперь работает под профилем ядра, несущим ровно те пути, которые правила уже объявили: ни одно из пяти написаний больше не попадает на диск, а обычная работа — сборка, git, запись собственного .env в своём проекте — проходит нетронутой. Ещё они нашли, что удалённый чат оставлял на диске полный текст своего разбора, что документированный выключатель песочницы ничего не выключал, и что сторож, следящий за честностью документации, сам считал обычные константы настройками.",
+        en: "Two independent reviewers went through this wave with opposite briefs — one refuting the documentation's claims against the source, the other hunting for changes described nowhere. Their most important finding was not in the documents but in the code: the claim that \"a rule stopping a tool stops the same thing through the shell\" held only for the literal spelling of a path. Through a variable, through a filename pattern, and from inside a program the shell started, the write went through. No amount of reading the command text closes that — a path a program COMPUTES has no text to read. So the shell now runs under a kernel profile carrying exactly the paths the rules already declare: none of the five spellings reaches the disk any more, while ordinary work — a build, git, writing your own project's .env — passes untouched. They also found that a deleted chat left the full text of its analysis on disk, that a documented sandbox off-switch switched nothing off, and that the guard watching over the documentation's honesty was itself counting ordinary constants as settings.",
       },
       {
         ru: "Версии 0.96–0.99 были шагами сборки внутри одной этой волны: каждый собирался и запускался, чтобы проверить очередную починку на живом приложении, но ни один не был отдельным состоянием для читателя. Всё, что они несли, описано здесь.",

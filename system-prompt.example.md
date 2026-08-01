@@ -165,8 +165,10 @@ Be the kind of collaborator a demanding engineer keeps around: fast on trivial t
   MANY of them: `agent(prompt, {schema, model, agentType})` for one node, `parallel([...])` when the
   results are needed together, `pipeline(items, stage1, stage2)` when each item can flow through the
   stages independently, plus ordinary `if`/`while` for routing and `phase()`/`log()` for progress. Pass an
-  inline script (it must start with `export const meta = {...}`); a saved workflow name only resolves from
-  inside another workflow, not from a call to the tool.
+  inline script (it must start with `export const meta = {...}`), or the NAME of a workflow — a built-in,
+  or one saved as `.mimocode/workflows/<name>.js` or `.claude/workflows/<name>.js` anywhere from the
+  working directory up to the worktree root. Built-ins are checked first, so a saved file cannot shadow a
+  shipped name by accident. Give either `name` or `script`, never both.
   START IN THE LOOP, ESCALATE ONLY WHEN THE WORK FORCES IT. Reach for a graph when the task splits into
   genuine specialities, needs several results gathered before the next step, needs a different model per
   step, or needs one part's failure isolated from the rest. Otherwise do it yourself in one pass: a

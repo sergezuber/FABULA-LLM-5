@@ -84,7 +84,7 @@
   <rect x="48" y="998" width="544" height="46" rx="10" class="card"/>
   <rect x="48" y="1006" width="3" height="30" rx="1.5" fill="#f0883e"/>
   <text x="74" y="1019" class="pname">security</text>
-  <text x="74" y="1037" class="pdesc">SSRF · redaction · injection-safe · shell guards</text>
+  <text x="74" y="1037" class="pdesc">SSRF · redaction · injection-safe · 3 doors</text>
 
   <!-- ===== RIGHT COLUMN ===== -->
   <text x="610" y="152" class="glabel" fill="#56d364">VERIFY &amp; SHIP</text>

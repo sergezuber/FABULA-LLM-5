@@ -28,7 +28,7 @@ import { safeFetch } from "./lib/ssrf"
 import { fileState, neverReadNote } from "./lib/filestate"
 import { findMatch, checkEscapeDrift } from "./lib/fuzzymatch"
 import { capToolOutput } from "./lib/outputcap"
-import { buildSeatbeltProfile, defaultSandboxConfig, sandboxExecArgv } from "./lib/sandbox"
+import { buildSeatbeltProfile, defaultSandboxConfig, hardlineSandboxConfig, sandboxExecArgv } from "./lib/sandbox"
 import { bashArgv, resolveBackend } from "./lib/execbackend"
 import { homedir } from "node:os"
 
@@ -37,6 +37,12 @@ import { homedir } from "node:os"
 // lib/execbackend. Built once at load. The harness owns the blast radius, not the model.
 const SANDBOX_PROFILE = process.env.FABULA_SANDBOX === "1" ? buildSeatbeltProfile(defaultSandboxConfig(homedir())) : ""
 const BASH_BACKEND = resolveBackend(process.env, SANDBOX_PROFILE)
+/** The kernel floor under every host shell command: the hardline paths, nothing else. Built once —
+ *  it depends only on $HOME. Empty when the platform has no Seatbelt or the operator opted out. */
+const shellKernelFloor: string =
+  process.env.FABULA_SHELL_GUARD !== "0" && existsSync("/usr/bin/sandbox-exec")
+    ? buildSeatbeltProfile(hardlineSandboxConfig(os.homedir()))
+    : ""
 import { detectVerifyCommand, verifyReport } from "./lib/verifycmd"
 import { resolveProviders, chatBody, extractText, synthesisPrompt, pickAggregator, Candidate } from "./lib/moa"
 import { Database } from "bun:sqlite"
@@ -367,7 +373,20 @@ export const FabulaTools: Plugin = async () => {
           const verdict = checkCommand(args.command)
           if (verdict.blocked) return blockedMessage(verdict, args.command)
           return await new Promise((resolve) => {
-            const argv = bashArgv(args.command, BASH_BACKEND)
+            // THE KERNEL ENFORCES WHAT THE RULES DECLARE.
+            //
+            // The shell door reads a command's TEXT, and an independent review measured three spellings
+            // of one write walking straight past it: `P=<path>; echo hi > "$P"`, a glob, and
+            // `python3 -c "open(<path>,'w')"` — all allowed while the literal spelling was blocked. No
+            // parser closes that; a path a program COMPUTES has no text to read. So bash also runs under
+            // a kernel profile carrying exactly the hardline PATHS `lib/pathguard.ts` already refuses —
+            // and none of the file-extension rules `execute_code` gets, because writing a `.env` in your
+            // own project is ordinary work and a guard that refuses it is one that gets switched off.
+            // An explicitly configured backend (sandbox/docker) still wins; FABULA_SHELL_GUARD=0 opts out.
+            const argv =
+              !BASH_BACKEND.sandboxProfile && !BASH_BACKEND.dockerCid && shellKernelFloor
+                ? sandboxExecArgv(bashArgv(args.command, BASH_BACKEND), shellKernelFloor)
+                : bashArgv(args.command, BASH_BACKEND)
             const child = spawn(argv[0], argv.slice(1), { cwd: ctx.directory, env: process.env })
             let out = "", err = "", killed = false
             const cap = 200_000
@@ -708,7 +727,13 @@ export const FabulaTools: Plugin = async () => {
           const lang = /node|js|javascript/i.test(args.language) ? "node" : "python"
           const v = scanCode(lang, args.code)
           if (v.blocked) return `[BLOCKED by FABULA security — code:${v.code}] execute_code refused: ${v.reason}`
-          const wantSandbox = args.sandbox !== false && process.env.FABULA_CODE_SANDBOX !== "0"
+          // The documented values are "docker" | "none" | "0". MEASURED 2026-08-01: only `!== "0"` was checked, so
+          // `FABULA_CODE_SANDBOX=none` — the spelling .env.example and DEPENDENCIES.md both advertise — left the
+          // sandbox ON. A documented off-switch that does not switch anything off is worse than none, because a
+          // user believes they have opted out.
+          const sandboxEnv = (process.env.FABULA_CODE_SANDBOX ?? "").trim().toLowerCase()
+          const sandboxDisabled = sandboxEnv === "0" || sandboxEnv === "none" || sandboxEnv === "off" || sandboxEnv === "false"
+          const wantSandbox = args.sandbox !== false && !sandboxDisabled
           const useDocker = wantSandbox && (await dockerAvailable())
 
           // AN EXPLICIT ASK FOR ISOLATION IS NOT DOWNGRADED — it is refused.

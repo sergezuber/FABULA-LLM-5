@@ -66,7 +66,7 @@ export const MANIFEST: PluginMeta[] = [
       { kind: "npm", name: "linkedom", required: true, purpose: "web_fetch DOM parsing", check: "test -d plugin/node_modules/linkedom", install: "cd plugin && bun install" },
       { kind: "npm", name: "unpdf", required: true, purpose: "web_fetch PDF extraction", check: "test -d plugin/node_modules/unpdf", install: "cd plugin && bun install" },
       { kind: "service", name: "SearXNG", required: false, purpose: "web_search / image_search backend", check: "curl -sf ${SEARXNG_URL:-http://localhost:8888}/ >/dev/null", install: "Run a SearXNG instance (docker run searxng/searxng) and set SEARXNG_URL", manual: true, note: "Without it, web_search/image_search return a clear 'not configured' message." },
-      { kind: "docker", name: "Docker", required: false, purpose: "execute_code sandbox (FABULA_CODE_SANDBOX=docker)", check: "docker version --format '{{.Server.Version}}' >/dev/null 2>&1", install: "brew install --cask docker  # then launch Docker Desktop once", note: "Optional: execute_code runs directly if Docker is absent and the command is allowed by the guards." },
+      { kind: "docker", name: "Docker", required: false, purpose: "execute_code isolation — optional for the default path (without it, code runs locally under the macOS kernel profile), REQUIRED for an explicit sandbox:true, which is refused rather than run on the host", check: "docker version --format '{{.Server.Version}}' >/dev/null 2>&1", install: "brew install --cask docker  # then launch Docker Desktop once", note: "Optional for the DEFAULT path — without Docker, execute_code runs locally under the macOS kernel profile (sandbox-exec), with credential and persistence paths denied by the kernel and the result saying which of the two ran. REQUIRED for an explicit sandbox:true, which is REFUSED rather than downgraded to the host when no container is available." },
     ],
   },
   {
@@ -101,7 +101,7 @@ export const MANIFEST: PluginMeta[] = [
   },
   {
     id: "security", file: "fabula-security.ts", name: "Security", core: true, defaultEnabled: true,
-    description: "SSRF guards, secret redaction, untrusted-result wrapping, command/approval guards, permission modes.",
+    description: "SSRF guards, secret redaction, untrusted-result wrapping, write-path guards and permission modes. The write and fetch rules are asked on THREE doors from one definition — the tools (including patch-style edits, whose targets are read out of the patch body), the shell (a redirect, tee, cp/mv/ln, sed -i or a curl target is extracted from the command), and code (execute_code without a container runs under the macOS kernel profile, because a path a program COMPUTES is invisible to anything that reads arguments). Two decisions are the owner's alone and cannot be taken from inside a run: the bypass mode, and a per-command allowance — allow_command records the request and reports that it is not in effect. An explicit sandbox:true is refused when isolation is unavailable rather than downgraded to the host.",
     tools: ["set_permission_mode", "allow_command"],
     deps: [...NPM_BUNDLED],
   },

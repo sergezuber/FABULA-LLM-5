@@ -85,6 +85,20 @@ exact shape is:
 **Do NOT put `description`/`prompt`/`subagent_type` at the top level — they MUST be inside `operation`.** Do
 not add unsupported keys (`timeout_ms`, `timeout`, `model`, …) — there is no timeout; subagents run to completion.
 
+**`workflow` is the OPPOSITE shape, and assuming otherwise breaks every one of its operations.** Its
+arguments are FLAT, with `operation` as a plain string, not an object:
+`workflow({ "operation": "run", "script": "export const meta = {...}" })` — or `{"operation":"run","name":"deep-research"}`,
+`{"operation":"status","run_id":"wf_…"}`, and the same for `wait` / `cancel` / `resume`.
+- Give either `name` or `script`, never both. `name` accepts a built-in OR a workflow saved as
+  `.mimocode/workflows/<name>.js` or `.claude/workflows/<name>.js`, searched from the working directory up
+  to the worktree root; built-ins win a name clash.
+- `task` and `actor` are the nested ones; `workflow` is the flat one. Two tools can both be "a union on
+  `operation`" and want opposite payloads — this pair does.
+
+**A bare verb is understood.** `{"operation":"list"}` on `task`/`actor` is completed into
+`{"operation":{"action":"list"}}` for you, and `{"action":"run", …}` on `workflow` is renamed to
+`{"operation":"run", …}`. You do not need to retry a call that was repaired — read the result.
+
 **Emit the arguments as STRICT, valid JSON — this is the #1 cause of `actor` failures**
 (`Invalid input for tool actor: JSON parsing failed`). The `prompt` usually contains code, quotes and
 newlines that MUST be escaped:

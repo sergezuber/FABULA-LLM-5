@@ -87,7 +87,7 @@ const DECLARED_UNREACHABLE: Record<string, string> = {
   "distillguard.ts:shouldBlockDistill": "the guard decides through blockedSelfImprovePass, which is the ONE decision covering every pass",
   "toolbelt.ts:activeTools": "the belt is applied by mask; the active list has no reader",
   "corpus.ts:DEFAULT_SUMMARY_TOKENS": "default consumed through the env knob, never referenced directly",
-  "askledger.ts:LEDGER_ENV": "env NAME constant, used through askLedgerPath",
+
   "attest/quarantine.ts:needsQuarantine": "quarantine is applied unconditionally to fetched evidence, so the predicate is never asked",
   "graph.ts:execOrder": "topological order: the graph runs by LEVELS (execLevels), which is the parallel form",
 

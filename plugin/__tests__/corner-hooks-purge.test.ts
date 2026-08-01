@@ -7,7 +7,10 @@
 // We never touch a real `ses_*` dir. Every dir we create/assert-on uses a unique throwaway id
 //   `fabula-purge-test-<pid>-<n>`  (never starts with `ses_`),
 // and afterAll re-asserts that NO real ses_* dir was removed (snapshot before/after).
-import { test, expect, beforeAll, afterAll } from "bun:test"
+import { test, expect, beforeAll, afterAll, describe } from "bun:test"
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs"
+import { execFileSync } from "node:child_process"
+import * as pathmod from "node:path"
 import { FabulaPurgeHook } from "../fabula-purge-hook"
 import { promises as fs } from "node:fs"
 import { existsSync } from "node:fs"
@@ -232,4 +235,60 @@ test("idempotent: deleting the same session twice is a no-op the second time", a
   // second delete on now-missing dir must not throw
   await fire(h, { type: "session.deleted", properties: { sessionID: id } })
   expect(existsSync(dir)).toBe(false)
+})
+
+// MEASURED 2026-08-01 by an independent review: the corpus store had grown to four artifacts per run —
+// the accumulator (every per-batch summary verbatim), the heartbeat, the handback marker and, newly, the
+// finished REPORT written to disk before delivery — while this hook removed only memory/sessions/<id>
+// and the handoffs. Deleting a chat therefore left the full text of its analysis on disk, in the store
+// whose stated guarantee is that nothing is retained. The same wave had just closed this exact class for
+// the handoff archive and walked past its sibling.
+describe("a deleted chat leaves nothing in the corpus store either", () => {
+  test("every artifact of that session goes, and another session's are untouched", async () => {
+    const data = mkdtempSync(pathmod.join(os.tmpdir(), "purge-corpus-"))
+    const prev = process.env.XDG_DATA_HOME
+    process.env.XDG_DATA_HOME = data
+    try {
+      const dir = pathmod.join(data, "fabula", "corpus")
+      mkdirSync(dir, { recursive: true })
+      const mine = "ses_deadbeef"
+      const other = "ses_cafebabe"
+      // Filenames DERIVED from the real key function, never hand-written: accumulatorKey strips
+      // characters (the underscore among them), so a hand-made fixture tests a name the product never
+      // writes — which is how this test first passed against a purge that matched nothing.
+      const { accumulatorKey } = await import("../lib/corpus")
+      const k = accumulatorKey(mine, "/Users/me/book")
+      const ko = accumulatorKey(other, "/Users/me/book")
+      const files = {
+        acc: pathmod.join(dir, `${k}.json`),
+        hb: pathmod.join(dir, `${k}.heartbeat.json`),
+        hand: pathmod.join(dir, `${k}.handback.json`),
+        report: pathmod.join(dir, `${k}.report.md`),
+        theirs: pathmod.join(dir, `${ko}.report.md`),
+      }
+      writeFileSync(files.acc, JSON.stringify({ v: 1, task: "read it all" }))
+      writeFileSync(files.hb, JSON.stringify({ state: "done" }))
+      writeFileSync(files.hand, "{}")
+      writeFileSync(files.report, "SECRET-ANALYSIS-MARKER the whole report text")
+      writeFileSync(files.theirs, "someone else's report")
+
+      const hooks: any = await (FabulaPurgeHook as any)({})
+      await hooks.event({ event: { type: "session.deleted", properties: { sessionID: mine } } })
+
+      for (const [name, f] of Object.entries(files)) {
+        const shouldSurvive = name === "theirs"
+        expect(`${name}:${existsSync(f)}`).toBe(`${name}:${shouldSurvive}`)
+      }
+      // And the marker itself is nowhere under the data dir — the guarantee is "no trace", not "no index".
+      const leftover = execFileSync("grep", ["-rl", "SECRET-ANALYSIS-MARKER", data], { encoding: "utf8" }).trim()
+      expect(leftover).toBe("")
+    } catch (e: any) {
+      // grep exits 1 with no match — that IS the passing case.
+      if (e?.status !== 1) throw e
+    } finally {
+      if (prev === undefined) delete process.env.XDG_DATA_HOME
+      else process.env.XDG_DATA_HOME = prev
+      rmSync(data, { recursive: true, force: true })
+    }
+  })
 })

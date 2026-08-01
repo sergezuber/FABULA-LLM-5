@@ -54,10 +54,39 @@ function namesReadByCode(): Set<string> {
     ...readAll(join(ROOT, "app")),
     ...readAll(join(ROOT, "scripts")),
   ]
+  // An ENV ACCESS, not merely the letters. MEASURED 2026-08-01 by an independent review: matching the
+  // bare name counted JavaScript CONSTANTS as environment reads — `const FABULA_VERIFIED_TTL_MS = 60_000`
+  // and three like it in one engine file — so this guard demanded `.env.example` document four names
+  // nobody can set, and the obvious way to make it green was to write documentation that lies. A guard
+  // that manufactures its own findings is worse than no guard, because its output looks like evidence.
+  //
+  // Every real reading form, across the four languages in this repository.
+  // NB `env?.X` — optional chaining is how an INJECTED env bag is read throughout this codebase, and a
+  // pattern that misses it reports live knobs as ghosts, which invites deleting documentation that is right.
+  const ACCESS = [
+    /process\.env\??\.(FABULA_[A-Z0-9_]+)/g,
+    /process\.env\[["'`](FABULA_[A-Z0-9_]+)["'`]\]/g,
+    /\benv\??\.(FABULA_[A-Z0-9_]+)/g,
+    /\benv\??\[["'`](FABULA_[A-Z0-9_]+)["'`]\]/g,
+    /\benvironment\[["'`](FABULA_[A-Z0-9_]+)["'`]\]/g,     // Swift: ProcessInfo…environment["X"]
+    /os\.environ\.get\(\s*["'](FABULA_[A-Z0-9_]+)["']/g,   // Python
+    /os\.environ\[\s*["'](FABULA_[A-Z0-9_]+)["']/g,
+    /getenv\(\s*["'](FABULA_[A-Z0-9_]+)["']/g,
+    /\$\{?(FABULA_[A-Z0-9_]+)\}?/g,                        // shell
+    // The INDIRECTION this codebase actually uses: the name lives in a string constant
+    // (`export const PIN_ENV = "FABULA_MEM_PIN"`) and the access goes through it. A quoted name is a
+    // read; a BARE identifier is not, which is the whole distinction — tightening to direct access
+    // alone hid fifteen real knobs and would have had them deleted from the documentation as ghosts.
+    /["'`](FABULA_[A-Z0-9_]+)["'`]/g,
+  ]
   const found = new Set<string>()
   for (const f of files) {
-    for (const m of readFileSync(f, "utf8").matchAll(/FABULA_[A-Z0-9_]+/g)) {
-      if (!NOT_KNOBS.some((re) => re.test(m[0]))) found.add(m[0])
+    const text = readFileSync(f, "utf8")
+    for (const re of ACCESS) {
+      for (const m of text.matchAll(re)) {
+        const name = m[1]!
+        if (!NOT_KNOBS.some((r) => r.test(name))) found.add(name)
+      }
     }
   }
   return found

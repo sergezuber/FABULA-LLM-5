@@ -287,3 +287,23 @@ describe("the shell is a door onto the same rooms", () => {
     }
   })
 })
+
+// Every other guard here ships a kill-switch, and a refusal a user cannot turn off is one they read as a
+// bug with no recourse. This one turns off the SHELL door only — the tool guards stay on, which is what
+// keeps the switch honest: it is "the shell stops asking", not "the guards are off".
+test("the shell door has a kill-switch, and it does not take the other doors with it", async () => {
+  const prev = process.env.FABULA_SHELL_GUARD
+  const cmd = `echo x > ${os.homedir()}/Library/LaunchAgents/zz.plist`
+  try {
+    delete process.env.FABULA_SHELL_GUARD
+    await expectBlocked("bash_tool", { command: cmd }, "[BLOCKED")
+
+    process.env.FABULA_SHELL_GUARD = "0"
+    await expectAllowed("bash_tool", { command: cmd })
+    // …while the TOOL door is untouched by that switch.
+    await expectBlocked("create_file", { path: `${os.homedir()}/Library/LaunchAgents/zz.plist` }, "[BLOCKED")
+  } finally {
+    if (prev === undefined) delete process.env.FABULA_SHELL_GUARD
+    else process.env.FABULA_SHELL_GUARD = prev
+  }
+})

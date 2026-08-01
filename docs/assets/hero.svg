@@ -57,7 +57,7 @@
   <line x1="1122" y1="318" x2="1122" y2="1158" stroke="#f0883e" stroke-width="1.5"/>
   <line x1="1114" y1="318" x2="1130" y2="318" stroke="#f0883e" stroke-width="1.5"/>
   <line x1="1114" y1="1158" x2="1130" y2="1158" stroke="#f0883e" stroke-width="1.5"/>
-  <text transform="rotate(90 1146 738)" x="1146" y="738" text-anchor="middle" class="sub" fill="#f0883e">reliability + security wrap every call — loop-guard · arg-repair · SSRF · redaction · injection-safe</text>
+  <text transform="rotate(90 1146 738)" x="1146" y="738" text-anchor="middle" class="sub" fill="#f0883e">reliability + security wrap every call — loop-guard · arg-repair · SSRF · write-path · redaction</text>
 
   <!-- connectors -->
   <g>

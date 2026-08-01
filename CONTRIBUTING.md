@@ -13,8 +13,14 @@ Thanks for your interest! This project is a local-first autonomous agent harness
 
 A green `bun test` can hide a plugin that fails to load in a live harness — unit tests are necessary but not sufficient.
 
+There are **three** suites, and each covers a layer the others cannot reach. A change to the adapter or
+the engine is not tested by the plugin suite, however green it is — that gap is exactly how five adapter
+test files came to contribute zero tests while `pytest -q` reported success.
+
 ```bash
-cd plugin && bun install && bun test        # unit + corner tests
+cd plugin  && bun install && bun test                       # plugins: unit + corner + wiring
+cd proxy   && python3 -m pytest -q                          # the :1235 adapter (watchdogs, admission, framing)
+cd engine/packages/opencode && bun typecheck && bun test test/session test/task test/tool
 ```
 
 Then verify against a **real, isolated engine**:

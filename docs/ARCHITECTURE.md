@@ -64,7 +64,13 @@ for compatibility). A working config is produced by copying
 
 ### 1.2 Models — local-first via the `:1235` adapter
 
-Models are served **locally by LM Studio** (default endpoint `localhost:1234`). The
+Models are served **locally by LM Studio**, whose own serving port is `localhost:1234` — but nothing in
+FABULA sends inference there. Every inference call goes to the adapter on `:1235`; the raw port is read
+only for the native metadata API (`/api/v0/models`), which the adapter does not proxy and which is not
+inference. `LMSTUDIO_URL` overrides the inference endpoint and should stay empty unless you are pointing
+at another machine's adapter — setting it to `:1234` silently switches off the translation, the admission
+gate, both watchdogs and the output clamp, and does not fail loudly, because `:1234` answers 200 on a
+plain chat call. The
 harness does **not** talk to LM Studio directly. Instead it points at a small Python
 **compatibility adapter** on `localhost:1235` (`proxy/lmstudio-adapter.py`), which
 proxies to LM Studio and does the following so that *structured output* and *tool calls*
@@ -170,6 +176,33 @@ participate in the agent loop in two ways:
   - `chat.message` / `chat.params` — adjust messages or request params before the model
     is called (e.g. collapse system messages, inject curated memory).
   - `event` — react to engine events (e.g. session idle, chat deletion).
+
+### 1.4 The provider catalog is scrubbed at read time
+
+The list of providers and models comes from an external registry at runtime, so the build-time brand scrub
+cannot reach it — measured, the built bundle was clean while Settings ▸ Providers still showed the vendor
+FABULA's engine was forked from. `ModelsDev.get()` rewrites only the DISPLAY name of that one vendor (it
+appears as **Zen**); provider IDs, API URLs and env var names are deliberately untouched, because renaming
+them would orphan a user's stored credentials and model selections. Real model vendors are never touched —
+their names identify models a user can actually select.
+
+### 2.0 Code intelligence: the engine's `lsp` tool
+
+Two switches, both on by default in FABULA. `"lsp": true` in `fabula.config.json` starts the language-server
+subsystem (36 servers; the TypeScript server resolves from the project's own `node_modules`), and
+`MIMOCODE_EXPERIMENTAL_LSP_TOOL=1` — set by the app in its serve spawn — exposes the `lsp` tool to the
+model. The engine gates the tool as experimental, so without the env var it silently does not exist, which
+is why the posture nudge in `fabula-context` is gated on the same variable: it must never advise a tool
+that is not there.
+
+Operations are positional — `goToDefinition`, `findReferences`, `hover`, `documentSymbol`,
+`goToImplementation`, and the call-hierarchy trio — and take `file_path` + `line` + `character`.
+`workspaceSymbol` is the exception: it searches the whole workspace by NAME, takes a `query` and no
+position, and accepts `file_path` only as a hint. A language server starts on first use of a file, so on a
+cold session there may be none running; asked then, the tool says so explicitly rather than returning an
+empty list, because "nothing was asked" and "no such symbol" are different answers and only one of them
+means the symbol is absent. The same reasoning applies to `GET /find/symbol`, which brings the configured
+servers up before answering.
 
 ### 2.1 `plugin/` vs `plugin/lib/` — a deliberate split
 

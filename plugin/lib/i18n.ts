@@ -48,8 +48,8 @@ export const PLUGIN_I18N: Record<string, PluginI18n> = {
   security: {
     tags: ["security"],
     nameRu: "Безопасность",
-    descEn: "Safety layer — blocks requests to internal addresses (SSRF), hides secrets in output, and isolates untrusted text so it can't hijack the agent (prompt-injection defense).",
-    descRu: "Слой защиты — блокирует запросы к внутренним адресам (SSRF), прячет секреты в выводе и изолирует недоверенный текст от перехвата агента (защита от prompt-injection).",
+    descEn: "Safety layer — blocks requests to internal addresses (SSRF), refuses writes to credential and persistence files, hides secrets in output, and isolates untrusted text so it can't hijack the agent (prompt-injection defense). The write and fetch rules are asked on three doors from one set of rules: the tools, the shell, and code (which runs under the OS kernel profile when no container is available), so reaching for another tool after a refusal gets the same answer. Turning a guard off — the bypass mode, or an allowance for one command — is yours alone: asked for from inside a run it is recorded and reported, never put into effect.",
+    descRu: "Слой защиты — блокирует запросы к внутренним адресам (SSRF), запрещает запись в файлы учётных данных и автозапуска, прячет секреты в выводе и изолирует недоверенный текст от перехвата агента (защита от prompt-injection). Правила записи и запросов спрашиваются на трёх дверях из одного набора: инструменты, оболочка и код (он идёт под профилем ядра ОС, если контейнера нет), поэтому обход через другой инструмент даёт тот же отказ. Выключение защиты — режим bypass или разрешение одной команды — только ваше: запрошенное изнутри работы оно записывается и сообщается, но не действует.",
   },
   context: {
     tags: ["memory"],

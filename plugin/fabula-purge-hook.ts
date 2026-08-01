@@ -9,6 +9,7 @@ import { promises as fs } from "node:fs"
 import * as path from "node:path"
 import * as os from "node:os"
 import { removeHandoffsForSession } from "./lib/handoff"
+import { sessionArtifacts } from "./lib/corpus"
 
 // The engine's XDG data dir follows its app id ("fabula"): ~/.local/share/fabula, where per-session
 // checkpoint memory (memory/sessions/<id>) actually lives. Pointing at the legacy "mimocode" dir made
@@ -24,5 +25,13 @@ export const FabulaPurgeHook: Plugin = async () => gate("purge-hook", ({
     await fs.rm(path.join(DATA, "memory", "sessions", id), { recursive: true, force: true }).catch(() => {})
     // Also remove durable handoff artifacts created by this (now deleted) session (orphan cleanup).
     await removeHandoffsForSession(id).catch(() => {})
+    // …and the corpus store, which holds the per-batch summaries VERBATIM, the heartbeat, the handback
+    // marker and — since the delivery-safety change — the finished report itself. Found by an
+    // independent review: the store had grown a fourth artifact while this hook still knew about two
+    // places, so deleting a chat left the full text of its analysis on disk. `sessionArtifacts` is the
+    // single list, so the next artifact added there is purged without this file being touched.
+    for (const f of sessionArtifacts(id)) {
+      await fs.rm(f, { recursive: true, force: true }).catch(() => {})
+    }
   },
 }))

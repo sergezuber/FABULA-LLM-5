@@ -31,7 +31,7 @@ The system is composed of four cooperating layers.
                           │                                           │
                           │   ┌─────────────────────────────────┐    │
                           │   │ PLUGIN LAYER (plugin/fabula-*.ts) │   │
-                          │   │ 40 plugins · shared plugin/lib/   │   │
+                          │   │ plugin/fabula-*.ts · shared lib/  │   │
                           │   └─────────────────────────────────┘    │
                           └───────┬───────────────────────┬──────────┘
                                   │ chat + structured     │ MCP
@@ -48,7 +48,7 @@ The system is composed of four cooperating layers.
                               ▼
               ┌────────────────────────────────┐      ┌─────────────────────┐
               │  LM Studio  localhost:1234      │      │  Cloud: NVIDIA       │
-              │  local models (Qwen3.x, …)      │      │  (OpenAI-compatible) │
+              │  local models (any OpenAI-compat.)      │      │  (OpenAI-compatible) │
               └────────────────────────────────┘      │  OPT-IN, heavy steps │
                                                        └─────────────────────┘
 ```
@@ -80,12 +80,12 @@ point every request passes:
    wants a specific grammar opts in with the `X-Fabula-Schema` header (the goal judge uses
    this to pin its strict verdict shape).
 
-2. **`reasoning_content` → `content`.** When a reasoning model (e.g. Qwen3.x) leaves
+2. **`reasoning_content` → `content`.** When a reasoning model — a whole serving class does this — leaves
    `content` empty and puts the actual JSON answer in `reasoning_content`, the AI SDK
    can't parse it. For non-streaming responses the adapter detects this and copies the
    `reasoning_content` into `content`.
 
-3. **Stall watchdog + output cap.** A single local call can spiral or hang, emitting zero
+3. **Stall watchdog + output cap.** A single upstream call can spiral or hang, emitting zero
    tokens for minutes. Every read carries an **inactivity timeout** with a first-token
    (prefill) budget that drops to a smaller inter-token budget once the first byte arrives —
    applied to *both* the streaming and the non-streaming path. A stalled upstream is
@@ -98,8 +98,8 @@ point every request passes:
    a level is supplied (`X-Fabula-Reasoning` / env); the adapter also logs KV-cache prefix
    breaks (the measured #1 cost) and context-overflow classification for visibility.
 
-5. **Admission control.** This serving class matches cloud latency at low concurrency and
-   collapses under concurrent prefill, and every session, background pass and witness call
+5. **Admission control.** This serving class collapses under concurrent prefill
+   (measured below), and every session, background pass and witness call
    funnels through this one adapter — so it serializes *inference* work
    (`FABULA_MAX_CONCURRENT_UPSTREAM`, default 1; `0` = unlimited). Excess requests queue
    FIFO; a queued streaming client receives SSE-comment keepalives, and once those commit
@@ -108,8 +108,10 @@ point every request passes:
    be worse than no gate. Metadata (`GET /v1/models`, the app's liveness probe) and
    embeddings bypass the queue entirely. Measured on this hardware with four concurrent
    *unique* heavy prefills: **41.1s unserialized vs 2.4s serialized**; with a warm shared
-   prefix the gate costs ~0.15s. NB it bounds starvation but does not prioritise — a
-   background pass that arrives first holds the slot for its whole generation.
+   prefix the gate costs ~0.15s (unique prefixes per request — a shared-prefix fixture
+   measures nothing). The gate bounds starvation; prioritisation lives one layer up —
+   background passes defer to foreground work, and admission ranks a live turn ahead of
+   background calls.
 
 6. **Measured idle budget.** The flat inter-token timeout is replaced per
    (model, prompt-size bucket) by a budget derived from genuinely observed *inter-token
@@ -183,7 +185,7 @@ off-by-default **proof-economy** plugins (`registry`, `witness`, `daemon`, `rela
 | Plugin (file)              | Factory             | Responsibility |
 |----------------------------|---------------------|----------------|
 | `fabula-tools.ts`          | `FabulaTools`       | The **core tool belt**: `web_fetch` (URL→markdown, incl. PDF), `web_search` + `image_search` (via SearXNG MCP), `bash_tool` / `execute_code` (sandboxed shell), `view` / `str_replace` / `create_file` / `note_append` (file ops), `present_files`, `verify_done`, `weather_fetch`, `places_search`, `mixture_of_agents` (fan out to N models + synthesize), `session_search`, `save_skill`, `cost_report`, `batch_run`, `search_mcp_registry`, `suggest_connectors`, `recommend_LLM_apps`, `fetch_sports_data`. |
-| `fabula-graph.ts`          | `FabulaGraph`       | The **`workflow_graph`** orchestrator: planner → ≤5 isolated subtasks → synthesize, with an opt-in local→cloud router. The edge between steps is a contract — a step that produced nothing arrives as an absence, a cut declares itself, an unusable output is retried once then marked empty — and every step shares one opening block so the serving cache is reused. For genuinely multi-agent work the engine's own `workflow` tool is stronger. See §4. |
+| `fabula-graph.ts`          | `FabulaGraph`       | The **`workflow_graph`** orchestrator: planner → ≤5 isolated subtasks → synthesize, with an opt-in local→cloud router. The edge between steps is a contract — a step that produced nothing arrives as an absence, a cut declares itself, an unusable output is retried once then marked empty — and every step shares one opening block so the serving cache is reused. `workflow_graph` is the light single-pass orchestrator; the engine's own `workflow` tool is the full one — typed contracts, conditional routing, convergence loops. See §4. |
 | `fabula-handoff.ts`        | `FabulaHandoff`     | Durable structured **handoff artifacts** between steps/sessions: `save_handoff` / `read_handoff` / `list_handoffs`. Threat-scanned and size-capped. |
 | `fabula-reliability.ts`    | `FabulaReliability` | **Loop-guard** that hard-stops repeated no-progress tool calls (throws in `tool.execute.before`), tool-arg **repair**, outbound **push notifications via ntfy**, and optional terse role preambles for actor subagents (`FABULA_SOULS=1`). |
 | `fabula-security.ts`       | `FabulaSecurity`    | **SSRF guards**, **secret redaction**, **untrusted-result wrapping** (prompt-injection defense, via `tool.execute.after`), and command/approval guards (via `tool.execute.before`). |
@@ -212,8 +214,8 @@ a single pass handles poorly. Its pipeline:
    - a short **role preamble**, and
    - a `STOP` sentinel.
    Because steps are isolated, they don't inherit the full conversation — they get exactly
-   the context they need. `/no_think` keeps a local reasoning model's answer in `content`
-   (no chain-of-thought leakage).
+   the context they need; the adapter's reasoning shim guarantees the answer lands in
+   `content` regardless of the model's reasoning mode.
 3. **Parallel fan-out.** Steps run in **dependency levels**: independent steps in the same
    level run in parallel.
 4. **Synthesize.** The step outputs are synthesized into a final answer, with a short
@@ -241,8 +243,8 @@ lifecycle hooks.
 
 - **Reliability** (`fabula-reliability.ts`): a **loop-guard** detects repeated
   no-progress / failed tool calls and **hard-aborts** them by throwing in
-  `tool.execute.before` (the harness's own stop signal is advisory and was being ignored
-  by weak local models). Adds **tool-arg repair**, **ntfy** push notifications on
+  `tool.execute.before` — an advisory stop signal is one any model in the socket may
+  ignore, so the guard makes the stop deterministic. Adds **tool-arg repair**, **ntfy** push notifications on
   idle/error, and optional actor role preambles (`FABULA_SOULS=1`).
 
 - **Security** (`fabula-security.ts`): **SSRF guards** on outbound fetches, **secret

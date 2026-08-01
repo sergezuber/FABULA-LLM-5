@@ -4,7 +4,7 @@
 
 ## The problem
 
-Every AI agent on the market reports its own completion. The agent says "done"; the human checks. As models
+AI agents report their own completion. The agent says "done"; the human checks. As models
 get more capable, their unverified "done" gets more *convincing* — not more *true* — and the user silently
 becomes the quality-assurance department for their own tools. Capability has scaled; accountability hasn't.
 
@@ -18,7 +18,7 @@ signal. If no check can pass, the honest terminal state is *not done* — and sa
 
 ## The protocol
 
-Verified Autonomy is a small, implementation-agnostic contract in four parts:
+Verified Autonomy is a minimal, implementation-agnostic contract in four parts:
 
 ### 1. Gates
 Verification is enforced by the **system**, not requested from the model. A conforming harness ships gates
@@ -29,14 +29,14 @@ that fire *themselves*:
 - **Comprehension gate** — the agent is graded against its own diff (not its self-assessment) before "done" stands.
 - **Grounding gate** — for a **non-code** deliverable (an analysis, a plan, a research summary), each written claim is re-derived against its cited source: a quote must appear verbatim in the source it names (a real line pinned to the wrong section is caught as mis-attribution), a number must be present, a "read all N" claim is checked against the run's read-log. Only the claims that fail the free deterministic check reach a quarantined model that separates a faithful paraphrase from a fabrication. It carries *done is a proof* from code to any deliverable — silent on chat turns, fail-open (never falsely rejects grounded work).
 - **Loop guard** — repeated no-progress action is hard-stopped, forcing a new hypothesis instead of wheel-spinning.
-- **Stop judge** *(v0.1)* — ending the turn is not the model's decision: before any stop is honored, an independent judge reads the transcript (the real tool calls, not the model's summary) and refuses the stop until the request is fulfilled — done, not planned, described, or promised. Bounded re-entries; fail-open on judge error so a broken judge can never trap the user.
+- **Stop judge** *(v0.1)* — ending the turn is not the model's decision: before any stop is honored, an independent judge reads the transcript (the real tool calls, not the model's summary) and refuses the stop until the request is fulfilled — done, not planned, described, or promised. Re-entries are bounded and the judge fails open by design — a broken judge can never trap the user.
 
 ### 2. Verdicts
 Every run terminates in one of two explicit states: **VERIFIED** (the check passed; the proof is attached)
 or **NOT DONE** (the check didn't pass or couldn't run; the reason is attached). There is no third state.
 Silent stops and unproven "done" are protocol violations. This is the protocol's terminal contract; the
-shipped enforcement is a strong best-effort gate, not a mathematical guarantee — heavy context compaction
-or fully delegating the work to a subagent can still slip past it (see the README's honest framing).
+shipped enforcement is a hard gate with two known escape paths — heavy context compaction and full
+subagent delegation — both documented as open boundaries in the README.
 
 ### 3. The receipt (Proof of Done) — v0.1
 A completed run mints a machine-readable receipt:
@@ -82,9 +82,9 @@ your perimeter, and the receipt is what makes the work trustworthy anyway.
 
 ## Status
 
-- **v0 — draft.** This document specifies intent and shape; the receipt format will be versioned as it stabilizes.
+- **v0.2 — draft.** This document specifies intent and shape; the receipt format is versioned (v0 → v0.1 provenance → v0.2 full identity claim) and will continue to be.
 - **Reference implementation:** [FABULA](https://github.com/sergezuber/FABULA-LLM-5). The gates exist in code today:
-  engine [verify-gate](../engine/packages/opencode/src/session/verify-gate.ts) (default-on),
+  the engine's session verify-gate (default-on, `session/verify-gate.ts` in the engine source),
   [reproduce-gate](../plugin/fabula-reproduce-gate.ts), [change-quiz](../plugin/fabula-change-quiz.ts),
   loop hard-stop in [reliability](../plugin/fabula-reliability.ts). **Receipt minting ships now** as the
   [receipt](../plugin/fabula-receipt.ts) plugin (default-on): a green verify_done that no other gate

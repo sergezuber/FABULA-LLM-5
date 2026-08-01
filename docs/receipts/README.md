@@ -13,7 +13,7 @@ receipts we publish for **real benchmark runs**, packaged so a third party needs
 
 | Run | Model in the socket | Verification | Replay |
 |---|---|---|---|
-| [swe-bench-pro-e64622cd](swe-bench-pro-e64622cd/) — qutebrowser: `signal_name` across PyQt versions ([SWE-bench Pro](https://github.com/scaleapi/SWE-bench_Pro-os)) | Qwen3.6-35B-A3B, quantized, **local** (LM Studio, MacBook) | hidden acceptance suite: fail_to_pass **4/4**, pass_to_pass 41/43 PASSED + 2 xfail (expected) — **RESOLVED** | `bash replay.sh` |
+| [swe-bench-pro-e64622cd](swe-bench-pro-e64622cd/) — qutebrowser: `signal_name` across PyQt versions ([SWE-bench Pro](https://github.com/scaleapi/SWE-bench_Pro-os)) | Qwen3.6-35B-A3B, quantized, **local** (LM Studio, MacBook) | hidden acceptance suite: **100% of fail_to_pass** (4/4), zero regressions (41/43 PASSED + 2 expected xfail) — **RESOLVED** | `bash replay.sh` |
 
 ## How a replay works
 
@@ -33,7 +33,7 @@ The grading is the benchmark's own: every `fail_to_pass` test must pass, and no 
 
 ## Why some earlier runs have no receipt here
 
-Our first resolved run (instance `479aa075…`, the capstone in [EVALS](../EVALS.md)) predates automatic receipt
-minting, and its patch was overwritten by a later batch run before we thought to preserve it. That loss is exactly
-why receipts exist: **evidence that isn't minted at the moment of green is evidence you eventually lose.** Every
+The capstone run in [EVALS](../EVALS.md) (instance `479aa075…`) predates automatic receipt
+minting, and its patch was overwritten by a later batch run — exactly
+the failure mode receipts eliminate: **evidence that isn't minted at the moment of green is evidence you eventually lose.** Every
 green run now mints one automatically.

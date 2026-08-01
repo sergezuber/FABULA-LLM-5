@@ -18,7 +18,7 @@ trust-layer economics ("a real agent can describe itself with complete confidenc
 wrong" — arXiv:2606.03034) both converge on the same requirement: **consequential agent
 output must carry an offline re-verifiable attestation.**
 
-What no prior scheme records is the **context identity**: *which exact prompt prefix,
+None of the surveyed schemes (§8 — SLSA, OTel traces, tamper-evident prompt chains) records the **context identity**: *which exact prompt prefix,
 which exact serving build of which model, on which exact input* produced the verified
 work. Supply-chain provenance (SLSA) captures the build, not the LLM context; observability
 traces (OTel) capture debugging data, not replayable proof; tamper-evident prompt chains
@@ -118,8 +118,11 @@ can be checked against each other by a third party with no trust in either produ
    re-hash and compare `weightsDigest.digest`.
 
 Steps 1–3 verify the **work**. Step 4 verifies the **identity claim** — that the stated
-model build really is the one on disk. A verifier MUST treat a hash mismatch as
-NOT VERIFIED, and MUST NOT substitute a weaker check (e.g. trusting the id string).
+model build really is the one on disk. A verifier MUST report a hash mismatch as a failed
+IDENTITY claim (MISMATCH) — never silently downgraded to trusting the id string — while
+still reporting the work verdict of steps 1–3 on its own line: a mismatch fails the
+identity claim, not the work claim. Recomputing a descriptor proves only what *this*
+machine serves now; a verifier elsewhere reports honestly that it cannot check.
 
 ## 5. Independent attestation (witness)
 
@@ -179,7 +182,10 @@ agent's own change is the setting this spec targets.
 
 A producer conforms iff: (a) every hash covers exactly what this spec says it covers;
 (b) optional fields are **omitted** when their data was not really obtained — never
-defaulted, estimated, or synthesized; (c) the Markdown rendering labels
+defaulted, estimated, or synthesized; a producer that emits `modelDescriptorHash` MUST
+also emit `modelDescriptor`, or the renderer MUST label the hash unchecked-by-construction
+(a hash whose preimage is withheld defeats the no-network self-consistency check);
+(c) the Markdown rendering labels
 `modelDescriptorHash` as *not a weights hash*; (d) a failed or absent verification is
 rendered as NOT DONE / unverified on the receipt's face.
 

@@ -1,6 +1,6 @@
 # Contributing to FABULA-LLM-5
 
-Thanks for your interest! This project is a local-first agent stack, and contributions that keep it working **fully offline on ordinary hardware** are especially welcome.
+Thanks for your interest! This project is a local-first autonomous agent harness: the supervision layer — verification gates, checkpoints, loop guards, receipts — is what makes any model in the socket ship verified work. Contributions that keep it working **fully offline on ordinary hardware** are especially welcome.
 
 ## Ground rules
 
@@ -11,7 +11,7 @@ Thanks for your interest! This project is a local-first agent stack, and contrib
 
 ## Testing
 
-Unit tests are necessary but not sufficient — a green `bun test` does not catch plugin-load failures in a live harness.
+A green `bun test` can hide a plugin that fails to load in a live harness — unit tests are necessary but not sufficient.
 
 ```bash
 cd plugin && bun install && bun test        # unit + corner tests
@@ -31,7 +31,7 @@ Exercise new tools through their real `execute()` against live backends. "Looks 
 
 - Keep PRs focused; explain *why*, not just *what*.
 - Match the style of the surrounding code (comment density included).
-- If a change affects the macOS app, rebuild with `app/build.sh` and note what you clicked to verify.
+- If a change affects the macOS app, rebuild with `./build.sh` from the repo root (frontend, engine binary, and app bundle — `app/build.sh` alone leaves the app serving a stale engine), then run `bash scripts/verify-deploy.sh` and note what you clicked to verify.
 
 ## Reporting bugs
 

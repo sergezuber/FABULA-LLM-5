@@ -10,10 +10,10 @@ Please **do not** open a public issue for security problems. Use GitHub's **priv
 - reproduction steps or a proof of concept,
 - affected file(s)/plugin(s) if known.
 
-You will get an acknowledgement as quickly as possible, typically within a few days. Please allow reasonable time for a fix before public disclosure.
+You will get an acknowledgement, typically within a few days. Please allow reasonable time for remediation before public disclosure.
 
 ## Scope notes
 
 - Bypasses of the guards (SSRF filter, secret redaction, command guard, prompt-injection wrapping, the loop-guard) are in scope and very welcome.
 - The upstream projects FABULA's engine derives from (MiMoCode/OpenCode) and model providers have their own security processes; issues that reproduce without the FABULA plugin set belong upstream.
-- Local models can be manipulated by adversarial content they read (web pages, files). The wrapping defense reduces this; reports that demonstrate practical injection through a FABULA tool are in scope.
+- Any model in the socket can be manipulated by adversarial content it reads (web pages, files). The untrusted-content wrapping (`fabula-security.ts`) narrows this surface by design; reports that demonstrate practical injection through a FABULA tool are in scope and prioritized.

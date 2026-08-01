@@ -1,53 +1,61 @@
+<div align="center">
+
 # FABULA
 
-![Prove it — the examiner demands the proof; the scribe keeps writing until it exists](docs/assets/prove-it.jpg)
+**The agent harness that makes small local models finish hard tasks — and prove it.**
 
-### Frontier models sell confidence. FABULA ships proof.
+Frontier models sell confidence. FABULA ships proof.
 
-**Any model in. Finished, verified work out.**
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-macOS%20Apple%20Silicon-black)](#try-it)
+[![Release](https://img.shields.io/github/v/release/sergezuber/FABULA-LLM-5)](https://github.com/sergezuber/FABULA-LLM-5/releases)
 
-**Sovereign by default: your model, your data, your perimeter — and a receipt anyone can replay.**
+[Docs](#docs) · [Receipt spec](docs/spec/verified-autonomy-receipt-v0.2.md) · [Plugins](docs/PLUGINS.md) · [Evals](docs/EVALS.md) · [Contributing](CONTRIBUTING.md)
 
-> **Platform:** runs today on **macOS with Apple Silicon (M-series)** only. The engine is portable Bun/TypeScript — Linux is on the roadmap, not shipped yet.
+</div>
 
-![How FABULA works — any model slots into the socket; Context OS compiles the minimal byte-stable context; the work loop self-repairs on red, rewinds to the last green checkpoint after repeated failures, takes one cloud second opinion when stuck; even a green run is NOT YET DONE until the REPRODUCE and QUIZ gates pass, and the JUDGE refuses to end the turn until the request is fulfilled; only proven work exits, as a replayable, context-fingerprinted Proof-of-Done receipt](docs/assets/how-it-works.svg)
+![Prove it](docs/assets/prove-it.jpg)
 
-FABULA is an **agent harness** built on one bet: **trust belongs to the proof, not the model.** Any LLM — a small local model or a frontier cloud — is a swappable chip, and the autonomy lives in the machinery around it. **Done is a test result, not the model's confidence.** Every gate is open source you can read, and every fully-gated green run mints a replayable [Proof-of-Done receipt](docs/GREENPAPER.md) ([open spec draft](docs/spec/verified-autonomy-receipt-v0.2.md)). Run it fully local and nothing leaves your machine — not a cost argument, but sovereignty: the mode audited environments (on-prem, air-gapped) actually require, where a verified receipt from the model you own outranks an unverifiable claim from a model you rent.
+## What is FABULA?
 
-## The loop doesn't give up — and is built not to end in a story
+FABULA is an agent harness built on one bet: **reliability lives in the machinery around the model, not in the model.** Any LLM — local on your machine or a frontier cloud — slots into the socket as a swappable chip. Every step of the run is enforced by the engine, not by a prompt the model may ignore: the run cannot claim "done" without a green test run, cannot end before the request is fulfilled, and cannot quietly drift, loop, or quit.
 
-A red verify doesn't stop the run: the model iterates against the real failing output. Repeated reds don't stop it either — the harness rewinds the files to the last green checkpoint, atomically, and steers a different approach. A dead end pulls one second opinion from a stronger model — fetched by the harness, not left to the model to ask for — and the local model keeps driving. **NOT YET DONE is a transit state, not a verdict.**
+Run it fully local and nothing leaves your machine. That is not a cost argument — it is the mode audited environments actually require, where a verified receipt from a model you own outranks an unverifiable claim from a model you rent.
 
-And the run won't quietly end in a claim. If source changed but the tests never ran, the force-verify gate re-enters and makes the model run them; if the retry budget is spent with the change still unverified, the final message is stamped **NOT DONE (unverified)** over the real failing output. A finished run is built to land in one of two honest states — **VERIFIED**, with a replayable receipt, or an explicit **NOT DONE** — not a confident "done" you were meant to take on faith. It's a strong best-effort gate, not a proof of impossibility: heavy context compaction, or handing the whole task to a subagent, can still slip past it.
+![How FABULA works](docs/assets/how-it-works.svg)
 
-## The run can't even end early
+## Why "FABULA"?
 
-Ending the turn is not the model's decision. Before any stop is honored, an independent judge reads the transcript — the real tool calls, not the model's summary — and refuses the stop until the request is fulfilled: **done, not planned, described, or promised.** The judge is fail-open (a broken judge can never trap you) and bounded (a low re-entry cap), and an explicit `/goal` condition makes it as strict as you want. A judge is also just one model call, and model judges are systematically overconfident — so it doesn't get the last word alone: the harness hands it the trajectory it *measured* (verify greens and reds and which came last, rewinds, edits it never verified) and overrides a "done" outright when those dynamics say the work isn't done. Deterministic, same for any model in the socket, and still bounded by the same cap.
+*Fabula* is Latin for "a story." Every agent you have used ends its hard tasks in one — a confident paragraph about work that may or may not exist. FABULA is built so that work cannot end in a story: a run finishes in exactly one of two honest states — **VERIFIED**, with a replayable receipt, or an explicit **NOT DONE** over the real failing output. The name is the failure mode; the product is its refusal.
 
-## The right context, not all the context
+## Every local-agent failure you know, refused by the engine
 
-Most agents ship the same giant system prompt and every tool schema on every step. FABULA compiles the **minimal sufficient context per task**: a deterministic router picks the profile's tools (the committed demo receipt records 80 tools on the coding profile; a masked tool called by name still executes — a router miss costs one roundtrip, never a blocked task), the kernel prompt carries only load-bearing contracts (28.8k → 4.9k tokens), and verbose tool prose went on a measured diet. From the wire: the request prefix dropped **72.3k → 43.5k tokens (−40%)** — and it stays **byte-stable within a task**, so the local model's KV-cache survives across steps. That's why a 35B on a laptop keeps up. Every cut was gated: a tool-use golden-eval (right tool, right arguments) and behavioral gate probes ran before and after each step — zero regressions.
+**"It said done, but nothing works."**
+Done is a test result here. After a source edit the engine re-enters the turn until the project's own tests actually ran — in the run loop, not in a prompt.
 
-## One pass by default, a graph when the work forces it
+**"It wrote a test that proves nothing."**
+The harness runs the model's new test against the *pre-patch* code. Green there too? The reproduction is fake — done is refused. Breaks a sibling test? Regression — done is refused.
 
-Most work is one loop with tools, and FABULA keeps it there — a multi-agent run burns many times the
-tokens of a single pass, and a step you could have done inline was never a step. When the work genuinely
-splits, the engine runs a **deterministic orchestration script**: nodes are subagents, each with its own
-model, its own toolset and an optional output schema; `parallel` gathers results that are needed
-together, `pipeline` streams items through stages independently, plain `if`/`while` route the edges, and
-a node that fails resolves to nothing rather than taking the run with it. Agents that write in parallel
-each get their own git worktree. Runs are journalled, so a resumed workflow replays what already
-finished instead of paying for it twice.
+**"It quit halfway."**
+Ending the turn is not the model's decision. An independent judge reads the real tool calls — not the model's summary — and refuses the stop until the request is fulfilled. A "done" is overridden outright when the measured trajectory (red verifies, unverified edits, rewinds) says otherwise.
 
-The lighter `workflow_graph` covers the small case in one pass. Its edges are contracts either way: a
-step that produced nothing is passed on as an **absence**, never as text that reads like an answer; a cut
-says how much it removed; and a step whose output is unusable is retried once and then honestly marked
-empty, so whatever merges the results is told where the holes are.
+**"It dug itself deeper."**
+Two failed verifies in a row and the harness rolls every file back to the last green snapshot — its own shadow store, your `.git` untouched — and steers a different approach, with the recurring root cause named. Side effects a file revert cannot undo (an install, a migration, a POST) are flagged, not forgotten.
 
+**"It looped on the same search."**
+Byte-identical calls and near-duplicate queries are cut by the engine after a measured budget — and when a search turn is stopped, the harness itself delivers an honest "could not find it" listing what was tried, instead of a dead turn.
 
-## Proof
+**"It drowned in context."**
+The window belongs to one call — not to the conversation. Checkpoints carry the state across the ceiling, oversized material is held outside the context and read back in bounded slices, and the session outlives the window.
 
-The scheme above is not a promise — a real captured run walked that exact path: the model fixed the bug, the tests went green, and the machine still answered NOT YET DONE until the proof existed. The run left a receipt. It is committed verbatim — replay it:
+**"Agent harnesses burn 4× the tokens."**
+This one cuts them. Per-step cost dropped **45%, measured on the wire**: the request prefix went from 72.3k tokens to under 40k (39.8k on a live app turn, 2026-08-01), and it stays byte-stable within a task so the model's KV-cache survives across steps. That is why a small local model keeps up on a laptop.
+
+## Don't trust it. Replay it.
+
+Every fully-gated green run mints a **Proof-of-Done receipt**: the diff, the verify command, the model that sat in the socket, and a sha256 fingerprint of the exact context that produced the work — prompt prefix, tool schemas, router profile, request text, serving-model descriptor, optionally a real digest of the weight files on disk. No other shipped agent publishes this artifact as an open, replayable spec — if you know one that does, open an issue.
+
+A real captured run is committed verbatim — replay it:
 
 ```bash
 cd demo && fabula receipt verify
@@ -58,54 +66,41 @@ VERIFIED ✓ — the artifact replayed deterministically:
 base c660a02ab138 + patch → `bun test` passed.
 ```
 
-**Don't trust it. Replay it.** The receipt records the model in the socket (a quantized 35B running locally in LM Studio), the gates that fired, the diff and the passing verification — and **the exact context that produced the work**: a sha256 fingerprint of the prompt-prefix (system + tool schemas), the router profile, and a byte-stability verdict; as of v0.2 also a hash of the user's request text, the serving model's descriptor (arch/quantization — honestly labeled *not a weights hash*), and an optional real digest of the weight files on disk ([spec](docs/spec/verified-autonomy-receipt-v0.2.md); the committed demo receipt carries all of them — including a real 20.4 GB weights digest). `fabula receipt verify` prints it next to the claim:
+The harder one is public too: a real [SWE-bench Pro](https://github.com/scaleapi/SWE-bench_Pro-os) task, solved end-to-end by a local model on one consumer machine and graded by the benchmark's *hidden* acceptance suite — **100% of the hidden tests passed, verdict RESOLVED** — with a one-command Docker replay: [`docs/receipts/`](docs/receipts/).
 
-```
-Claim:    VERIFIED ✓ · qwen3.6-35b-a3b-uncensored-heretic-mlx (local) · 2 file(s)
-Context:  prefix a38cb5a6f018b9c0 · profile coding · byte-stability held
-```
+The model didn't get smarter. The system around it refused to let "done" happen without proof.
 
-Two receipts with the same prefix hash were produced in byte-identical contexts — the work is reproducible not just by artifact, but by *context*. [Read the receipt](demo/.fabula/receipts/latest.md).
+Raw, unedited artifacts behind the scheme: the live recording of the refusal ([`docs/assets/refusal.cast`](docs/assets/refusal.cast), plays with asciinema), its beat-by-beat render ([`docs/assets/captured-run.svg`](docs/assets/captured-run.svg)), and the worst-day walkthrough — repeated reds, an automatic rewind, a steered second opinion: [`docs/HARDEST-JOURNEY.md`](docs/HARDEST-JOURNEY.md).
 
-The harder one is public too: a **real [SWE-bench Pro](https://github.com/scaleapi/SWE-bench_Pro-os) task**, solved by the same local 35B and graded by the benchmark's *hidden* acceptance suite — fail-to-pass **4/4**, **RESOLVED**. Its receipt ships with a one-command Docker replay: [`docs/receipts/`](docs/receipts/). A second captured bench run and methodology: [`docs/EVALS.md`](docs/EVALS.md).
+The receipt format is an open specification any agent can implement — [verified-autonomy receipt v0.2](docs/spec/verified-autonomy-receipt-v0.2.md): JSON schema, field-by-field honesty rules, and a replay protocol. FABULA is its reference implementation: [`docs/GREENPAPER.md`](docs/GREENPAPER.md).
 
-The model didn't get smarter — the system around it refused to let "done" happen without proof.
+## What's inside
 
-## Why a receipt, not a bigger model
+| Gate | What it refuses |
+|---|---|
+| **verify** | "Done" without a green run of the project's own tests — the engine presses the run back into verification by itself. |
+| **reproduce** | A fix whose new test also passes on the pre-patch code (fake repro), or breaks a sibling (regression). |
+| **quiz** | A change the agent cannot explain — graded against its own diff before done stands. |
+| **attest** | A written deliverable that asserts more than its sources support — quotes re-found verbatim, numbers re-checked, "read all N files" checked against the run's own read log. |
+| **judge** | A turn that ends before the request is fulfilled — with a hard veto when the measured trajectory contradicts the model's "done". |
+| **rewind** | Digging the hole deeper — repeated reds roll the files back to the last green checkpoint, atomically. |
+| **go floor** | A Go change whose own analysers were never asked — six of them run once on green, and a *reachable* vulnerability blocks while mere inventory does not. |
+| **re-checking** | A receipt asserting more than its verification checks — every identity claim lands in exactly one named state: re-verified here, not checkable here, or mismatch. |
+| **provenance** | Work of unknown origin — every receipt fingerprints the exact context that produced it. |
+| **escalate** | Looping on a dead end — when measured evidence says another local attempt is not worth its cost, the harness itself fetches one cloud second opinion; the local model keeps driving. |
+| **memory** | Memory you trust instead of check — a memory is bound to the code it came from and re-verified against your real tree before it is ever served back. Ships off by default; its decisions start in shadow until you have read them. |
 
-Every agent vendor answers the trust question the same way: *trust the model — it's smart.* A merge
-gate here, a pass-rate dashboard there — but the unit they ship is still an unverified claim, and
-the remedy they sell is a bigger model. FABULA changes the unit: what leaves the run is a
-**content-addressed, third-party-replayable proof** with the *exact context that produced it* —
-prompt-prefix fingerprint, request-text hash, serving-model descriptor, optional weights digest,
-byte-stability verdict. To our knowledge no other shipped agent mints that artifact. The moment work
-is judged by its receipt, the capability gap stops being a rent: **a verified receipt from a 35B you
-own beats a confident claim from a frontier model you rent — everywhere someone audits** (regulated,
-enterprise, government: the buyers who already demand on-prem and air-gapped, which FABULA runs by
-default).
+Around the gates: web research, shell, sandboxed code execution, drift-tolerant file edits, browser automation, durable hand-offs, checkpoints and undo, and SSRF / redaction / injection defense at the tool boundary. The full map — 40 plugins, 85 tools: [`docs/PLUGINS.md`](docs/PLUGINS.md).
 
-The receipt format is an **open specification** — [verified-autonomy receipt v0.2](docs/spec/verified-autonomy-receipt-v0.2.md):
-JSON schema, field-by-field honesty rules, and a replay protocol any agent can implement. Mint
-receipts from your own harness; verify ours with one command. The proof economy gets better the more
-producers it has.
-
-**Status:** verified end-to-end on macOS (Apple Silicon) today. The engine is portable Bun/TypeScript with a web UI — the native app is the macOS shell, not a dependency; Linux builds are on the roadmap. Every captured run is replayable.
-
-## The raw evidence
-
-For anyone who wants the unedited artifacts behind the scheme: the live recording of the refusal ([`docs/assets/refusal.cast`](docs/assets/refusal.cast), plays with asciinema) and its beat-by-beat render ([`docs/assets/captured-run.svg`](docs/assets/captured-run.svg)). The worst day — repeated red verifies, an automatic file rewind, a steered cloud second opinion — is the machinery's deeper ladder: [`docs/HARDEST-JOURNEY.md`](docs/HARDEST-JOURNEY.md).
+An optional **proof economy** builds on the receipt — publish to a content-addressed registry, cross-model witness attestation, a proof tree for team work. Off by default: [the disrupt layer](docs/PLUGINS.md#the-disrupt-layer--turning-a-proof-of-done-into-a-proof-economy-experimental-off-by-default).
 
 ## Try it
 
-You need a **Mac with Apple Silicon (M1 or newer)** — that's the only shipped platform today — and
-the **Xcode Command Line Tools** (the engine build compiles a few native modules):
+You need a **Mac with Apple Silicon** and the Xcode Command Line Tools (the engine build compiles a few native modules). The engine itself is portable Bun/TypeScript; Linux is on the roadmap.
 
 ```bash
-# once per machine; skip if you already build C/C++ on this Mac
-xcode-select --install
+xcode-select --install   # once per machine; skip if you already build C/C++
 ```
-
-<sup>Toolchain sanity check: `printf '#include <functional>\nint main(){}\n' | clang++ -x c++ - -o /tmp/t && echo OK` — if this fails after a macOS update, reinstall the Command Line Tools.</sup>
 
 ```bash
 git clone https://github.com/sergezuber/FABULA-LLM-5 && cd FABULA-LLM-5
@@ -113,16 +108,14 @@ git clone https://github.com/sergezuber/FABULA-LLM-5 && cd FABULA-LLM-5
 open FABULA-LLM-5.app
 ```
 
-`./setup.sh` is idempotent — re-run it any time (after `git pull`, after installing a dependency); it
-never overwrites your `.env` / `fabula.config.json`.
+`./setup.sh` is idempotent — re-run it any time; it never overwrites your `.env` / `fabula.config.json`.
 
-### Point it at your model
+**Local model (default):** install [LM Studio](https://lmstudio.ai), load a tool-calling model — setup already installed the localhost adapter the config points at. Nothing else to do.
 
-**Local (default):** install [LM Studio](https://lmstudio.ai), load a tool-calling model — setup
-already installed the localhost adapter the config points at. Nothing else to do.
+<details>
+<summary><b>Any OpenAI-compatible endpoint</b> — a cloud provider or a corporate gateway</summary>
 
-**Any OpenAI-compatible endpoint** — a cloud provider or a corporate gateway: put the key in `.env`
-(gitignored) and describe the provider in `fabula.config.json`:
+Put the key in `.env` (gitignored) and describe the provider in `fabula.config.json`:
 
 ```jsonc
 // .env
@@ -144,9 +137,9 @@ MY_API_KEY=sk-...
 }
 ```
 
-The model must support **tool calling**, and `limit` needs both `context` and `output`. Check the
-endpoint and the exact model id with `curl -s https://llm.example.com/v1/models -H "Authorization: Bearer $MY_API_KEY"`.
-If the gateway lives behind a corporate VPN, the VPN has to be up while you work.
+The model must support **tool calling**, and `limit` needs both `context` and `output`. Check the endpoint and the exact model id with `curl -s https://llm.example.com/v1/models -H "Authorization: Bearer $MY_API_KEY"`.
+
+</details>
 
 ### The two-minute proof
 
@@ -155,30 +148,6 @@ A planted bug is waiting in [`demo/`](demo/) — every test is green anyway. Ope
 > Fix the export bug: the nightly export silently drops rows dated exactly on the end date. Prove it.
 
 Then watch the machine refuse to finish until the proof exists — on your machine, with your model.
-
-## What's inside
-
-| The gate | What it refuses |
-|---|---|
-| **verify** | "Done" without a green run of the project's own tests — the engine presses the run back into verification after source edits, by itself. |
-| **reproduce** | A green suite proves nothing on its own. The harness runs your new test against the pre-patch code: passes with *and* without the fix → fake, no done; breaks a sibling → regression, no done. |
-| **quiz** | A change the agent can't explain — it is graded against its own diff before done stands. |
-| **attest** | A written deliverable — an analysis, a plan, a research summary — that asserts more than its sources support. The harness decomposes it into typed claims and re-derives each: a quote must appear verbatim in the source it cites (a real line pinned to the wrong section is caught as mis-attribution), a number must be present, a "read all N files" claim is checked against the run's read-log. Only the claims that fail the free deterministic check reach a quarantined model that separates a faithful paraphrase from a fabrication. It carries *done is a proof* from code to any deliverable — silent on chat turns, and fail-open, so it never falsely rejects grounded work. |
-| **judge** | A turn that ends before the request is fulfilled — an independent judge reads the transcript and refuses the stop until it's done, not planned or promised. It is handed the trajectory the harness *measured* (greens/reds, rewinds, unverified edits), and a "done" is overridden outright when those dynamics say otherwise. |
-| **re-checking** | **A proof must not assert more than its verification checks.** A receipt makes two kinds of claim: that the code passes its tests — expensive to forge, and always genuinely re-run — and which model, which weights, which context, which is cheap to forge and used to be printed straight back out of the receipt being checked. Now every identity claim lands in exactly one state and names it: *re-verified here*, *not checkable here*, or *mismatch*. A mismatch fails the identity claim and never the work claim, because recomputing proves what **this** machine serves now — a verifier elsewhere can only honestly say it cannot check. The cheapest contradiction of all, a descriptor hash that disagrees with the descriptor printed beside it, is detectable with no network, by anyone, forever. |
-| **go floor** *(Go projects only)* | A Go change whose own analysers were never asked. When the tests go green on Go source, the harness runs `govulncheck`, `gosec`, `staticcheck`, NilAway, `go vet` and `golangci-lint` over the module once and, if they are not clean, takes *done* back with each finding's file and line — every line produced by a program, not inferred. A known vulnerability blocks only when it is **reachable**: the vulnerable symbol is actually called, not merely present in `go.mod`, so four advisories about an unused dependency never stop you while the one real call path does. Whichever analysers are missing are **named** in the report, so a narrow check never reads as a clean one. Needs the Go toolchain installed — see [`docs/PLUGINS.md`](docs/PLUGINS.md) for the one-line install. In a repository with no `go.mod` it is completely inert. |
-| **provenance** | Work of unknown origin — every receipt carries a sha256 of the exact context (system prompt + tool schemas + router profile), a byte-stability verdict, and (v0.2) the request-text hash + the serving model's descriptor, with an optional real weights digest. |
-| **rewind** | Digging the hole deeper — repeated red verifies roll the files back to the last green checkpoint, atomically, from the harness's own shadow-git. The failed attempts leave your context so the retry starts clean; the steer names the recurring root cause; and any non-idempotent side effect (an install, a migration, a POST) is flagged as not-undone. |
-| **memory** | **Memory you can check, not memory you trust.** A memory formed from a verified turn is bound to the code it came from, and that binding is re-checked against your real tree before it is ever served back — plain file hashing, no model, no network. Code moved on? It is withheld, or the *current* source is served instead. It is never handed over with a "possibly stale" label, because a hedge beside a memory measurably worsens the decision rather than softening it. Raw records are append-only: consolidation archives what it consumes before summarising it. Ships off by default, and its promotion decisions start in shadow — journalled, acting on nothing, until you have read them. *(`fabula-memory`)* |
-| **escalate** | Looping on a dead end — when the measured evidence agrees another local attempt is not worth its cost (verifications failing in a row, attempts churning the same file, time already burned), the harness itself fetches one cloud second opinion and hands it to the model, which keeps driving. Advice a model may ignore is not a mechanism. Bounded per task; the old constants remain a floor, so nothing gets carried past the point the run should stop. |
-
-Around the gates: web, shell, sandboxed code execution, drift-proof file edits, a real Chromium, memory and hand-off notes, checkpoints and undo, SSRF/redaction/injection defense on every call. The full map of every plugin and tool: [`docs/PLUGINS.md`](docs/PLUGINS.md).
-
-And an optional **proof economy** builds on the receipt — publish it to a content-addressed registry, have an independent cross-model witness attest the diff, escalate a stuck run to a cloud model that writes the patch *you* then re-verify, or compose a team's sub-receipts into one all-or-nothing proof tree. Six plugins, all off by default: [the disrupt layer](docs/PLUGINS.md#the-disrupt-layer--turning-a-proof-of-done-into-a-proof-economy-experimental-off-by-default).
-
-## The protocol
-
-The receipt format — *which model sat in the socket, which gates fired, what patch shipped, how to replay it* — is specified as a small open protocol, **Verified Autonomy**; FABULA is its reference implementation: [`docs/GREENPAPER.md`](docs/GREENPAPER.md).
 
 ## Privacy
 
@@ -206,7 +175,7 @@ The receipt format — *which model sat in the socket, which gates fired, what p
 
 ## Acknowledgements
 
-Built on and grateful to: [MiMoCode](https://github.com/XiaomiMiMo/MiMo-Code) (the engine FABULA builds on, an [OpenCode](https://opencode.ai) fork), [LM Studio](https://lmstudio.ai), [SearXNG](https://docs.searxng.org), [Playwright](https://playwright.dev), [Bun](https://bun.sh), piper, and faster-whisper. Several supervision mechanisms — cross-provider conversation replay, silent context-overflow detection, prefix-cache telemetry, bounded tool output, drift-tolerant edits, and the conversation-rewind idea FABULA extends into a file-atomic rewind — were adapted from the mechanism designs of [pi](https://github.com/earendil-works/pi) (Mario Zechner, MIT), reimplemented and tested here. The toolset follows naming and schema conventions that state-of-the-art assistants have made publicly familiar, implemented here independently for any model you choose to run. More: [`docs/CREDITS.md`](docs/CREDITS.md).
+Built on and grateful to: [MiMoCode](https://github.com/XiaomiMiMo/MiMo-Code) (the engine FABULA builds on, an [OpenCode](https://opencode.ai) fork), [LM Studio](https://lmstudio.ai), [SearXNG](https://docs.searxng.org), [Playwright](https://playwright.dev), [Bun](https://bun.sh), piper, and faster-whisper. Several supervision mechanisms were adapted from the mechanism designs of [pi](https://github.com/earendil-works/pi) (Mario Zechner, MIT), reimplemented and tested here. The toolset follows naming and schema conventions that state-of-the-art assistants have made publicly familiar, implemented here independently for any model you choose to run. More: [`docs/CREDITS.md`](docs/CREDITS.md).
 
 ## License
 

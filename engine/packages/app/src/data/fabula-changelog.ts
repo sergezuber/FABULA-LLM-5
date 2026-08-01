@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.94.0"
+export const FABULA_VERSION = "0.95.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.95.0",
+    date: "2026-08-01",
+    items: [
+      {
+        ru: "Публичное описание проекта переписано практикой вперёд. Главная страница теперь ведёт не философией, а узнаваемыми ситуациями — «сказал готово, а ничего не работает», «бросил на полпути», «зациклился» — и на каждую отвечает тем, что делает движок, с командой, которой это можно проверить самому. Вся документация выровнена по одному правилу: каждое заявление либо повторимо командой, либо ему не место на витрине; заявления, привязанные к конкретной модели, переписаны — в гнездо ставится любая модель, и текст теперь говорит именно это.",
+        en: "The public description of the project was rewritten practice-first. The front page now leads not with philosophy but with situations everyone recognizes — \"it said done but nothing works\", \"it quit halfway\", \"it looped\" — and answers each with what the engine does, plus the command to check it yourself. All documentation was aligned to one rule: every claim is either replayable by a command or it does not belong on the storefront; claims tied to one specific model were rewritten — any model goes into the socket, and the text now says exactly that.",
+      },
+    ],
+  },
   {
     version: "0.94.0",
     date: "2026-08-01",

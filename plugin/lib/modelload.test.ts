@@ -6,7 +6,8 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 import { rmSync, writeFileSync, readFileSync } from "node:fs"
-import { ensureLoadedAtPlannedWindow, readServed, residentsOther, syncEngineLimit, plannedSlots, recordKvSample, readSamples, calibrateCost } from "./modelload"
+import { ensureLoadedAtPlannedWindow, readServed, residentsOther, syncEngineLimit, plannedSlots, recordKvSample, readSamples, calibrateCost, unitBytes } from "./modelload"
+import { fitCostFromSamples } from "./kvcost"
 
 const GIB = 1024 ** 3
 const STORE = join(tmpdir(), `kvcost-test-${process.pid}.json`)
@@ -63,8 +64,50 @@ describe("other residents", () => {
       { id: "witness", state: "loaded", bytes: 19 * GIB, loadedWindow: 0, passport: 0 },
       { id: "embed", state: "not-loaded", bytes: GIB, loadedWindow: 0, passport: 0 },
     ]
-    const r = residentsOther(served as any, "kat")
+    const r = residentsOther(served as any, "kat", () => 0)
     expect(r.map((x) => x.id)).toEqual(["witness"])
+  })
+
+  // MEASURED 2026-08-01: the live serving API omits size_bytes ENTIRELY, so every resident arrived with
+  // bytes:0 and the old `.filter(m => m.bytes > 0)` dropped it — the residents term could never fire on
+  // this runtime. Dropping a resident is not "no resident"; it is "the machine is empty", which is the
+  // one reading that over-commits it.
+  test("a resident the serving API cannot size is SIZED FROM ANOTHER SOURCE, not dropped", () => {
+    const served = [
+      { id: "kat", state: "loaded", bytes: 0, loadedWindow: 0, passport: 0 },
+      { id: "witness", state: "loaded", bytes: 0, loadedWindow: 0, passport: 0 },
+    ]
+    const r = residentsOther(served as any, "kat", (id) => (id === "witness" ? 19 * GIB : 0))
+    expect(r).toEqual([{ id: "witness", bytes: 19 * GIB }])
+  })
+
+  test("a resident NOTHING can size is still reported, with bytes 0 meaning unknown", () => {
+    const served = [
+      { id: "kat", state: "loaded", bytes: 0, loadedWindow: 0, passport: 0 },
+      { id: "mystery", state: "loaded", bytes: 0, loadedWindow: 0, passport: 0 },
+    ]
+    const r = residentsOther(served as any, "kat", () => 0)
+    expect(r).toEqual([{ id: "mystery", bytes: 0 }])
+  })
+})
+
+describe("weights as the runtime PRINTS them", () => {
+  // MEASURED 2026-08-01: `lms ps` prints "21.95 GB" and that model's weight files on disk sum to
+  // 21,950,414,309 bytes = 21.95 x 10^9. Reading the decimal string as binary invented 1.51 GiB.
+  test("a suffix without an 'i' is decimal; one with an 'i' is binary", () => {
+    expect(unitBytes("GB")).toBe(1e9)
+    expect(unitBytes("gb")).toBe(1e9)
+    expect(unitBytes("GiB")).toBe(1024 ** 3)
+    expect(unitBytes("MB")).toBe(1e6)
+    expect(unitBytes("MiB")).toBe(1024 ** 2)
+  })
+
+  test("the real printed string resolves to the real on-disk size", () => {
+    // 21.95 GB as printed, against 21,950,414,309 bytes actually on disk: within 0.01%.
+    const parsed = 21.95 * unitBytes("GB")
+    expect(Math.abs(parsed - 21_950_414_309) / 21_950_414_309).toBeLessThan(0.001)
+    // The binary reading of the same string is 1.5 GiB of weights that do not exist.
+    expect(21.95 * 1024 ** 3 - parsed).toBeGreaterThan(1.5 * GIB)
   })
 })
 
@@ -264,6 +307,38 @@ describe("request-time cache cost", () => {
     recordKvSample("kat", { contextTokens: 0, kvBytes: GIB })
     recordKvSample("kat", { contextTokens: 100, kvBytes: 0 })
     expect(readSamples()["kat"] ?? []).toHaveLength(0)
+  })
+
+  // MEASURED 2026-08-01: one calibration reported 29,132 B/token against a stored 123,758 for the same
+  // resident model, was written anyway, and moved the fit from usable to REFUSING — so planWindow could
+  // no longer size anything. Screening on the floor alone was never enough; agreement is the other half.
+  test("a CHEAPER reading that disagrees is refused, and the store keeps what it had", () => {
+    recordKvSample("kat", { contextTokens: 40_949, kvBytes: Math.round(4.72 * GIB) }) // 123,758 B/token
+    const verdict = recordKvSample("kat", { contextTokens: 50_391, kvBytes: Math.round(1.37 * GIB) }) // 29,132
+    expect(verdict.admitted).toBe(false)
+    expect(verdict.reason).toContain("CHEAPER")
+    const kept = readSamples()["kat"] ?? []
+    expect(kept).toHaveLength(1)
+    expect(kept[0]!.contextTokens).toBe(40_949)
+    // And the fit still works — the whole point of refusing.
+    expect(fitCostFromSamples(kept).bytesPerToken).toBeGreaterThan(100_000)
+  })
+
+  test("a DEARER reading that disagrees REPLACES the store, because under-reading is the dangerous direction", () => {
+    recordKvSample("kat", { contextTokens: 50_391, kvBytes: Math.round(1.37 * GIB) }) // 29,132 B/token
+    const verdict = recordKvSample("kat", { contextTokens: 40_949, kvBytes: Math.round(4.72 * GIB) }) // 123,758
+    expect(verdict.admitted).toBe(true)
+    expect(verdict.reason).toContain("DEARER")
+    const kept = readSamples()["kat"] ?? []
+    expect(kept).toHaveLength(1)
+    expect(kept[0]!.contextTokens).toBe(40_949)
+    expect(fitCostFromSamples(kept).bytesPerToken).toBeGreaterThan(100_000)
+  })
+
+  test("readings that AGREE still accumulate — the guard is about disagreement, not about novelty", () => {
+    expect(recordKvSample("kat", { contextTokens: 40_949, kvBytes: Math.round(4.72 * GIB) }).admitted).toBe(true)
+    expect(recordKvSample("kat", { contextTokens: 60_332, kvBytes: Math.round(6.6 * GIB) }).admitted).toBe(true)
+    expect(readSamples()["kat"] ?? []).toHaveLength(2)
   })
 
   test("a request-time reading OVERRIDES a load-time fit, because it measures the real quantity", async () => {

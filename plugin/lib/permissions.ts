@@ -24,7 +24,13 @@ export type PermissionMode = "default" | "acceptEdits" | "plan" | "bypass"
 export type ModeOrigin = "owner" | "agent"
 const MODES: PermissionMode[] = ["default", "acceptEdits", "plan", "bypass"]
 
-interface Store { mode?: PermissionMode; allow?: Record<string, boolean> }
+interface Store {
+  mode?: PermissionMode
+  modeOrigin?: ModeOrigin
+  allow?: Record<string, boolean>
+  /** WHO approved each signature. An allowance without one is not honoured — see isCommandAllowed. */
+  allowOrigin?: Record<string, ModeOrigin>
+}
 
 function storeFile(): string {
   if (process.env.FABULA_PERMISSIONS_FILE) return process.env.FABULA_PERMISSIONS_FILE
@@ -95,18 +101,49 @@ export function commandSignature(tool: string | undefined, args: any): string {
   return `${tool}:${p}`
 }
 
+/**
+ * Is this exact call pre-approved — BY THE OWNER?
+ *
+ * MEASURED 2026-08-01, end to end through the real hook: `bash_tool {command:"rm -rf /"}` was blocked;
+ * one `allow_command` call later the identical call was ALLOWED. `allow_command` is declared inside the
+ * plugin's `tool:` block, so it is model-callable, and `shouldBypassGuards` consulted the allow-list
+ * with no origin check at all — directly contradicting its own docstring, which had already been written
+ * for `bypass`: "the mode is honoured ONLY when it was set outside the agent's reach". The bypass switch
+ * had been closed in W6 and the allow-list, which does the same job one signature at a time, had not.
+ *
+ * The rule is now one rule for both doors: an approval is honoured only when the OWNER recorded it. An
+ * entry with no recorded origin predates the stamp and is NOT honoured — an unattributable approval is
+ * exactly the shape this closes, and a silently-honoured one is how the hole existed in the first place.
+ */
 export function isCommandAllowed(sig: string): boolean {
   if (!sig) return false
-  return !!load().allow?.[sig]
+  const s = load()
+  if (!s.allow?.[sig]) return false
+  return s.allowOrigin?.[sig] === "owner"
 }
 
-export function allowCommand(sig: string): { ok: boolean; sig: string } {
-  const s = load(); s.allow = s.allow || {}; s.allow[sig] = true; save(s)
-  return { ok: true, sig }
+/** Was this signature approved at all, whoever asked? Used to REPORT honestly, never to permit. */
+export function commandAllowanceOrigin(sig: string): ModeOrigin | "none" {
+  const s = load()
+  if (!sig || !s.allow?.[sig]) return "none"
+  return s.allowOrigin?.[sig] === "owner" ? "owner" : "agent"
+}
+
+export function allowCommand(sig: string, origin: ModeOrigin = "owner"): { ok: boolean; sig: string; honoured: boolean } {
+  const s = load()
+  s.allow = s.allow || {}
+  s.allowOrigin = s.allowOrigin || {}
+  s.allow[sig] = true
+  s.allowOrigin[sig] = origin
+  save(s)
+  return { ok: true, sig, honoured: origin === "owner" }
 }
 
 export function revokeCommand(sig: string): { ok: boolean } {
-  const s = load(); if (s.allow) { delete s.allow[sig]; save(s) }
+  const s = load()
+  if (s.allow) delete s.allow[sig]
+  if (s.allowOrigin) delete s.allowOrigin[sig]
+  save(s)
   return { ok: true }
 }
 

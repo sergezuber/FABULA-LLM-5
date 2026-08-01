@@ -3,6 +3,7 @@
 // (return install guidance) when a dependency isn't present.
 
 import { execFile } from "node:child_process"
+import { localInferenceBase } from "./moa"
 
 /** Resolve the first available binary from candidates via `which`. A per-spawn timeout keeps a
  *  wedged lookup (loaded machine, network-mounted PATH) from hanging the promise forever — a
@@ -27,9 +28,11 @@ export function resolveVision(env: Record<string, string | undefined>): VisionEn
     url: env.FABULA_VISION_URL, model: env.FABULA_VISION_MODEL,
     headers: env.FABULA_VISION_KEY ? { Authorization: `Bearer ${env.FABULA_VISION_KEY}` } : {},
   }
-  // LM Studio with a VLM loaded (model id supplied via env to avoid guessing)
+  // LM Studio with a VLM loaded (model id supplied via env to avoid guessing). Through the ADAPTER —
+  // localInferenceBase is the single definition shared with moa/auxLLM, so this path cannot drift back
+  // to the raw serving port the way it had (see the note on localInferenceBase).
   if (env.LMSTUDIO_VLM_MODEL) return {
-    url: `${env.LMSTUDIO_URL || "http://localhost:1234/v1"}/chat/completions`,
+    url: `${localInferenceBase(env)}/chat/completions`,
     model: env.LMSTUDIO_VLM_MODEL, headers: {},
   }
   return null

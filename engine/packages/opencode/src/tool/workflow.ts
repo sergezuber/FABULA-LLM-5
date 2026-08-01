@@ -5,6 +5,8 @@ import { Effect, Fiber } from "effect"
 import { Config } from "../config"
 import { workflowRef } from "@/workflow/runtime-ref"
 import { BuiltinWorkflow } from "@/workflow/builtin"
+import { resolveWorkflowScript } from "@/workflow/resolve"
+import { Instance } from "@/project/instance"
 import type { SessionID } from "../session/schema"
 
 const id = "workflow"
@@ -118,7 +120,24 @@ export const WorkflowTool = Tool.define<typeof parameters, Metadata, Config.Serv
             new Error("workflow run: provide either `name` (a built-in) or `script` (inline), not both."),
           )
         }
-        const script = input.name ? BuiltinWorkflow.get(input.name)?.script : input.script
+        // A SAVED workflow is reachable by name, not only a built-in one.
+        //
+        // MEASURED 2026-08-01: this resolved `input.name` against `BuiltinWorkflow` ONLY and errored
+        // "Unknown built-in workflow" on anything else — while `resolveWorkflowScript`, which knows about
+        // `.mimocode/workflows/<name>.js` and `.claude/workflows/<name>.js`, had exactly ONE caller in the
+        // whole engine: the nested in-script `workflow()` call in runtime.ts:945. So a workflow a user had
+        // saved to disk could be invoked from inside another workflow and from nowhere else — including
+        // from the tool that is the entry point to the feature.
+        //
+        // Built-ins are checked first, so a saved file cannot shadow a shipped name by accident.
+        const saved = input.name
+          ? yield* Effect.promise(() =>
+              // resolveWorkflowScript THROWS on a name that could escape the workflows dir; a bad name is
+              // "no such workflow", which the error below already says well.
+              resolveWorkflowScript(input.name!, Instance.directory, Instance.worktree).catch(() => null),
+            )
+          : null
+        const script = input.name ? (BuiltinWorkflow.get(input.name)?.script ?? saved) : input.script
         if (!script) {
           const known = BuiltinWorkflow.list()
             .map((w) => w.name)
@@ -126,8 +145,10 @@ export const WorkflowTool = Tool.define<typeof parameters, Metadata, Config.Serv
           return yield* Effect.fail(
             new Error(
               input.name
-                ? `Unknown built-in workflow "${input.name}". Known: ${known || "(none)"}.`
-                : "workflow run requires either `name` (a built-in) or `script` (inline).",
+                ? `Unknown workflow "${input.name}". Built-ins: ${known || "(none)"}. ` +
+                  `A saved workflow is looked up as .mimocode/workflows/${input.name}.js or ` +
+                  `.claude/workflows/${input.name}.js, from this directory up to the worktree root.`
+                : "workflow run requires either `name` (a built-in or saved workflow) or `script` (inline).",
             ),
           )
         }

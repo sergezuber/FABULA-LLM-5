@@ -209,7 +209,22 @@ export function gateVerdictOf(marks: any): GateVerdict {
   if (/^fake/i.test(ftp)) return { claim: "failed", mark: ftp, reason: `reproduce gate: the reproduction is FAKE — ${ftp}` }
   if (/^post-fails/i.test(ftp)) return { claim: "failed", mark: ftp, reason: "reproduce gate: the test does not pass on the patched tree" }
   if (p2p === "sibling-failed") return { claim: "failed", mark: `${ftp} · ${p2p}`, reason: "reproduce gate: a pre-existing sibling test broke (pass-to-pass regression)" }
-  if (/^validated/i.test(ftp) || /^no-change \(verified\)/i.test(ftp)) {
+  if (/^no-change \(verified\)/i.test(ftp)) {
+    // MEASURED 2026-08-01: this mark was folded into the same arm as /^validated/ and inherited its
+    // sentence — "the test fails on the pre-patch tree and passes on the patched one". No such thing was
+    // measured. strictGateVerdict emits this mark on the `!hasSourceChange && hasNewTest &&
+    // noChangePasses` branch, which runs newTestsPassOnCurrent and NOTHING else: there is no patch, so
+    // there is no pre-patch tree and no probe of one. The claim is still good — the receipt just has to
+    // say what was actually done, which is the entire premise of a receipt.
+    return {
+      claim: "validated",
+      mark: ftp,
+      reason:
+        "reproduce gate VALIDATED (no-change): the test passes on the current tree and no source was " +
+        "changed, so there was no patch to probe against a pre-patch tree",
+    }
+  }
+  if (/^validated/i.test(ftp)) {
     return { claim: "validated", mark: ftp, reason: "reproduce gate VALIDATED: the test fails on the pre-patch tree and passes on the patched one" }
   }
   return { claim: "unknown", mark: ftp, reason: `reproduce gate: unrecognised verdict ${JSON.stringify(ftp)} — treated as unknown, never as a pass` }

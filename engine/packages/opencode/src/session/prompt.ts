@@ -105,6 +105,7 @@ import { Team } from "@/team"
 import { ActorRegistry } from "@/actor/registry"
 import { Metrics } from "@/metrics"
 import { resolveInvocationStyle, type ToolStyleConfig } from "../tool/invocation-style"
+import { checkpointWriterToolRefusal } from "../tool/memory-path-guard"
 import { shouldAutoDream, shouldAutoDistill, DREAM_TASK, DISTILL_TASK, AUTO_DREAM_TITLE, AUTO_DISTILL_TITLE } from "./auto-dream"
 
 // @ts-ignore
@@ -781,6 +782,17 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   sessionID: input.session.id,
                 })
                 const ctx = context(args, options)
+                // The declared checkpoint-writer toolbelt, ENFORCED. The generic actor whitelist below
+                // cannot cover it: `whitelistFor()` returns early when `input.agentID` is absent, and the
+                // writer's own messages carry none (measured — 74 of 74 writer messages have agentID
+                // NULL), so its persisted `tools` row was consulted for nothing. Keyed on the agent NAME,
+                // which is the same signal the writer's read guard already uses successfully.
+                const writerRefusal = checkpointWriterToolRefusal(ctx.agent, item.id)
+                if (writerRefusal) {
+                  const output = { title: "Tool not permitted", output: writerRefusal, metadata: { rejected: true, reason: "tool-whitelist" as const } }
+                  yield* input.processor.completeToolCall(options.toolCallId, output)
+                  return output
+                }
                 if (whitelist && !whitelist.has(item.id)) {
                   const output = rejectionFor(item.id)
                   log.debug("tool execute rejected", {
@@ -1083,11 +1095,38 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           time: { start: Date.now() },
         },
       })
-      yield* plugin.trigger(
-        "tool.execute.before",
-        { tool: ActorTool.id, sessionID, callID: part.id },
-        { args: taskArgs },
-      )
+      // MEASURED 2026-08-01: this call passed an INLINE object literal as the before-output and never
+      // looked at it again, so a hook that armed `cancel` had its decision discarded and the call ran
+      // anyway. The other two call sites (:794 and :913) both bind the output and check `cancel`; only
+      // this one did not, and it is the site the harness's own loop guard reaches when a runaway `actor`
+      // has to be stopped. Driven through the real hook with the same armed block: sites 1 and 2
+      // SUPPRESSED the call, site 3 EXECUTED it. (In-place ARG REPAIR still worked here, because the
+      // taskArgs reference is shared — so only the block was being lost, which is exactly the half that
+      // matters and the half nothing would have shown.)
+      const beforeOutput: { args: any; cancel?: boolean; cancelReason?: string } = { args: taskArgs }
+      yield* plugin.trigger("tool.execute.before", { tool: ActorTool.id, sessionID, callID: part.id }, beforeOutput)
+      if (beforeOutput.cancel) {
+        const cancelOutput = {
+          title: "Cancelled",
+          output: beforeOutput.cancelReason || "Tool call cancelled by hook",
+          metadata: { cancelled: true },
+        }
+        yield* sessions.updatePart({
+          ...part,
+          state: {
+            status: "completed",
+            input: part.state.status === "pending" ? taskArgs : part.state.input,
+            title: cancelOutput.title,
+            metadata: cancelOutput.metadata,
+            output: cancelOutput.output,
+            time: { start: part.state.status === "running" ? part.state.time.start : Date.now(), end: Date.now() },
+          },
+        } satisfies MessageV2.ToolPart)
+        assistantMessage.finish = "tool-calls"
+        assistantMessage.time.completed = Date.now()
+        yield* sessions.updateMessage(assistantMessage)
+        return
+      }
 
       const taskAgent = yield* agents.get(task.agent)
       if (!taskAgent) {

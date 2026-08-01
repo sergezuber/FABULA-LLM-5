@@ -1,5 +1,6 @@
 import sys, os, socket, threading
 sys.path.insert(0, os.path.dirname(__file__))
+import adapter_util
 from adapter_util import (
     stable_prefix, shared_prefix_len, classify_overflow, clamp_max_tokens, drain_with_idle_split,
     update_prefix_and_check, DegenerationDetector, detect_degeneration, sse_delta_content,
@@ -214,3 +215,50 @@ if __name__ == "__main__":
             fails += 1; print("FAIL", fn.__name__); traceback.print_exc()
     print(f"\n{len(fns)-fails}/{len(fns)} passed")
     sys.exit(1 if fails else 0)
+
+
+# ── the blame clause has to be able to fire on the shape FABULA actually sends (2026-08-01) ──────────
+# MEASURED: 10 real position-shifts in the live log, 0 blame clauses, ever. FABULA sends ONE system
+# message then the conversation, so the "stable head" is a single block — and an offender needs a
+# volatile block WITH a stable block below it INSIDE that head, which one block cannot contain. All 10
+# real shifts diverged deep in the conversation (63-97% of prefixes 195k-506k chars).
+def _realistic_body():
+    return {"messages": [
+        {"role": "system", "content": "You are the FABULA agent. " + "S" * 4000},
+        {"role": "user", "content": "read the chapters " + "u" * 500},
+        {"role": "assistant", "content": "<system-reminder>date is 2026-08-01T10:00</system-reminder> " + "a" * 2000},
+        {"role": "user", "content": "continue " + "u" * 500},
+        {"role": "assistant", "content": "<system-reminder>gate: verify_done result</system-reminder> " + "b" * 2000},
+        {"role": "user", "content": "more " + "u" * 500},
+        {"role": "assistant", "content": "<system-reminder>auto-rewind</system-reminder> " + "c" * 2000},
+    ]}
+
+
+def test_blame_names_an_offender_on_a_deep_divergence():
+    body = _realistic_body()
+    # The old head-only scope: silent, exactly as measured in production.
+    assert adapter_util.injection_order_report(body)["offenders"] == []
+    # Told where the prefixes actually stopped matching, it names the volatile block above it.
+    r = adapter_util.injection_order_report(body, divergence_fraction=0.9)
+    assert r["offenders"], r
+    last = r["offenders"][-1]
+    assert "<system-reminder>" in last["text"]
+    assert last["stable_blocks_below"] >= 1
+
+
+def test_blame_never_accuses_a_block_BELOW_the_divergence():
+    body = _realistic_body()
+    early = adapter_util.injection_order_report(body, divergence_fraction=0.35)["offenders"]
+    late = adapter_util.injection_order_report(body, divergence_fraction=0.9)["offenders"]
+    # Content below the divergence cannot have caused it, so an early divergence accuses fewer blocks.
+    assert len(early) < len(late)
+
+
+def test_blame_stays_silent_on_a_body_with_nothing_volatile_in_it():
+    clean = {"messages": [
+        {"role": "system", "content": "S" * 3000},
+        {"role": "user", "content": "hello"},
+        {"role": "assistant", "content": "hi"},
+    ]}
+    assert adapter_util.injection_order_report(clean, divergence_fraction=0.9)["offenders"] == []
+    assert adapter_util.injection_order_report(clean)["clean"] is True

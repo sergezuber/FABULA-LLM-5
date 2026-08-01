@@ -209,3 +209,34 @@ export function assertCheckpointWriterReadAllowed(input: {
       `write the sections you can and leave the rest as-is rather than exploring the project.`,
   )
 }
+
+/**
+ * The tools the checkpoint-writer may call. ONE definition — `session/checkpoint.ts` spawns the writer
+ * with this exact list, and the guard below enforces the same one, so the two cannot drift.
+ *
+ * MEASURED 2026-08-01: the list was a literal at the spawn site, it WAS persisted (the sqlite
+ * `actor_registry` row reads `checkpoint-writer|["read","write","edit","apply_patch","glob","grep","task"]`)
+ * — and nothing anywhere read it back. Every reference under `actor/` is a write or a type. The measured
+ * consequence: tools actually called inside checkpoint-writer sessions were read 16, write 10, task 9,
+ * edit 3, **str_replace 1, session_search 1** — two tools outside the declared whitelist, called by the
+ * one agent whose whole job is to summarise a transcript it was already given. A restriction nothing
+ * enforces is a comment.
+ */
+export const CHECKPOINT_WRITER_TOOLS = ["read", "write", "edit", "apply_patch", "glob", "grep", "task"] as const
+
+export function checkpointWriterToolRefusal(agentName: string | undefined, toolID: string | undefined): string | undefined {
+  if (agentName !== "checkpoint-writer") return undefined
+  if (!toolID) return undefined
+  if ((CHECKPOINT_WRITER_TOOLS as readonly string[]).includes(toolID)) return undefined
+  return (
+    `checkpoint-writer may not call \`${toolID}\` — it summarises the transcript it was given.\n` +
+    `Available: ${CHECKPOINT_WRITER_TOOLS.join(", ")}\n` +
+    `Write the checkpoint from the conversation you were handed rather than reaching for another tool.`
+  )
+}
+
+/** Throwing form, for a call site inside a tool's own execute. Same rule, one definition. */
+export function assertCheckpointWriterToolAllowed(agentName: string | undefined, toolID: string | undefined): void {
+  const refusal = checkpointWriterToolRefusal(agentName, toolID)
+  if (refusal) throw new Error(refusal)
+}

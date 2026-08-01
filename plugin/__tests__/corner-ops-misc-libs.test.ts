@@ -31,13 +31,22 @@ import {
 
 // ───────────────────────────── moa.resolveProviders ─────────────────────────────
 describe("moa.resolveProviders", () => {
-  test("empty env → only local-qwen, default LM Studio url, non-cloud", () => {
+  // MEASURED 2026-08-01: this default was :1234 — the serving process itself, not the adapter — and
+  // LMSTUDIO_URL is set nowhere in a real install, so mixture_of_agents dialled the raw port in
+  // production, skipping admission control, both watchdogs and the max-token clamp. It did not fail
+  // loudly because :1234 answers 200 on a plain chat call. The same default had already been found and
+  // fixed in auxLLM.ts alone, which is why the rule now has ONE definition (localInferenceBase).
+  test("empty env → only local-qwen, through the ADAPTER, non-cloud", () => {
     const p = resolveProviders({})
     expect(p.length).toBe(1)
     expect(p[0].name).toBe("local-qwen")
     expect(p[0].cloud).toBe(false)
-    expect(p[0].url).toBe("http://localhost:1234/v1/chat/completions")
+    expect(p[0].url).toBe("http://localhost:1235/v1/chat/completions")
     expect(p[0].headers).toEqual({})
+  })
+
+  test("an explicitly named LMSTUDIO_URL still wins — a caller who named an endpoint has decided", () => {
+    expect(resolveProviders({ LMSTUDIO_URL: "http://box:9999/v1" })[0].url).toBe("http://box:9999/v1/chat/completions")
   })
 
   test("NVIDIA only → local + 2 nvidia cloud providers", () => {
@@ -883,9 +892,10 @@ describe("multimodal.resolveVision", () => {
     // URL alone is insufficient; LM Studio fallback only if LMSTUDIO_VLM_MODEL set
     expect(resolveVision({ FABULA_VISION_URL: "http://v" })).toBe(null)
   })
-  test("LMSTUDIO_VLM_MODEL → LM Studio default url", () => {
+  // Same defect, same fix: vision inference goes through the adapter like every other inference path.
+  test("LMSTUDIO_VLM_MODEL → the ADAPTER, not the raw serving port", () => {
     const e = resolveVision({ LMSTUDIO_VLM_MODEL: "qwen-vl" })!
-    expect(e.url).toBe("http://localhost:1234/v1/chat/completions")
+    expect(e.url).toBe("http://localhost:1235/v1/chat/completions")
     expect(e.model).toBe("qwen-vl")
     expect(e.headers).toEqual({})
   })

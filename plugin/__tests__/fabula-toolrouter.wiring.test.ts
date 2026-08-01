@@ -6,6 +6,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { FabulaToolRouter } from "../fabula-toolrouter"
 import { decideBelt, taskTextFrom } from "../lib/beltwire"
+import { discriminationWeight } from "../lib/toolrouter"
 
 const CHANNEL_KEY = "__FABULA_SESSION_BELT__"
 const channel = () => (globalThis as any)[CHANNEL_KEY] as Map<string, any> | undefined
@@ -200,5 +201,52 @@ describe("expand_tools — the escape-hatch dispatcher (§4.4)", () => {
     const t = await getTool()
     const out = await t.execute({ tool: "whatever" }, { sessionID: SID2 })
     expect(out).toContain("No tools are hidden")
+  })
+})
+
+// MEASURED 2026-08-01. The profiles are NESTED — coding keeps 50 of 74 cards, web-research 51 — and the
+// score summed every kept tool, so ~50 identical terms drowned the two or three that actually tell them
+// apart. "search the web for the latest papers on prefix caching" scored coding 0.1913 vs web-research
+// 0.1895 (0.9% apart) and chose coding, which HIDES web_search and web_fetch. 29 of 29 live decisions
+// were `coding`. These cases drive the REAL decideBelt over the REAL card corpus.
+describe("profile selection tracks intent, not BM25 noise", () => {
+  const WEB = [
+    "search the web for the latest papers on prefix caching and summarise with links",
+    "web search for today's news and give me links",
+    "browse the internet and find the current price of bitcoin",
+    "look up news headlines about AI today",
+    "найди в интернете свежие статьи про кэш префикса и дай ссылки",
+  ]
+  for (const ask of WEB) {
+    test(`a web ask keeps the web tools visible: ${ask.slice(0, 40)}`, () => {
+      const d = decideBelt(ask)
+      expect(d.entry.profileId).not.toBe("coding")
+      // The point is not the label — it is that the tools the answer needs are not masked away.
+      for (const t of ["web_search", "web_fetch"]) expect(d.entry.hide).not.toContain(t)
+    })
+  }
+
+  const CODE = [
+    "implement mergeIntervals in typescript and add unit tests",
+    "fix the failing test in lib/graph.ts and run the suite",
+    "почини падающий тест и запусти сборку",
+  ]
+  for (const ask of CODE) {
+    test(`a coding ask still masks the non-coding belt: ${ask.slice(0, 40)}`, () => {
+      const d = decideBelt(ask)
+      expect(d.entry.profileId).toBe("coding")
+      expect(d.entry.hide.length).toBeGreaterThan(0)
+    })
+  }
+
+  test("a tool every profile keeps carries no vote — that is what made the sums indistinguishable", () => {
+    const profiles = [
+      { id: "lean", tools: ["read", "write", "edit"] },
+      { id: "wide", tools: ["read", "write", "edit", "web_search"] },
+    ]
+    const w = discriminationWeight(profiles)
+    expect(w("read")).toBe(0)
+    expect(w("write")).toBe(0)
+    expect(w("web_search")).toBeGreaterThan(0)
   })
 })

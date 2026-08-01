@@ -17,6 +17,30 @@ import { scanThreats, threatBanner } from "./lib/threatscan"
 import { readLedger, annotate } from "./lib/heartbeat"
 import { isUncensoredModel, uncensoredPattern } from "./lib/distillguard"
 
+/** The labels launchd is actually running, or null when launchd could not be asked. `null` is NOT an
+ *  empty set: reporting every job as an orphan because a probe failed would be its own false claim. */
+async function loadedLabels(): Promise<Set<string> | null> {
+  return new Promise((resolve) => {
+    try {
+      const c = spawn("launchctl", ["list"])
+      let out = ""
+      const t = setTimeout(() => { try { c.kill() } catch {} ; resolve(null) }, 4000)
+      c.stdout.on("data", (d) => { out += d.toString() })
+      c.on("error", () => { clearTimeout(t); resolve(null) })
+      c.on("close", (code) => {
+        clearTimeout(t)
+        if (code !== 0 && !out) return resolve(null)
+        const labels = new Set<string>()
+        for (const line of out.split("\n")) {
+          const label = line.trim().split(/\s+/).pop() ?? ""
+          if (label.startsWith(LABEL_PREFIX)) labels.add(label)
+        }
+        resolve(labels)
+      })
+    } catch { resolve(null) }
+  })
+}
+
 const z = tool.schema
 const ENGINE = process.env.FABULA_ENGINE_BIN ||
   ["/opt/homebrew/bin/fabula", "/usr/local/bin/fabula", path.join(os.homedir(), ".local", "bin", "fabula"),
@@ -132,8 +156,27 @@ export const FabulaOps: Plugin = async () => gate("ops", ({
           if (!jobs.length) return "No scheduled jobs."
           const led = await readLedger(LEDGER)
           const now = Date.now()
-          const lines = jobs.map((j) => { const slug = j.slice(LABEL_PREFIX.length, -6); return "  - " + annotate(slug, LABEL_PREFIX + slug, led, now) })
-          return { output: "Scheduled jobs:\n" + lines.join("\n"), metadata: { count: jobs.length } }
+          // ASK LAUNCHD, do not infer from the directory.
+          //
+          // MEASURED 2026-08-01: `~/Library/LaunchAgents` held two `com.fabula.schedule.*` plists left
+          // over from a run three weeks earlier — their command still cd'd into a directory named after
+          // that day — and `launchctl list` had never heard of either. This tool nevertheless printed
+          // both as "Scheduled jobs", so a user asking what is scheduled was told two jobs are armed
+          // that cannot ever fire. A file on disk is a job description; only launchd knows what is
+          // LOADED. When launchd cannot be asked at all, nothing is claimed either way rather than the
+          // old claim being made silently.
+          const loaded = await loadedLabels()
+          const lines = jobs.map((j) => {
+            const slug = j.slice(LABEL_PREFIX.length, -6)
+            const label = LABEL_PREFIX + slug
+            const state = !loaded ? "" : loaded.has(label) ? "" : "  ⚠️ NOT LOADED (launchd does not know this job — it cannot fire; cancel_scheduled removes the leftover file)"
+            return "  - " + annotate(slug, label, led, now) + state
+          })
+          const live = loaded ? jobs.filter((j) => loaded.has(LABEL_PREFIX + j.slice(LABEL_PREFIX.length, -6))).length : jobs.length
+          return {
+            output: "Scheduled jobs:\n" + lines.join("\n"),
+            metadata: { count: jobs.length, loaded: live, orphans: jobs.length - live },
+          }
         } catch (e: any) { return `list_scheduled error: ${e.message}` }
       },
     }),

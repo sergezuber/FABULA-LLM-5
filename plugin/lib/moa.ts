@@ -21,6 +21,24 @@ export function cloudEndpointsAllowed(env: Record<string, string | undefined>): 
   return !underTest || !!env.FABULA_TEST_ALLOW_CLOUD
 }
 
+/** The ONE definition of where a local INFERENCE call goes. :1235 is the adapter; :1234 is the serving
+ *  process itself.
+ *
+ *  MEASURED 2026-08-01: this default was `:1234` here and in multimodal.ts, and LMSTUDIO_URL is set
+ *  NOWHERE (absent from .env, from app/FabulaApp.swift and from the running engine's environment), so in
+ *  the owner's real install `mixture_of_agents` dialled the raw serving port. That silently skips every
+ *  mechanism the adapter exists for — admission control, the idle and degeneration watchdogs, the
+ *  max-token clamp, the reasoning→content move — and it does NOT fail loudly, because :1234 answers 200
+ *  on a plain chat call. It only 400s on the structured form, which is why the same defect was found and
+ *  fixed in auxLLM.ts alone in July while these two call sites kept their own copy of the rule.
+ *
+ *  Note the deliberate asymmetry: LM Studio's NATIVE metadata API (`/api/v0/models`, used by the window
+ *  planner and the receipt) is not proxied by the adapter and is correctly read from :1234. Inference is
+ *  the thing that must go through the adapter; a metadata GET is not inference. */
+export function localInferenceBase(env: Record<string, string | undefined>): string {
+  return (env.LMSTUDIO_URL || "").trim() || "http://localhost:1235/v1"
+}
+
 /** Build the provider fan from env. FABULA_MOA_ENDPOINTS (JSON array) overrides the defaults. */
 export function resolveProviders(env: Record<string, string | undefined>): MoaProvider[] {
   if (env.FABULA_MOA_ENDPOINTS) {
@@ -33,7 +51,7 @@ export function resolveProviders(env: Record<string, string | undefined>): MoaPr
     } catch { /* fall through to defaults */ }
   }
   const out: MoaProvider[] = []
-  const lmUrl = env.LMSTUDIO_URL || "http://localhost:1234/v1"
+  const lmUrl = localInferenceBase(env)
   out.push({ name: "local-qwen", url: `${lmUrl}/chat/completions`, model: "", headers: {}, cloud: false })
   if (cloudEndpointsAllowed(env)) {
     if (env.NVIDIA_API_KEY) {

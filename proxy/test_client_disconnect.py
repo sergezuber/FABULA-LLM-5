@@ -126,8 +126,19 @@ def main():
     print("stream: received=%s upstream_closed=%s log=%s" % (received, stream_closed, stream_log))
     print("nonstream: upstream_closed=%s log=%s" % (nonstream_closed, nonstream_log))
     print("RESULT:", "PASS" if passed else "FAIL")
-    sys.exit(0 if passed else 1)
+    return bool(passed)
+
+# ── pytest collection ───────────────────────────────────────────────────────────────────────────────
+# MEASURED 2026-08-01: `pytest -q` in proxy/ reported "110 passed" while FIVE of the 17 files
+# contributed ZERO tests — this one among them — because all of their work sat behind
+# `if __name__ == "__main__":`. pytest imported the module, found no `test_*` callable, and moved on, so
+# a regression here would have left the project's declared adapter gate GREEN. `main()` now returns a
+# verdict instead of exiting, and one body serves both the script and the suite.
+
+
+def test_client_disconnect():
+    assert main(), "see the printed report above for which case failed"
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(0 if main() else 1)

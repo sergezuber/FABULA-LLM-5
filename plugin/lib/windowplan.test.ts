@@ -75,6 +75,23 @@ describe("the model is not alone in memory", () => {
     expect(p.tokens).toBe(0)
     expect(p.reason).toContain("cannot hold")
   })
+
+  // MEASURED 2026-08-01: residentsOther silently DROPPED any model whose size it could not read, and the
+  // serving API reports none, so the ceiling was computed as if the machine were empty. Unknown is not
+  // zero — treating it as zero is the single reading that can drive the desktop into swap.
+  test("a resident of UNKNOWN size makes the plan refuse, not shrink", () => {
+    const p = planWindow({ ...base, residents: [{ id: "mystery", bytes: 0 }] })
+    expect(p.fits).toBe(false)
+    expect(p.tokens).toBe(0)
+    expect(p.reason).toContain("could not be measured")
+    expect(p.reason).toContain("mystery")
+  })
+
+  test("a resident of KNOWN size is still planned around normally", () => {
+    const p = planWindow({ ...base, residents: [{ id: "nomic-embed", bytes: 0.5 * GIB }] })
+    expect(p.fits).toBe(true)
+    expect(p.tokens).toBeGreaterThan(0)
+  })
 })
 
 describe("refusing rather than guessing", () => {

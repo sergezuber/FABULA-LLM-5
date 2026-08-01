@@ -1219,6 +1219,8 @@ export const dict = {
   "settings.usage.receipts": "Квитанции",
   "settings.usage.secondOpinions": "Вторые мнения",
   "settings.usage.failedVerifies": "Красные проверки",
+  "settings.usage.pendingGates": "Ждут гейта",
+  "settings.usage.noVerifyCommand": "Нет команды проверки",
   "settings.usage.topTools": "Топ инструментов",
   "settings.usage.byModel": "По моделям",
   "settings.usage.empty": "Пока нет данных",

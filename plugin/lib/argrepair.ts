@@ -15,16 +15,45 @@
 // harmless no-op otherwise). (b) The real backstop for native tools is the addendum guidance + the
 // model's own retry — not this strip.
 
+/**
+ * How a tool's discriminated union is SHAPED. Two tools can both be "a discriminated union on an
+ * operation" and want opposite repairs, and assuming they are the same broke one of them completely.
+ *
+ * MEASURED 2026-08-01: `workflow` was given the whitelist `["operation"]` on the assumption that it was
+ * nested like `task`/`actor`. It is not — `engine/…/tool/workflow.ts` declares
+ * `z.strictObject({operation: z.literal("run"), name?, script?, args?, workspace?, async?})` and
+ * `z.discriminatedUnion("operation", …)`, i.e. FLAT with a STRING discriminator that happens to be named
+ * `operation`. So the whitelist stripped every required sibling: `{operation:"run", script:"…"}` reached
+ * the tool as `{"operation":"run"}` (parses, but the engine then answers "requires either name or
+ * script"), and `{operation:"status", run_id:"wf_1"}` became `{"operation":"status"}` and failed
+ * validation outright. **All 6 workflow operations were broken by the repair meant to help them** — and
+ * the same entry's wrap path produced `{operation:{action:"run",…}}`, a nested object where the schema
+ * demands a string literal.
+ *
+ * The two shapes are therefore declared, not inferred.
+ */
+export type UnionShape =
+  /** `{operation: {action: "list", …}}` — the payload lives INSIDE `operation`. */
+  | { kind: "nested"; wrapper: "operation"; discriminator: "action" }
+  /** `{operation: "run", script: "…"}` — `operation` IS the discriminator, siblings are real fields. */
+  | { kind: "flat"; discriminator: "operation"; fields: string[] }
+
+export const TOOL_UNION_SHAPE: Record<string, UnionShape> = {
+  actor: { kind: "nested", wrapper: "operation", discriminator: "action" },
+  task: { kind: "nested", wrapper: "operation", discriminator: "action" },
+  workflow: {
+    kind: "flat",
+    discriminator: "operation",
+    // The union of every branch's fields, read from the engine schema — see the note above.
+    fields: ["operation", "name", "script", "args", "workspace", "async", "run_id", "timeout_ms"],
+  },
+}
+
 // tool → allowed top-level keys. Only enforced for tools listed here; all others pass through.
 export const STRICT_TOOL_KEYS: Record<string, string[]> = {
   actor: ["operation"],
   task: ["operation"],
-  // Same single-key discriminated-union shape as the two above, and the same failure without this
-  // entry. MEASURED 2026-07-26: told to orchestrate with a workflow, the model in the socket picked the
-  // right tool four times and every call died on `Invalid input → at operation`, because it sent the
-  // flat `{action:"run", script:"…"}` the schema's own discriminator describes. A tool nobody can call
-  // is a tool nobody has — and the repair for it already existed one line above.
-  workflow: ["operation"],
+  workflow: TOOL_UNION_SHAPE.workflow.kind === "flat" ? TOOL_UNION_SHAPE.workflow.fields : ["operation"],
 }
 
 /** Remove lone surrogates (unpaired \uD800-\uDFFF) which break JSON re-encode / many providers. */
@@ -75,12 +104,34 @@ export function repairArgs(tool: string, args: any): RepairResult {
   // provably un-nested operation rather than a guess: the tool's argument type is a discriminatedUnion on
   // `action`, so `{action:"list"}` is an operation missing its wrapper, while `{foo:1}` is not an
   // operation at all and must keep being stripped as before.
-  if (
-    whitelist && whitelist.length === 1 && whitelist[0] === "operation" &&
-    work && typeof work === "object" && !Array.isArray(work) &&
-    !("operation" in work) && typeof (work as any).action === "string"
-  ) {
-    work = { operation: work }
+  const shape = TOOL_UNION_SHAPE[tool]
+  if (shape && work && typeof work === "object" && !Array.isArray(work)) {
+    const w = work as Record<string, any>
+    if (shape.kind === "nested") {
+      // `{action:"list"}` is an operation that lost its wrapper. `{foo:1}` is not an operation at all
+      // and must keep being stripped — the discriminator is what makes this provable rather than a guess.
+      if (!("operation" in w) && typeof w[shape.discriminator] === "string") work = { operation: w }
+      // `{"operation":"list"}` — the wrapper is present but holds the ACTION NAME instead of the payload.
+      // MEASURED 2026-08-01: 7 failures in one day, every one exactly this, latest 13:11:44, all answered
+      // `Invalid input: expected object, received string → at operation`. Neither layer covered it: the
+      // wrap above requires `operation` to be ABSENT, and the engine's own recoverTaskArgs tries
+      // `JSON.parse("list")`, which throws and leaves the string in place. A bare action name is a
+      // perfectly readable intent and there is no reason for it to be unanswerable.
+      else if (typeof w.operation === "string" && w.operation.trim() && !w.operation.trim().startsWith("{")) {
+        const rest = { ...w }
+        delete rest.operation
+        work = { operation: { [shape.discriminator]: w.operation.trim(), ...rest } }
+      }
+    } else if (shape.kind === "flat") {
+      // The mirror image: the model named the discriminator `action`, as the other two tools spell it.
+      // Rename it — never wrap it, which is what the shared nested path used to do here and produced an
+      // object where the schema demands a string literal.
+      if (!("operation" in w) && typeof w.action === "string") {
+        const rest = { ...w }
+        delete rest.action
+        work = { operation: w.action, ...rest }
+      }
+    }
   }
   if (whitelist && work && typeof work === "object" && !Array.isArray(work)) {
     const allow = new Set(whitelist)

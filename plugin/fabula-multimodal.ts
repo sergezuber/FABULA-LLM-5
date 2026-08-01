@@ -52,7 +52,20 @@ export const FabulaMultimodal: Plugin = async () => gate("multimodal", ({
             dataUrl = `data:${mimeFromPath(args.image)};base64,${buf.toString("base64")}`
           }
           const r = await fetch(ep.url, { method: "POST", headers: { "Content-Type": "application/json", ...ep.headers }, body: JSON.stringify(visionBody(ep.model, args.prompt, dataUrl)) })
-          if (!r.ok) return `vision_analyze error: HTTP ${r.status} from vision endpoint.`
+          if (!r.ok) {
+            // CARRY THE ENDPOINT'S OWN WORDS. MEASURED 2026-08-01: pointed at the currently-served model
+            // this returned only `vision_analyze error: HTTP 400`, while the body said exactly what was
+            // wrong — "The provided messages contain images, but kat-coder-v2.5-dev-optiq does not
+            // support image inputs." A model reading "HTTP 400" cannot tell an unsupported-modality
+            // refusal (load a VLM, or don't ask) from a transport failure (retry), so it retries the one
+            // thing that can never work. The status alone discards the only useful part of the answer.
+            const detail = await r.text().catch(() => "")
+            const said = detail.trim().slice(0, 600)
+            return `vision_analyze error: HTTP ${r.status} from the vision endpoint${said ? ` — it said: ${said}` : "."}` +
+              (r.status === 400 && /image/i.test(said)
+                ? `\nThis model cannot accept images. Load a vision model in LM Studio and set LMSTUDIO_VLM_MODEL, or set FABULA_VISION_URL + FABULA_VISION_MODEL.`
+                : "")
+          }
           const text = extractVision(await r.json())
           return { output: redactSecrets(text || "(empty response)").text, metadata: { model: ep.model } }
         } catch (e: any) { return `vision_analyze error: ${e.message}` }

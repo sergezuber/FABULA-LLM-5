@@ -2,7 +2,7 @@
 // LOCAL model first (LM Studio Qwen), falling back to a cheap CLOUD model. Cost lever.
 // Pure chain resolver (testable) + async callAux with fallback.
 
-import { chatBody, extractText, cloudEndpointsAllowed } from "./moa"
+import { chatBody, extractText, cloudEndpointsAllowed, localInferenceBase } from "./moa"
 
 export interface AuxEndpoint { name: string; url: string; model: string; headers: Record<string, string> }
 
@@ -31,7 +31,7 @@ export function auxChain(env: Record<string, string | undefined>): AuxEndpoint[]
     // is what the entailment path is FOR, so the default configuration pointed the gate at an endpoint
     // that cannot answer it. :1235 is the adapter, which translates the request and is where every
     // other inference path in this project already goes. An explicit LMSTUDIO_URL still wins.
-    const lm = explicitLm || "http://localhost:1235/v1"
+    const lm = localInferenceBase(env)
     chain.push({ name: "local-qwen", url: `${lm}/chat/completions`, model: "", headers: {} })
   }
   // Cloud fallback — same test-runner discipline as the local default (RULE #18). A bare key must not

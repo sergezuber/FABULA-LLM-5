@@ -56,6 +56,26 @@ export function redVerifies(h: HistoryLike): number {
 
 const KEEP: QeResult = { verdict: "worth-retrying", reason: "", fromModel: false }
 
+/**
+ * Room for the answer — including whatever the model says on its way to it.
+ *
+ * MEASURED 2026-08-01: this was 8, on the reasoning that "answer with one word" needs one word. The
+ * branch fired correctly (chat_calls=1, fromModel=true, 325–1066ms, well inside budget) and returned
+ * `unknown` on 4 of 4 attempts, including on an obviously doomed patch — a password check replaced with
+ * `return True` after four red verifies. The reason string gave it away: `the estimate could not be read
+ * ("The user is asking me to evaluate")`. The model holds the correct opinion and spends its eight
+ * tokens getting ready to say it. Proven by varying one parameter against the identical prompt:
+ * maxTokens=8 → "The user is asking me to evaluate" → unknown; maxTokens=8 with `/no_think` → identical,
+ * the model ignores it; maxTokens=400 → "DOOMED" → not-worth-retrying. So `not-worth-retrying` — the
+ * only verdict that does anything — was unreachable, and the call cost a model round-trip per red streak
+ * to say nothing.
+ *
+ * RULE #14: this is not a property of one model. Any model in the socket may narrate before answering,
+ * so the budget has to allow for it. The real bound on this call is the WALL CLOCK (budgetMs), which is
+ * enforced and unchanged — tokens were never the thing keeping it cheap.
+ */
+export const QE_MAX_TOKENS = Math.max(8, parseInt(process.env.FABULA_QE_MAX_TOKENS || "", 10) || 512)
+
 function keep(reason: string): QeResult {
   return { ...KEEP, reason }
 }
@@ -99,7 +119,7 @@ export async function qeVerdict(diff: string, history?: HistoryLike, opts: { tim
         text,
       ].join("\n"),
       {
-        maxTokens: 8,
+        maxTokens: QE_MAX_TOKENS,
         // A HARD end-to-end bound. `callAux` retries and walks a chain of endpoints, so a per-request
         // timeout is not a per-call one: measured at 16.6s against a single hung endpoint, ~50s worst
         // case, inside a hook whose sibling escalation is capped at 8s with the note that a blocked turn
@@ -116,7 +136,12 @@ export async function qeVerdict(diff: string, history?: HistoryLike, opts: { tim
     return keep(`quality estimate unavailable (${(e as Error)?.message ?? "error"}) — keeping the attempt local.`)
   }
 
-  const s = answer.toLowerCase()
+  // READ THE TAIL. With room to think, a model narrates before it answers, and the verdict is the last
+  // thing it says — while the narration often contains both words ("it might be WORTH one more try, but
+  // …"). The whole string is kept as a fallback so a model that answers in one word still classifies.
+  const full = answer.toLowerCase()
+  const tail = full.slice(-240)
+  const s = /\bdoomed\b|\bhopeless\b|\bnot worth\b|\bfutile\b|\bworth\b|\bretry\b|\blikely\b|\byes\b/.test(tail) ? tail : full
   if (/\bdoomed\b|\bhopeless\b|\bnot worth\b|\bfutile\b/.test(s)) {
     return {
       verdict: "not-worth-retrying",

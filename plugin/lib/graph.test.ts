@@ -2,7 +2,7 @@
 // as a plausible string, a cut nobody could see, and a verdict with no consequence.
 
 import { describe, expect, test } from "bun:test"
-import { clip, stepPrompt, synthesizePrompt, verifyStep, MISSING_INPUT, MIN_STEP_CHARS, STEP_PREAMBLE, type Step } from "./graph"
+import { clip, stepPrompt, synthesizePrompt, verifyStep, parseGraph, closeTruncatedJson, MISSING_INPUT, MIN_STEP_CHARS, STEP_PREAMBLE, type Step } from "./graph"
 
 const step = (over: Partial<Step> = {}): Step => ({
   id: "s2",
@@ -131,5 +131,53 @@ describe("prefix-cache layout — constant first, variable last", () => {
   test("what varies stays at the tail: the subtask never appears before the constant block ends", () => {
     const p = stepPrompt({ id: "s1", role: "build", description: "UNIQUEMARKER", needs: [] }, {})
     expect(p.indexOf("UNIQUEMARKER")).toBeGreaterThan(STEP_PREAMBLE.length)
+  })
+})
+
+// MEASURED 2026-08-01: a full workflow_graph run reported "1 step(s)" — the silent fallback — while the
+// planner had emitted a valid 4-step diamond whose reply was ONE closing brace short. Across four planner
+// calls, three parsed (4, 5, 4 steps) and the fourth returned null; `parseGraph(raw + "}")` parsed it
+// into 5 steps. So about one run in four lost its entire orchestration and the trace read as though one
+// step had been intended. This function's own comment promised "parse loosely"; it was a plain JSON.parse.
+describe("a planner reply cut one bracket short still becomes a graph", () => {
+  const FULL = JSON.stringify({
+    steps: [
+      { id: "s1", role: "explore", description: "read the contract" },
+      { id: "s2", role: "build", description: "implement A", needs: ["s1"] },
+      { id: "s3", role: "build", description: "implement B", needs: ["s1"] },
+      { id: "s4", role: "verify", description: "synthesise", needs: ["s1", "s2", "s3"] },
+    ],
+  })
+
+  test("the complete reply parses, as it always did", () => {
+    expect(parseGraph(FULL).graph?.steps.length).toBe(4)
+  })
+
+  test("the SAME reply missing its last brace parses to the same graph", () => {
+    const cut = FULL.slice(0, -1) // exactly the measured failure: one closing brace short
+    expect(parseGraph(cut).graph?.steps.length).toBe(4)
+    expect(parseGraph(cut).graph?.steps.map((s) => s.id)).toEqual(["s1", "s2", "s3", "s4"])
+  })
+
+  test("missing several closers is still recoverable", () => {
+    expect(parseGraph(FULL.slice(0, -3)).graph?.steps.length).toBeGreaterThan(0)
+  })
+
+  test("a cut landing MID-STRING is refused — no word is invented to finish it", () => {
+    const midString = '{"steps":[{"id":"s1","role":"build","description":"implement the thin'
+    expect(closeTruncatedJson(midString)).toBeNull()
+  })
+
+  test("text that is not JSON at all still fails, exactly as before", () => {
+    expect(parseGraph("I thought about it and decided to do it in one step.").graph).toBeNull()
+    expect(closeTruncatedJson("no json here")).toBeNull()
+  })
+
+  test("already-balanced JSON is left alone — the repair only ever adds what is missing", () => {
+    expect(closeTruncatedJson(FULL)).toBeNull()
+  })
+
+  test("more closers than openers is malformed, not truncated", () => {
+    expect(closeTruncatedJson('{"steps":[]}}')).toBeNull()
   })
 })

@@ -59,6 +59,14 @@ type FabulaVerifiedStats = {
   autoRewinds: number
   receiptsMinted: number
   secondOpinions: number
+  /** Green checks still held by a gate (reproduce / change-quiz). MEASURED 2026-08-01: these were
+   *  counted NOWHERE — not as verified, not as failed — on the assumption that the quiz would later
+   *  mint a receipt and credit them. When it does not (the quiz never runs, the receipt plugin is off),
+   *  a real green check simply vanished from the panel, which is how a busy harness reported zero. */
+  pendingGates: number
+  /** Checks that ran in a project with NO verify command, so there was no verdict to give. Of 18
+   *  in-scope verify parts, 17 were exactly this — invisible, and reading as "nothing happened". */
+  noVerifyCommand: number
 }
 const fabulaVerifiedCache = new Map<string, { at: number; value: FabulaVerifiedStats }>()
 const FABULA_VERIFIED_TTL_MS = 60_000
@@ -537,6 +545,29 @@ export const GlobalRoutes = lazy(() =>
             }
           })(),
         )
+        // THE PLUGIN'S ID COMES FROM THE MANIFEST, WHICH IS WHERE IT IS DEFINED.
+        //
+        // MEASURED 2026-08-01, end to end: this route derived the id from the FILENAME
+        // (`fabula-toolrouter.ts` → `toolrouter`) while the plugin gates itself on `tool-router`
+        // (`gate("tool-router", …)`). The panel POSTs `{id: row.id}` and the handler writes it verbatim,
+        // so switching the tool router OFF wrote `disabled:["toolrouter"]` — a name nothing reads.
+        // Probed hermetically: `disabled:["toolrouter"] → isEnabled("tool-router") = true` (still
+        // RUNNING) versus `disabled:["tool-router"] → false`. And it got worse on the next read, because
+        // the GET then computes `enabled` from the same wrong name and finds it disabled — so the switch
+        // rendered OFF while the plugin was on. One of 40 plugins, which is precisely why nobody caught
+        // it: the derivation is right 39 times.
+        //
+        // `plugin/lib/manifest.ts` is this project's declared single source of truth for plugin identity,
+        // and it carries the file→id mapping already. A filename is not an id; it is a filename.
+        const manifestByFile = new Map<string, { id: string; name?: string }>()
+        try {
+          const src = nodeFs.readFileSync(nodePath.join(pluginDir, "lib", "manifest.ts"), "utf8")
+          for (const m of src.matchAll(/id:\s*"([a-z0-9-]+)",\s*file:\s*"([^"]+)",\s*name:\s*"((?:[^"\\]|\\.)*)"/g)) {
+            manifestByFile.set(m[2]!, { id: m[1]!, name: m[3]!.replace(/\\"/g, '"') })
+          }
+        } catch {
+          // Unreadable manifest: the filename derivation is still the fallback, exactly as before.
+        }
         // Human names/descriptions come from the plugin folder's own i18n table (single source of
         // truth — the same one list_plugins and the native menu render). Bun transpiles the TS on
         // the fly; a missing/broken table just means bare ids (fail-open, never a 500).
@@ -548,13 +579,18 @@ export const GlobalRoutes = lazy(() =>
           .filter((f) => /^fabula-.*\.ts$/.test(f) && !f.endsWith(".d.ts"))
           .sort()
           .map((f) => {
-            const id = f.replace(/\.ts$/, "").replace(/^fabula-/, "")
+            const declared = manifestByFile.get(f)
+            const id = declared?.id ?? f.replace(/\.ts$/, "").replace(/^fabula-/, "")
             const meta = i18n[id] ?? {}
             return {
               id,
               file: `plugin/${f}`,
               enabled: envDisabled.has(id) || disabled.includes(id) ? false : explicitlyEnabled.includes(id) || !defaultsOff.has(id),
-              name: str(meta.nameEn) ?? str(meta.name),
+              // The manifest's own name is the LAST fallback rather than no name at all. Measured
+              // 2026-08-01: `grep -c nameEn plugin/lib/i18n.ts` is 0 and a bare `name:` appears once, so
+              // exactly 1 of 40 rows carried an English name off this route — while the native menu path
+              // (`manage-cli list --json`) returned a real name for every one of them, from the manifest.
+              name: str(meta.nameEn) ?? str(meta.name) ?? declared?.name,
               nameRu: str(meta.nameRu),
               desc: str(meta.descEn),
               descRu: str(meta.descRu),
@@ -632,7 +668,12 @@ export const GlobalRoutes = lazy(() =>
         const p = nodePath.join(Global.Path.config, "fabula-permissions.json")
         const state = (await Bun.file(p)
           .json()
-          .catch(() => ({}))) as { mode?: string; modeOrigin?: string; allow?: Record<string, boolean> }
+          .catch(() => ({}))) as {
+          mode?: string
+          modeOrigin?: string
+          allow?: Record<string, boolean>
+          allowOrigin?: Record<string, string>
+        }
         if (body.mode) {
           state.mode = body.mode
           // This route IS the owner — it is only reachable from Settings ▸ Permissions and the CLI.
@@ -642,11 +683,22 @@ export const GlobalRoutes = lazy(() =>
           // and no error anywhere.
           state.modeOrigin = "owner"
         }
-        if (body.allowAdd?.trim()) state.allow = { ...state.allow, [body.allowAdd.trim()]: true }
+        // The allow-list needs the SAME owner stamp as the mode, and for the same measured reason: the
+        // guards skip a pre-approved call, so an allowance the agent can create is a bypass switch it can
+        // flip one signature at a time (proven 2026-08-01 — `rm -rf /` blocked, then allowed, from inside
+        // a run). This route is the owner; the plugin tool records "agent" and is never honoured.
+        if (body.allowAdd?.trim()) {
+          const sig = body.allowAdd.trim()
+          state.allow = { ...state.allow, [sig]: true }
+          state.allowOrigin = { ...state.allowOrigin, [sig]: "owner" }
+        }
         if (body.allowRemove) {
           const allow = { ...state.allow }
+          const allowOrigin = { ...state.allowOrigin }
           delete allow[body.allowRemove]
+          delete allowOrigin[body.allowRemove]
           state.allow = allow
+          state.allowOrigin = allowOrigin
         }
         await Bun.write(p, JSON.stringify(state, null, 2))
         return c.json({ ok: true, mode: state.mode ?? "default" })
@@ -965,7 +1017,7 @@ export const GlobalRoutes = lazy(() =>
               )
               .all(),
           )
-          const out: FabulaVerifiedStats = { verifiedRuns: 0, failedVerifies: 0, notDoneVerdicts: 0, autoRewinds: 0, receiptsMinted: 0, secondOpinions: 0 }
+          const out: FabulaVerifiedStats = { verifiedRuns: 0, failedVerifies: 0, notDoneVerdicts: 0, autoRewinds: 0, receiptsMinted: 0, secondOpinions: 0, pendingGates: 0, noVerifyCommand: 0 }
           // The receipt plugin sets metadata.receipt to the written file's path — but on an fs
           // failure the path degrades to "(unwritten)", which is a mint attempt, not a receipt.
           const receiptWritten = (meta: Record<string, unknown>) =>
@@ -1007,6 +1059,16 @@ export const GlobalRoutes = lazy(() =>
               // steered) is PENDING, not a failure — it becomes a verified run when its receipt mints on
               // the quiz part above; counting it here would both overcount failures and undercount success.
               out.failedVerifies++
+            } else if (meta["passed"] === true) {
+              // passed:true AND steered — held by a gate. It is not a failure and not yet a verified run,
+              // but it IS a check that happened, and a panel that drops it reports zero for a run that
+              // did real work. Named, so the reader can see the difference between "nothing ran" and
+              // "something ran and is waiting on a gate".
+              out.pendingGates++
+            } else {
+              // No verdict at all: the project has no verify command, so nothing could be checked. That
+              // is a fact about the PROJECT, not about the run, and stating it beats showing a zero.
+              out.noVerifyCommand++
             }
             if (meta["notDone"]) out.notDoneVerdicts++
             if (meta["autoRewind"]) out.autoRewinds++

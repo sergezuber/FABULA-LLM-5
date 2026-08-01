@@ -28,7 +28,7 @@ import { safeFetch } from "./lib/ssrf"
 import { fileState, neverReadNote } from "./lib/filestate"
 import { findMatch, checkEscapeDrift } from "./lib/fuzzymatch"
 import { capToolOutput } from "./lib/outputcap"
-import { buildSeatbeltProfile, defaultSandboxConfig } from "./lib/sandbox"
+import { buildSeatbeltProfile, defaultSandboxConfig, sandboxExecArgv } from "./lib/sandbox"
 import { bashArgv, resolveBackend } from "./lib/execbackend"
 import { homedir } from "node:os"
 
@@ -711,6 +711,25 @@ export const FabulaTools: Plugin = async () => {
           const wantSandbox = args.sandbox !== false && process.env.FABULA_CODE_SANDBOX !== "0"
           const useDocker = wantSandbox && (await dockerAvailable())
 
+          // AN EXPLICIT ASK FOR ISOLATION IS NOT DOWNGRADED — it is refused.
+          //
+          // MEASURED 2026-08-01: probe code run with sandbox=undefined, sandbox=true and sandbox=false
+          // produced IDENTICAL results — `{"sandboxed":false}` and `HOSTNAME=… HOME_VISIBLE=True
+          // NET=104.20.23.154`, i.e. the real host, the user's ~/GitHub visible, full network — because
+          // `useDocker` simply falls through to the local child when Docker is down. It was not silent
+          // (the output carries a note and metadata.sandboxed:false), but a caller who wrote
+          // `sandbox: true` asked a question, and running the code anyway answers a different one. The
+          // DEFAULT case keeps falling back exactly as before: nothing that never asked for isolation
+          // starts failing.
+          if (args.sandbox === true && !useDocker) {
+            return (
+              "execute_code refused: isolation was explicitly requested (sandbox: true) and the Docker " +
+              "sandbox is not available on this machine, so the code would have run on the HOST with your " +
+              "home directory and network in reach. Start Docker and retry, or call it again with " +
+              "sandbox: false if running on the host is genuinely what you want."
+            )
+          }
+
           if (useDocker) {
             const dir = await fs.mkdtemp(path.join(os.homedir(), ".fabula-sbx-"))
             const file = lang === "node" ? "c.js" : "c.py"
@@ -737,11 +756,28 @@ export const FabulaTools: Plugin = async () => {
             })
           }
 
-          // Fallback: local child with env-scrub (Docker not available / disabled)
+          // Fallback: a local child — under the KERNEL PROFILE when one is available, never unconfined.
+          //
+          // MEASURED 2026-08-01 through the live app. The write guard refused a LaunchAgent plist on every
+          // file tool and, once the shell door was closed, on bash too — and the model then wrote it with
+          // four lines of Node through `execute_code`, and said so plainly in its report. That is not an
+          // attack; it is an agent finding the one remaining door. And no argument-reading rule can close
+          // this one: the path is COMPUTED inside a program, so there is nothing to read. A kernel profile
+          // does not care how a path was arrived at, which is exactly why it is the right layer here.
+          //
+          // Seatbelt is macOS-only and may be absent; when it is, this degrades to the previous
+          // unconfined child rather than refusing to run code at all, and SAYS which of the two happened.
           const bin = lang === "node" ? "node" : "python3"
           const flag = lang === "node" ? "-e" : "-c"
+          const confined = existsSync("/usr/bin/sandbox-exec") && process.env.FABULA_CODE_SEATBELT !== "0"
+          const argv = confined
+            ? sandboxExecArgv([bin, flag, args.code], buildSeatbeltProfile(defaultSandboxConfig(os.homedir())))
+            : [bin, flag, args.code]
+          const note = confined
+            ? "\n[local exec under the macOS kernel profile — Docker sandbox unavailable; env scrubbed, credential and persistence paths denied by the kernel]"
+            : "\n[local exec — Docker sandbox unavailable and no kernel profile on this platform; env scrubbed]"
           return await new Promise((resolve) => {
-            const child = spawn(bin, [flag, args.code], { cwd: ctx.directory, env: scrubEnv(process.env) })
+            const child = spawn(argv[0]!, argv.slice(1), { cwd: ctx.directory, env: scrubEnv(process.env) })
             let out = "", err = "", killed = false
             const cap = 100_000
             const timer = setTimeout(() => { killed = true; child.kill("SIGKILL") }, 60_000)
@@ -754,7 +790,7 @@ export const FabulaTools: Plugin = async () => {
               ctx.abort?.removeEventListener?.("abort", onAbort)
               let body = (out + (err ? `\n[stderr]\n${err}` : "")).trim() || "(no output)"
               if (killed) body += "\n[killed: timeout 60s or aborted]"
-              resolve({ output: redactSecrets(body).text + "\n[local exec — Docker sandbox unavailable; env scrubbed]", metadata: { language: lang, exitCode: code, sandboxed: false } })
+              resolve({ output: redactSecrets(body).text + note, metadata: { language: lang, exitCode: code, sandboxed: false, confined } })
             })
             child.on("error", (e) => { clearTimeout(timer); resolve(`execute_code error: ${e.message} (is ${bin} installed?)`) })
           })

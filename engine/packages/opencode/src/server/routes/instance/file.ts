@@ -102,9 +102,21 @@ export const FileRoutes = lazy(() =>
           query: z.string(),
         }),
       ),
-      async (c) => {
-        return c.json([])
-      },
+      // MEASURED 2026-08-01: the body of this handler was literally `return c.json([])`. Live,
+      // `/find/symbol?query=planWindow` answered `[]` in 0.002345s — no LSP call, no server spawn — one
+      // line under a describeRoute promising "Search for workspace symbols like functions, classes, and
+      // variables using LSP". An empty array is indistinguishable from "no such symbol", so a caller
+      // could not tell a stub from an answer.
+      async (c) =>
+        jsonRequest("FileRoutes.findSymbol", c, function* () {
+          const lsp = yield* LSP.Service
+          // A language server starts on first use of a FILE, and this route touches none — so on a cold
+          // instance `workspace/symbol` is asked of nobody and returns [], which reads exactly like "no
+          // such symbol". `init` brings the configured servers up first, so an empty answer here means
+          // the servers were asked and had nothing.
+          yield* lsp.init()
+          return yield* lsp.workspaceSymbol(c.req.valid("query").query)
+        }),
     )
     .get(
       "/file",

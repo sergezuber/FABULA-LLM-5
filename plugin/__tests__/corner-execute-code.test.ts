@@ -13,7 +13,8 @@
 // unicode/emoji/CRLF output; sandbox:false forces local; FABULA_CODE_SANDBOX=0 forces local;
 // extra/unknown args; language aliasing; concurrency; abort/timeout (quick).
 
-import { test, expect, beforeAll, afterAll } from "bun:test"
+import { test, expect, beforeAll, afterAll, describe } from "bun:test"
+import { existsSync, rmSync } from "node:fs"
 import { execFileSync } from "node:child_process"
 import * as os from "node:os"
 import * as fs from "node:fs/promises"
@@ -494,3 +495,52 @@ test.if(dockerUp)("Docker sandbox cleans up its host temp dir", async () => {
   const after = (await fs.readdir(home)).filter((n) => n.startsWith(".fabula-sbx-")).length
   expect(after).toBeLessThanOrEqual(before)
 }, 180000)
+
+// MEASURED 2026-08-01 through the LIVE app, and reported by the model itself in its own words: "the
+// harness guards write:launchagent on all file-write tools (bash_tool, create_file, write, bash) but NOT
+// on execute_code, which successfully wrote the plist through standard OS file I/O". Four lines of Node.
+// No argument-reading rule can close that door — the path is COMPUTED inside the program, so there is
+// nothing to read. The kernel profile does not care how a path was arrived at.
+describe("execute_code runs under the kernel profile when Docker is unavailable", () => {
+  const hooks = async () => (await (FabulaTools as any)({ directory: os.tmpdir() })) as any
+  const ctx = { directory: os.tmpdir(), sessionID: "s" }
+  const write = (target: string) => `require("fs").writeFileSync(${JSON.stringify(target)}, "x"); console.log("WROTE")`
+
+  test.if(existsSync("/usr/bin/sandbox-exec"))("a persistence target cannot be written even from inside a program", async () => {
+    const h = await hooks()
+    for (const target of [
+      path.join(os.homedir(), "Library/LaunchAgents/zz-fabula-probe.plist"),
+      path.join(os.homedir(), ".ssh/zz-fabula-probe-authorized_keys"),
+    ]) {
+      const r: any = await h.tool.execute_code.execute({ language: "node", code: write(target) }, ctx)
+      expect(`${target}:${existsSync(target)}`).toBe(`${target}:false`)
+      expect(r?.metadata?.confined).toBe(true)
+      if (existsSync(target)) rmSync(target, { force: true })
+    }
+  })
+
+  // The control is what keeps this from passing on a profile that simply denies everything.
+  test.if(existsSync("/usr/bin/sandbox-exec"))("ordinary work is untouched", async () => {
+    const h = await hooks()
+    const target = path.join(os.tmpdir(), `zz-fabula-ok-${process.pid}.txt`)
+    try {
+      const r: any = await h.tool.execute_code.execute({ language: "node", code: write(target) }, ctx)
+      expect(existsSync(target)).toBe(true)
+      expect(String(r?.output ?? r)).toContain("WROTE")
+    } finally {
+      rmSync(target, { force: true })
+    }
+  })
+
+  // An explicit ask for isolation is REFUSED rather than quietly downgraded to the host.
+  test("sandbox: true is refused when Docker is down, not silently run on the host", async () => {
+    const h = await hooks()
+    const r: any = await h.tool.execute_code.execute({ language: "node", code: "console.log(1)", sandbox: true }, ctx)
+    const text = String(r?.output ?? r)
+    // Either Docker is present and it really did isolate, or it refused. Never "ran on the host anyway".
+    if (r?.metadata?.sandboxed !== true) {
+      expect(text).toContain("refused")
+      expect(text).toContain("sandbox: true")
+    }
+  })
+})

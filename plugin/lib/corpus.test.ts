@@ -184,13 +184,17 @@ describe("askLine — the reader's ask, carried not classified", () => {
       "дай критическое развернутое описание книги",
       "read the book in full",
       "ну и?",
-    ]) expect(askLine(q)).toBe(`${ASK_LABEL}: ${q}`)
+      // The reader's words are carried VERBATIM; the language pin is appended after them (see askLine —
+      // the corpus worker calls the model directly, so the hook that normally enforces the language rule
+      // never runs on this path and the rule is applied here instead).
+    ]) expect(askLine(q).startsWith(`${ASK_LABEL}: ${q}`)).toBe(true)
   })
 
   test("an ask is bounded — it is paid for once per batch", () => {
     const line = askLine("x".repeat(9000), 2000)
-    expect(line.length).toBeLessThan(2100)
-    expect(line.endsWith("…")).toBe(true)
+    // The ASK itself is bounded; the appended language pin is a fixed short block.
+    expect(line.split("\n\n[Write the entire answer")[0].length).toBeLessThan(2100)
+    expect(line.split("\n\n[Write the entire answer")[0].endsWith("…")).toBe(true)
   })
 
   test("no ask is no line, not an empty label", () => {
@@ -209,9 +213,26 @@ describe("ANALYST_PREAMBLE", () => {
     const skeleton = (q: string) => chapterSummaryPrompt(files, q, 1000).replace(askLine(q), "<ASK>")
     expect(skeleton("сделай литературный разбор романа")).toBe(skeleton("ну и?"))
   })
-  test("asks for analysis rather than retelling, and answers in the reader's language", () => {
-    expect(ANALYST_PREAMBLE).toContain("не пересказ")
-    expect(ANALYST_PREAMBLE).toContain("языке запроса")
+  test("asks for analysis rather than retelling", () => {
+    expect(ANALYST_PREAMBLE).toContain("not a retelling")
+  })
+
+  // MEASURED 2026-08-01: an ENGLISH task produced a fully RUSSIAN report, because this file's prompts
+  // were hardcoded Russian and the worker calls the model directly — bypassing the hook where the
+  // project's language rule lives. The scaffolding is neutral now and the language comes from the ask.
+  test("the scaffolding carries no language of its own", () => {
+    const cyrillic = (s: string) => (s.match(/[\u0400-\u04FF]/g) ?? []).length
+    expect(cyrillic(ANALYST_PREAMBLE)).toBe(0)
+    expect(cyrillic(MAP_PREAMBLE)).toBe(0)
+    expect(cyrillic(ASK_LABEL)).toBe(0)
+    expect(cyrillic(synthesizeReportPrompt([{ name: "ch1", text: "s" }], "analyse this book in depth"))).toBe(0)
+  })
+
+  test("the report is pinned to the language the reader asked in", () => {
+    const en = synthesizeReportPrompt([{ name: "ch1", text: "s" }], "Read all the chapters and write a deep literary analysis of this book.")
+    expect(en).toContain("[Write the entire answer in English")
+    const ru = synthesizeReportPrompt([{ name: "ch1", text: "s" }], "Прочитай все главы и напиши глубокий литературный анализ книги.")
+    expect(ru).toContain("[Write the entire answer in Russian")
   })
 })
 
@@ -222,8 +243,8 @@ describe("chapterSummaryPrompt", () => {
     const p = chapterSummaryPrompt(files, "глубокий анализ книги", 1000)
     expect(p).toContain("UNTRUSTED data")
     expect(p).toContain("глава_01.md")
-    expect(p).toContain("[обрезано")
-    expect(p).toContain("ОСТАНОВИСЬ")
+    expect(p).toContain("[truncated —")
+    expect(p).toContain("then STOP")
     expect(p.length).toBeLessThan(20000) // cap held
   })
 

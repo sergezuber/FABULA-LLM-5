@@ -91,9 +91,37 @@ export async function removeHandoffsForSession(session: string): Promise<number>
   if (!session) return 0
   try {
     for (const f of await fs.readdir(HANDOFF_DIR)) {
-      if (!f.endsWith(".json")) continue
+      // `.history.jsonl` ENDS WITH ".jsonl", not ".json", so the old test skipped it — and that file is
+      // the append-only archive of every SUPERSEDED handoff body for the key.
+      //
+      // MEASURED 2026-08-01: after deleting a chat, a unique marker planted in a handoff was still on
+      // disk, verbatim, in `handoff/<key>.history.jsonl` — inside the store whose stated guarantee is
+      // that a deleted chat leaves no trace. The archive is only written when a key is re-saved, so a
+      // single-write handoff left nothing; but every key ever UPDATED left every earlier body behind
+      // permanently. A purge that skips the archive is not a purge, it is a purge of the current copy.
+      if (!f.endsWith(".json") && !f.endsWith(".history.jsonl")) continue
       const p = path.join(HANDOFF_DIR, f)
-      const h = parseHandoff(await fs.readFile(p, "utf8").catch(() => ""))
+      const body = await fs.readFile(p, "utf8").catch(() => "")
+      if (f.endsWith(".history.jsonl")) {
+        // The archive holds one record per line, and lines from OTHER sessions must survive — the file
+        // is keyed by handoff key, not by session. Rewrite it without this session's records; remove it
+        // outright when nothing is left, so an emptied archive is not left as a puzzling stub.
+        const kept: string[] = []
+        let removed = 0
+        for (const line of body.split("\n")) {
+          if (!line.trim()) continue
+          const h = parseHandoff(line)
+          if (h && h.session === session) { removed++; continue }
+          kept.push(line)
+        }
+        if (removed) {
+          if (kept.length) await fs.writeFile(p, kept.join("\n") + "\n", "utf8").catch(() => {})
+          else await fs.rm(p, { force: true }).catch(() => {})
+          n += removed
+        }
+        continue
+      }
+      const h = parseHandoff(body)
       if (h && h.session === session) { await fs.rm(p, { force: true }).catch(() => {}); n++ }
     }
   } catch {}

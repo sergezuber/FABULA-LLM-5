@@ -158,15 +158,48 @@ export type RouteDecision = {
   reason: "verbatim+scores" | "scores" | "hysteresis-hold" | "fallback-widest"
 }
 
-/** Sum of member-tool fused scores (pinned members count extra), normalized by sqrt(size)
- *  so a bulky profile can't win on mass alone. */
-export function profileScore(p: Profile, fused: Map<string, number>, pinned: Set<string>): number {
+/**
+ * Sum of member-tool fused scores, weighted by how much membership DISCRIMINATES between profiles.
+ *
+ * MEASURED 2026-08-01: the old form summed the raw scores of every tool a profile keeps, and the
+ * registry is NESTED — `coding` keeps 50 of 74 cards, `web-research` 51. So ~50 identical terms appeared
+ * in both sums and the two or three tools that actually tell the profiles apart were a rounding error on
+ * top. "search the web for the latest papers on prefix caching and summarise with links" scored
+ * coding 0.1913 against web-research 0.1895 — 0.9% apart — and chose coding, which HIDES web_search and
+ * web_fetch. "implement mergeIntervals…" scored 0.0068 against 0.0068, exactly tied. Live corroboration:
+ * 29 of 29 decisions were `coding`. An argmax whose two candidates differ by a thousandth is not
+ * selecting; it is reporting noise.
+ *
+ * A tool every profile keeps carries no information about which profile to choose, so it is weighted to
+ * zero — the same inverse-document-frequency idea BM25 already uses for words, applied to profiles. What
+ * remains is the difference between the profiles, which is the only thing the choice is actually about.
+ */
+export function profileScore(
+  p: Profile,
+  fused: Map<string, number>,
+  pinned: Set<string>,
+  weight: (toolId: string) => number = () => 1,
+): number {
   let s = 0
   for (const t of p.tools) {
-    s += fused.get(t) ?? 0
-    if (pinned.has(t)) s += 1
+    const w = weight(t)
+    if (w <= 0) continue
+    s += (fused.get(t) ?? 0) * w
+    if (pinned.has(t)) s += w
   }
   return p.tools.length ? s / Math.sqrt(p.tools.length) : 0
+}
+
+/** How much does keeping this tool distinguish one profile from the others? 0 when they all keep it. */
+export function discriminationWeight(profiles: readonly Profile[]): (toolId: string) => number {
+  const n = profiles.length
+  const kept = new Map<string, number>()
+  for (const p of profiles) for (const t of new Set(p.tools)) kept.set(t, (kept.get(t) ?? 0) + 1)
+  return (toolId: string) => {
+    const k = kept.get(toolId) ?? 0
+    if (k <= 0 || k >= n) return 0
+    return Math.log(n / k)
+  }
 }
 
 /**
@@ -180,18 +213,30 @@ export function route(
   cards: readonly ToolCard[],
   profiles: readonly Profile[],
   taskText: string,
-  opts: { current?: string; margin?: number; denseArm?: Map<string, number>; index?: Bm25Index } = {},
+  opts: {
+    current?: string
+    margin?: number
+    denseArm?: Map<string, number>
+    index?: Bm25Index
+    /** Tools the CALLER knows this task needs, whether or not their names appear in the text. A caller
+     *  that has already decided ("this ask is time-sensitive, the model will be told to web_search")
+     *  holds information no lexical index can recover from the words alone. */
+    requirePins?: readonly string[]
+  } = {},
 ): RouteDecision {
   if (!profiles.length) throw new Error("route: empty profile registry")
   const margin = opts.margin ?? 0.15
   const index = opts.index ?? buildIndex(cards)
+  const known = new Set(cards.map((c) => c.id))
   const pinned = verbatimIncludes(cards, taskText)
+  for (const t of opts.requirePins ?? []) if (known.has(t)) pinned.add(t)
   const arms = [bm25Scores(index, taskText)]
   if (opts.denseArm?.size) arms.push(opts.denseArm)
   const fused = rrfFuse(arms)
 
+  const weight = discriminationWeight(profiles)
   const profileScores: Record<string, number> = {}
-  for (const p of profiles) profileScores[p.id] = profileScore(p, fused, pinned)
+  for (const p of profiles) profileScores[p.id] = profileScore(p, fused, pinned, weight)
 
   const widest = [...profiles].sort((a, b) => b.tools.length - a.tools.length)[0]
 
@@ -202,7 +247,22 @@ export function route(
   const bestScore = profileScores[best.id]
 
   if (bestScore <= 0) {
-    return { profileId: widest.id, scores: fused, pinned, profileScores, reason: "fallback-widest" }
+    // TWO different situations reach here and they deserve different answers.
+    //
+    // (a) Tools DID score, but none of them discriminates — every candidate keeps them. Then the
+    //     profiles are interchangeable for this task, and the leanest is provably safe: a weighted sum
+    //     of zero means no tool that any profile hides has any relevance, so nothing the leanest hides
+    //     is wanted. This is the ordinary coding turn ("fix the failing test and run the suite"), and
+    //     answering it with the widest profile would disable masking on the most common task there is.
+    //
+    // (b) NOTHING scored at all — no lexical signal whatsoever. Here we genuinely know nothing, and the
+    //     original principle stands: correctness over leanness, never blind-mask a task we cannot read.
+    //     Measured example before the web pin existed: "look up news headlines about AI today" scored
+    //     0.0000 across all three.
+    const anySignal = [...pool].some((p) => p.tools.some((t) => (fused.get(t) ?? 0) > 0))
+    const leanest = [...pool].sort((a, b) => a.tools.length - b.tools.length)[0]
+    const choice = anySignal ? leanest : widest
+    return { profileId: choice.id, scores: fused, pinned, profileScores, reason: "fallback-widest" }
   }
   if (opts.current && opts.current !== best.id) {
     // Hysteresis: hold the incumbent unless the challenger's ADVANTAGE exceeds `margin` as a

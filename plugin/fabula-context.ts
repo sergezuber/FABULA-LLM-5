@@ -6,11 +6,44 @@
 import type { Plugin } from "@mimo-ai/plugin"
 import { isEnabled } from "./lib/manage"
 import { languageSteer, languagePosture } from "./lib/langsteer"
+import { FRESHNESS_RE } from "./lib/webintent"
 import { pinAwareTruncate } from "./lib/memserve"
 
-/** The language pin for the turn in flight, handed from the user-turn hook to the system-prompt hook.
- *  Module-scoped because the two hooks share no argument; last write wins, which is the current turn. */
-let LAST_LANGUAGE_PIN = ""
+/**
+ * The language pin, handed from the user-turn hook to the system-prompt hook — KEYED BY SESSION.
+ *
+ * MEASURED 2026-08-01: this was one module-level string with the comment "last write wins, which is the
+ * current turn". That assumption only holds under strict serialization, and nothing serializes these
+ * hooks. Executed: session A's Russian ask, then session B's Chinese ask, then session A's
+ * system.transform — session A's system prompt received "LANGUAGE: this conversation is in Chinese".
+ * It also busts the system-prefix cache for every session each time it flips, which is the same
+ * cross-session clobber the belt channel was made session-keyed to fix.
+ *
+ * `messages.transform` receives no sessionID, but every message carries `info.sessionID` — the same
+ * derivation the W2 conversation-rewind uses. `system.transform` is given one directly.
+ */
+const LANGUAGE_PIN = new Map<string, string>()
+/** Bounded, LRU by re-insertion. A long-lived engine sees many sessions and a map that only grows is a
+ *  leak; evicting the OLDEST-TOUCHED (not the first seen) keeps the active conversations. */
+const LANGUAGE_PIN_MAX = 64
+
+function setLanguagePin(sessionID: string, pin: string): void {
+  if (!sessionID) return
+  LANGUAGE_PIN.delete(sessionID)
+  LANGUAGE_PIN.set(sessionID, pin)
+  while (LANGUAGE_PIN.size > LANGUAGE_PIN_MAX) {
+    const oldest = LANGUAGE_PIN.keys().next().value
+    if (oldest === undefined) break
+    LANGUAGE_PIN.delete(oldest)
+  }
+}
+
+function languagePin(sessionID: string | undefined): string {
+  if (!sessionID) return ""
+  const pin = LANGUAGE_PIN.get(sessionID) ?? ""
+  if (pin) setLanguagePin(sessionID, pin) // touch: this session is active
+  return pin
+}
 import { promises as fs, realpathSync } from "node:fs"
 import * as path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -111,8 +144,9 @@ export const FabulaContext: Plugin = async (input: any) => {
   return {
     "experimental.chat.system.transform": async (_i: any, output: any) => {
       try {
-        if (LAST_LANGUAGE_PIN && Array.isArray(output?.system) && !output.system.some((x: any) => String(x).startsWith("LANGUAGE:"))) {
-          output.system.push(LAST_LANGUAGE_PIN)
+        const pin = languagePin(_i?.sessionID)
+        if (pin && Array.isArray(output?.system) && !output.system.some((x: any) => String(x).startsWith("LANGUAGE:"))) {
+          output.system.push(pin)
         }
       } catch { /* never break a turn over the language pin */ }
       if (!output || !Array.isArray(output.system)) return
@@ -215,15 +249,19 @@ export const FabulaContext: Plugin = async (input: any) => {
           // Hand the same pin to the SYSTEM channel. One channel is one point of failure: measured live,
           // the user-turn steer alone was obeyed for 1926 characters of a 1929-character answer and
           // slipped on three. Every other pin here (date, freshness) states its rule in both places.
-          LAST_LANGUAGE_PIN = languagePosture(rawAsk)
+          // Keyed by the session this message belongs to — see LANGUAGE_PIN. A single global here made
+          // one session's language overwrite another's, measured end to end.
+          setLanguagePin(String(last?.info?.sessionID ?? last?.sessionID ?? ""), languagePosture(rawAsk))
         }
         
         const t = String(textPart.text).toLowerCase()
         if (t.includes("[fabula: search first]")) return // already steered this turn
         // Triggers, EN + RU, deliberately broad on the "current" axis — a false positive costs one search,
         // a false negative costs a fabricated answer, and this project errs toward the cheaper mistake.
-        const FRESH = /\b(today|todays|current|currently|latest|recent|recently|breaking|this week|right now|as of|news|headlines|who won|score|price of|stock|weather)\b|сегодня|сейчас|последн|свеж|новост|актуальн|на данный момент|за неделю|кто выиграл|курс|погода|цена/i
-        if (!FRESH.test(t)) return
+        // The pattern lives in lib/webintent.ts because the tool ROUTER has to answer the same question:
+        // ordering a web search on a turn whose belt has hidden web_search is the one outcome neither
+        // mechanism may produce, and two copies of a rule is how that happens.
+        if (!FRESHNESS_RE.test(t)) return
         textPart.text +=
           "\n\n[FABULA: search first] This asks about CURRENT information that post-dates your training. " +
           "You MUST call the web_search tool (SearXNG is available) BEFORE answering, and base the answer on " +

@@ -193,6 +193,34 @@ def _model_info(model_id):
     return None
 
 
+def effective_context_window(model_id):
+    """The window to judge an overflow against — ASKED FOR, not configured.
+
+    MEASURED 2026-08-01: `grep -c CONTEXT-OVERFLOW adapter.err.log` returned 0 across 564 KB of log,
+    alongside 72 live `BUDGET … OVER` lines, so the classification had never once fired. The cause was
+    not the classifier — handed a real window it correctly returns `silent-truncation-length` and
+    `silent-overflow-accepted` — but its INPUT: the call site read `FABULA_CONTEXT_WINDOW`, and that
+    variable is set nowhere. Not in `.env`, not in the LaunchAgent plist, not in the running process
+    (`ps eww 1039` → 0 hits, `os.environ.get` → None). With 0 both silent branches return "" and only the
+    explicit HTTP>=400 case can be detected — i.e. the two failures the detector exists FOR were the two
+    it could not see.
+
+    The window is not a thing an operator should have to type in the first place: the serving runtime
+    reports it, this file already reads it for the clamp, and a typed number goes stale the moment a model
+    is reloaded. An explicit FABULA_CONTEXT_WINDOW still wins, for a runtime that cannot be asked.
+    """
+    try:
+        env = int(os.environ.get("FABULA_CONTEXT_WINDOW", "0") or 0)
+    except Exception:
+        env = 0
+    if env > 0:
+        return env
+    try:
+        return loaded_window(model_id) or 0
+    except Exception:
+        return 0
+
+
 def loaded_window(model_id, timeout=1.5):
     """The serving window of `model_id` as the server itself reports it. 0 when it cannot be learned —
     every caller must treat 0 as "unknown" and fall back, never as "no room"."""
@@ -463,13 +491,27 @@ def apply_reasoning(body, mapping, level, kind=API_KIND):
     if not level or not isinstance(mapping, dict):
         return body
     model = body.get("model") if isinstance(body, dict) else None
-    entry = mapping.get(model) or mapping.get("*")
-    if not isinstance(entry, dict):
+    # FALL THROUGH PER LEVEL, not per model.
+    #
+    # MEASURED 2026-08-01: `mapping.get(model) or mapping.get("*")` picks the model's table if it exists
+    # AT ALL, so the `*` table is never consulted for that model — for any level. Executed:
+    # `model=qwen3.5 level=off` returned the body UNCHANGED even though `*` defines
+    # `off -> set extra_body.thinking.type=disabled`, while the same run with a model that has no entry
+    # applied it correctly. The consequence is the opposite of what a fallback is for: adding ONE level
+    # for a model silently deletes every OTHER level for it, and the deletion is invisible because a
+    # missing patch means "leave the body alone", which looks exactly like success.
+    #
+    # A level is looked up in the model's own table first and in `*` when the model has nothing to say
+    # about that level, which is what "falls through model → '*'" says on the tin.
+    entries = [e for e in (mapping.get(model), mapping.get("*")) if isinstance(e, dict)]
+    if not entries:
         return body
-    per_level = entry.get(level)
-    if not isinstance(per_level, dict):
-        return body
-    patch = per_level.get(kind)
+    patch = None
+    for entry in entries:
+        per_level = entry.get(level)
+        if isinstance(per_level, dict) and isinstance(per_level.get(kind), dict):
+            patch = per_level[kind]
+            break
     if not isinstance(patch, dict):
         return body
     for op in patch.get("unset", []):
@@ -598,11 +640,15 @@ class Handler(BaseHTTPRequestHandler):
                             # reordering — while a content-break is real change and reordering is no cure.
                             _cls = classify_break(_prev_sp or "", _sp)
                             _shift = _cls.get("shift")
-                            _order = injection_order_report(j)
+                            # Search AT AND ABOVE the divergence, not just the stable head — the head is
+                            # one block on real traffic, so the head-only search could never name anyone.
+                            # shared/total is exactly where the prefixes stopped matching.
+                            _frac = (float(_cb[0]) / float(_cb[1])) if _cb[1] else None
+                            _order = injection_order_report(j, divergence_fraction=_frac)
                             _blame = ""
                             if _cls.get("cls") == "position-shift" and _order.get("offenders"):
-                                _o = _order["offenders"][0]
-                                _blame = " — volatile block #%d (%s) sits above %d stable block(s): %r" % (
+                                _o = _order["offenders"][-1]  # the one CLOSEST to the divergence
+                                _blame = " — likely volatile block #%d (%s) above %d stable block(s): %r" % (
                                     _o["index"], _o["role"], _o["stable_blocks_below"], _o["excerpt"][:80])
                             sys.stderr.write(
                                 "[fabula-adapter] CACHE-BREAK model=%s cause=%s%s shared=%d/%d (%.0f%%) "
@@ -970,7 +1016,7 @@ class Handler(BaseHTTPRequestHandler):
                 resp.status, "", obj["choices"][0].get("finish_reason") or "",
                 output_tokens=_usg.get("completion_tokens", -1),
                 input_tokens=_usg.get("prompt_tokens", -1),
-                context_window=int(os.environ.get("FABULA_CONTEXT_WINDOW", "0")))
+                context_window=effective_context_window(obj.get("model") or body.get("model")))
             if _reason:
                 sys.stderr.write("[fabula-adapter] CONTEXT-OVERFLOW (%s) usage=%s\n" % (_reason, _usg))
         except Exception:
@@ -990,6 +1036,19 @@ class Handler(BaseHTTPRequestHandler):
         leaks here silently degrades the cap to nothing, so the release lives at the outermost frame."""
         try:
             return BaseHTTPRequestHandler.handle_one_request(self)
+        except (ConnectionResetError, BrokenPipeError, ConnectionAbortedError, TimeoutError) as e:
+            # A CLIENT HANGING UP IS NOT AN ERROR, and printing a traceback for it is not diagnostics.
+            #
+            # MEASURED 2026-08-01: 188 `Exception occurred during processing of request from
+            # ('127.0.0.1', N)` blocks in the live log — 179 ConnectionResetError, 9 BrokenPipeError —
+            # roughly 2400 of its 6781 lines. Every one came from the SAME benign frame,
+            # `http/server.py:402 self.raw_requestline = self.rfile.readline(65537)`: reading the NEXT
+            # request on a keep-alive connection the client had already dropped. Functionally harmless,
+            # but this is the log RULE #17 mandates reading FIRST when something hangs, and a third of it
+            # was this. One line each, so the fact is still on the record without burying what matters.
+            self.close_connection = True
+            sys.stderr.write("[fabula-adapter] client hung up (%s) — connection closed\n" % type(e).__name__)
+            return None
         finally:
             adm = getattr(self, "_adm", None)
             if adm is not None:
@@ -1006,5 +1065,61 @@ class Handler(BaseHTTPRequestHandler):
         self._proxy("DELETE")
 
 
+def _stderr_path():
+    """Where fd 2 actually lands, asked of the kernel rather than assumed.
+
+    launchd hands the process an already-opened file via `StandardErrorPath`; nothing in this file names
+    it, and hardcoding one operator's path would be wrong on every other machine. macOS answers
+    `F_GETPATH` for any fd. FABULA_ADAPTER_LOG overrides, for a platform that will not."""
+    named = os.environ.get("FABULA_ADAPTER_LOG")
+    if named:
+        return named
+    try:
+        import fcntl
+        F_GETPATH = 50  # macOS <sys/fcntl.h>
+        # `fcntl.fcntl` RETURNS the filled buffer; it does not mutate one passed in (a bytearray argument
+        # raises "cannot be interpreted as an integer"). Caught by running the resolver in a process whose
+        # fd 2 really was a file, the way launchd opens it — it answered None, so the rotator would have
+        # done nothing in production while every test of the surrounding logic passed.
+        p = fcntl.fcntl(2, F_GETPATH, b"\0" * 1024).split(b"\0", 1)[0].decode("utf-8", "replace")
+        return p if p.startswith("/") else None
+    except Exception:
+        return None
+
+
+def _rotate_log_forever():
+    """Keep the diagnostic log bounded.
+
+    MEASURED 2026-08-01: nothing bounded it. `grep -c "rotat\\|RotatingFile\\|maxBytes"` returned 0, the
+    plist uses a plain append-only `StandardErrorPath`, and the file stood at 568 KB and grew during the
+    audit itself. Its two siblings, `adapter.err.log.old` and `adapter.err.log.pre25`, are hand-made
+    copies — the rotation existed, performed by a person. This is the log RULE #17 mandates reading FIRST
+    when anything hangs, so it being unbounded is a diagnostic problem, not a disk one.
+
+    Truncating IN PLACE is what makes this safe under launchd: fd 2 was opened with O_APPEND, so the very
+    next write lands at offset 0 of the same inode. Renaming the file instead would leave the process
+    writing into a file nobody is reading."""
+    path = _stderr_path()
+    if not path:
+        return
+    try:
+        limit = int(os.environ.get("FABULA_ADAPTER_LOG_MAX", str(20 * 1024 * 1024)) or 0)
+    except Exception:
+        limit = 20 * 1024 * 1024
+    if limit <= 0:
+        return
+    import shutil, time as _t
+    while True:
+        try:
+            if os.path.getsize(path) > limit:
+                shutil.copyfile(path, path + ".1")  # ONE previous generation, so a rotation loses nothing
+                os.truncate(path, 0)
+                sys.stderr.write("[fabula-adapter] log rotated at %d bytes; previous generation kept at %s.1\n" % (limit, path))
+        except Exception:
+            pass
+        _t.sleep(60)
+
+
 if __name__ == "__main__":
+    threading.Thread(target=_rotate_log_forever, daemon=True).start()
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()

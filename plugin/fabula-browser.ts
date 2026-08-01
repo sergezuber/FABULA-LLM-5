@@ -26,7 +26,28 @@ async function getPage(): Promise<any> {
   let chromium: any
   try { ({ chromium } = await import("playwright")) }
   catch { throw new Error("Playwright is not installed. Run: cd plugin && bun add playwright && bunx playwright install chromium") }
-  if (!_pw || !_pw.isConnected?.()) _pw = await chromium.launch({ headless: true })
+  if (!_pw || !_pw.isConnected?.()) {
+    try {
+      _pw = await chromium.launch({ headless: true })
+    } catch (e: any) {
+      // A MISSING BROWSER BINARY IS AN INSTALL STEP, NOT A STACK TRACE.
+      //
+      // MEASURED 2026-08-01: all 13 tools registered fine and every one of them failed at launch with
+      // `Executable doesn't exist at …/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64` —
+      // the installed builds were 1228 while the RESOLVED playwright-core wanted 1234. The package and
+      // the browser it drives version independently, so this drifts whenever either moves, and the raw
+      // error names an absolute path rather than the one command that fixes it. Playwright's own
+      // `install` reads the same browsers.json, so it always fetches the revision this copy wants.
+      const msg = String(e?.message ?? e)
+      const revision = msg.match(/(chromium[a-z_-]*-\d+)/i)?.[1]
+      throw new Error(
+        `The browser could not start${revision ? ` — this Playwright wants ${revision}` : ""}. ` +
+          `Install the matching build with:\n  cd plugin && bunx playwright install chromium\n` +
+          `(Playwright's installer reads the same manifest the driver does, so it fetches the right ` +
+          `revision even when an older one is already present.)\n\nUnderlying error: ${msg.slice(0, 400)}`,
+      )
+    }
+  }
   if (!_page || _page.isClosed?.()) {
     _page = await _pw.newPage({ userAgent: "FABULA-LLM-5/1.0 (research agent)" })
     _page.setDefaultTimeout(20000)

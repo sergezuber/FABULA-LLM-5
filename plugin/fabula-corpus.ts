@@ -69,7 +69,7 @@ function countReadableFiles(dir: string, depth = 2): number {
     return 0
   }
 }
-import { existsSync } from "node:fs"
+import { existsSync, statSync } from "node:fs"
 
 const REPORT_TAG = "[fabula-corpus-report]"
 const RECURSION_PREFIX = REPORT_TAG // a re-injected report must not re-trigger the intercept
@@ -77,10 +77,27 @@ const RECURSION_PREFIX = REPORT_TAG // a re-injected report must not re-trigger 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const WORKER = join(HERE, "lib", "corpus-worker.ts")
 // Resolve `bun` the way setup.sh / the app does (GUI-launched apps miss the shell PATH).
+/**
+ * The interpreter to spawn the worker with — the first candidate that EXISTS, not the first that is a
+ * non-empty string.
+ *
+ * MEASURED 2026-08-01: this returned the first TRUTHY candidate, and candidate two is
+ * `join(HOME, ".bun/bin/bun")` — a non-empty string whenever HOME is set, i.e. always. So the homebrew
+ * and /usr/local fallbacks below it were unreachable code, and on a machine where bun lives only in
+ * /opt/homebrew the worker would be spawned at a path that does not exist. On this machine
+ * ~/.bun/bin/bun happens to be real, which is exactly why nothing ever noticed.
+ *
+ * An explicitly named FABULA_BUN_BIN is honoured whether or not it resolves — a caller who named an
+ * interpreter has decided, and silently substituting a different one would be worse than failing.
+ */
 function bunBin(): string {
-  const cands = [process.env.FABULA_BUN_BIN, join(process.env.HOME || "", ".bun", "bin", "bun"), "/opt/homebrew/bin/bun", "/usr/local/bin/bun", "bun"]
-  for (const c of cands) if (c) return c
-  return "bun"
+  const named = process.env.FABULA_BUN_BIN
+  if (named) return named
+  const cands = [join(process.env.HOME || "", ".bun", "bin", "bun"), "/opt/homebrew/bin/bun", "/usr/local/bin/bun"]
+  for (const c of cands) {
+    try { if (statSync(c).isFile()) return c } catch { /* not here; try the next */ }
+  }
+  return "bun" // last resort: whatever PATH resolves
 }
 
 /** Did a previous attempt hand this session's task back to the model? The worker writes the marker

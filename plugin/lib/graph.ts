@@ -43,6 +43,43 @@ export function plannerPrompt(task: string): string {
 }
 
 // argrepair-style: extract the first {...}, parse loosely, cap at 5, dedupe ids, drop self/forward deps. Never throws.
+/**
+ * Supply the closing brackets a truncated JSON value is missing, or null when the text is not a
+ * bracket-balance problem at all.
+ *
+ * Scans once, tracking string state (and escapes, so a `\"` inside a string is not a terminator) and the
+ * open `{`/`[` stack. An unterminated STRING means the cut landed mid-value and no honest completion
+ * exists — return null rather than invent the rest of a word. Otherwise close the stack in order. This
+ * adds punctuation the grammar already required; it never adds content.
+ */
+export function closeTruncatedJson(text: string): string | null {
+  if (typeof text !== "string" || !text.trim()) return null
+  const stack: string[] = []
+  let inString = false
+  let escaped = false
+  for (const ch of text) {
+    if (inString) {
+      if (escaped) escaped = false
+      else if (ch === "\\") escaped = true
+      else if (ch === '"') inString = false
+      continue
+    }
+    if (ch === '"') inString = true
+    else if (ch === "{" || ch === "[") stack.push(ch)
+    else if (ch === "}" || ch === "]") {
+      const open = stack.pop()
+      // More closers than openers is a malformed reply, not a truncated one.
+      if (!open || (ch === "}" ? open !== "{" : open !== "[")) return null
+    }
+  }
+  if (inString) return null
+  if (!stack.length) return null // already balanced — nothing here to repair
+  // A trailing comma or a dangling key would still not parse; drop whatever incomplete tail follows the
+  // last completed value, then close.
+  const trimmed = text.replace(/,\s*$/, "")
+  return trimmed + stack.reverse().map((o) => (o === "{" ? "}" : "]")).join("")
+}
+
 export function parseGraph(raw: string): { graph: Graph | null; error?: string } {
   if (typeof raw !== "string") return { graph: null, error: "empty planner output" }
   // Robust extraction for reasoning models (which think in prose then maybe emit JSON): try a fenced
@@ -54,6 +91,28 @@ export function parseGraph(raw: string): { graph: Graph | null; error?: string }
   if (fb >= 0 && lb > fb) cands.push(raw.slice(fb, lb + 1))
   let obj: any = null
   for (const c of cands) { try { const o = JSON.parse(c); if (o && (Array.isArray(o.steps) || Array.isArray(o))) { obj = o; break } } catch {} }
+  // CLOSE WHAT THE MODEL LEFT OPEN.
+  //
+  // MEASURED 2026-08-01: a full run reported `workflow: 1 step(s)` — the silent single-step fallback, not
+  // a planner decision — while the planner had in fact emitted a VALID 4-step diamond. The reply ended
+  // `..."needs":["s2","s3","s4"]}]`: ONE closing brace short. This function's own comment promised
+  // "argrepair-style … parse loosely", and it was a plain JSON.parse over two spans with no balancing at
+  // all. Reproduced across four planner calls: runs 1-3 parsed (4, 5 and 4 steps), run 4 returned null —
+  // and `parseGraph(raw + "}")` parsed it into 5 steps across 3 levels. So roughly one run in four
+  // silently lost its entire orchestration, and the trace line read as though one step had been intended.
+  //
+  // Only the CLOSERS are supplied, and only when the prefix is otherwise valid JSON — nothing is invented
+  // about the content. A reply that is genuinely not JSON still fails, exactly as before.
+  if (!obj) {
+    for (const c of cands) {
+      const repaired = closeTruncatedJson(c)
+      if (!repaired) continue
+      try {
+        const o = JSON.parse(repaired)
+        if (o && (Array.isArray(o.steps) || Array.isArray(o))) { obj = o; break }
+      } catch { /* the completion did not help; try the next candidate */ }
+    }
+  }
   if (!obj) return { graph: null, error: "no parseable steps JSON in planner output" }
   const rawSteps = Array.isArray(obj?.steps) ? obj.steps : Array.isArray(obj) ? obj : []
   if (!rawSteps.length) return { graph: null, error: "planner produced no steps" }

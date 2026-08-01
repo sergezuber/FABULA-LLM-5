@@ -41,6 +41,7 @@ import { trace } from "./trace"
 import { loadPriorDiscoveredTitles } from "./checkpoint-retry"
 import * as CheckpointContext from "./checkpoint-context"
 import { buildProgressDiff } from "./checkpoint-progress-reconcile"
+import { CHECKPOINT_WRITER_TOOLS } from "../tool/memory-path-guard"
 
 const log = Log.create({ service: "session.checkpoint" })
 
@@ -864,7 +865,9 @@ export const layer: Layer.Layer<
         description: `checkpoint writer for session ${input.sessionID} covering ${rangeDesc}`,
         task: promptText,
         context: "full",
-        tools: ["read", "write", "edit", "apply_patch", "glob", "grep", "task"],
+        // ONE definition, shared with the guard that enforces it (tool/memory-path-guard.ts). It used to
+        // be a literal here and nothing read it back, so the "restriction" restricted nothing.
+        tools: [...CHECKPOINT_WRITER_TOOLS],
         model: {
           providerID: input.model.providerID as ProviderID,
           modelID: input.model.modelID as ModelID,

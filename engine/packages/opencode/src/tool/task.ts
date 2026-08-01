@@ -168,10 +168,23 @@ export function recoverTaskArgs(rawArgs: unknown): TaskOperation | undefined {
   if (rawArgs == null || typeof rawArgs !== "object") return undefined
   let obj = rawArgs as Record<string, unknown>
   if (typeof obj.operation === "string") {
+    const raw = obj.operation.trim()
     try {
-      const inner = JSON.parse(obj.operation)
+      const inner = JSON.parse(raw)
       if (inner && typeof inner === "object" && !Array.isArray(inner)) obj = { operation: inner }
-    } catch {}
+    } catch {
+      // A BARE ACTION NAME, e.g. {"operation":"list"}. MEASURED 2026-08-01: seven failures in a single
+      // day, every one with exactly these args, every one answered "Invalid input: expected object,
+      // received string → at operation". `JSON.parse("list")` throws, and the catch used to swallow it
+      // and leave the string in place, so the call could not succeed however many times it was retried —
+      // and a call that cannot succeed is retried forever (the 456-call loop had the same root).
+      // A bare verb is a readable intent; it only ever needed its wrapper.
+      if (raw && !raw.startsWith("{") && !raw.startsWith("[")) {
+        const rest: Record<string, unknown> = { ...obj }
+        delete rest.operation
+        obj = { operation: { action: raw, ...rest } }
+      }
+    }
   }
   if (obj.operation && typeof obj.operation === "object" && !Array.isArray(obj.operation))
     return { operation: obj.operation } as TaskOperation

@@ -127,6 +127,39 @@ const fetchApi = async () => {
   return { ok: result.ok, text: await result.text() }
 }
 
+/**
+ * The foreign-brand scrub, applied to the LIVE CATALOG rather than only to the built bundle.
+ *
+ * MEASURED 2026-08-01: the naming gate greps the built frontend bundle and reported 0 hits — a green it
+ * had earned honestly, because the bundle really is clean. But the provider catalog does not come from
+ * the bundle; it is fetched from the models registry at runtime and rendered straight into Settings ▸
+ * Providers, where a user saw "OpenCode Zen" and "OpenCode Go". A gate that checks one path and passes
+ * while another path carries the same string is a gate that produces a false green.
+ *
+ * SCOPE, deliberately narrow, because getting this wrong in the other direction removes functionality:
+ *   - Provider IDs are NOT touched. `opencode` / `opencode-go` are kept as inert contracts on purpose —
+ *     renaming them would orphan a user's stored credentials and model selections.
+ *   - The real model vendors are NOT touched either. Their names identify models a user can actually
+ *     select, so stripping them would delete working providers from the picker to satisfy a string
+ *     search — removing functionality in the name of a naming rule.
+ * Only the DISPLAY name of the forked-from vendor is rewritten, which is what the frontend scrub already
+ * did everywhere else it appears.
+ */
+const FOREIGN_BRAND = /\bopen ?code\b/gi
+
+function scrubForeignBrand<T>(catalog: T): T {
+  if (!catalog || typeof catalog !== "object") return catalog
+  for (const provider of Object.values(catalog as Record<string, { name?: unknown; doc?: unknown }>)) {
+    if (!provider || typeof provider !== "object") continue
+    if (typeof provider.name === "string" && FOREIGN_BRAND.test(provider.name)) {
+      FOREIGN_BRAND.lastIndex = 0
+      provider.name = provider.name.replace(FOREIGN_BRAND, "Zen").replace(/\s+/g, " ").trim()
+    }
+    FOREIGN_BRAND.lastIndex = 0
+  }
+  return catalog
+}
+
 export const Data = lazy(async () => {
   const result = await Filesystem.readJson(Flag.MIMOCODE_MODELS_PATH ?? filepath).catch(() => {})
   if (result) return result
@@ -151,7 +184,7 @@ export const Data = lazy(async () => {
 
 export async function get() {
   const result = await Data()
-  return result as Record<string, Provider>
+  return scrubForeignBrand(result) as Record<string, Provider>
 }
 
 export async function refresh(force = false) {

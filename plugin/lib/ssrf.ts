@@ -37,14 +37,70 @@ function inCidr(ipInt: number, netStr: string, bits: number): boolean {
   return (ipInt & mask) === (net & mask)
 }
 
+/**
+ * Expand an IPv6 literal to its eight 16-bit groups, or null if it is not one.
+ *
+ * MEASURED 2026-08-01, and this is why a parser replaced a regex. `isBlockedIp` had an explicit branch
+ * for `::ffff:<dotted-ipv4>` — and it was UNREACHABLE from every URL, because
+ * `new URL("http://[::ffff:169.254.169.254]/").hostname` returns `[::ffff:a9fe:a9fe]`: the WHATWG parser
+ * canonicalises the embedded v4 into HEX before any guard sees it. So the branch only ever fired when
+ * called directly with the dotted spelling, which `checkUrlSync` never does. Proven exploitable to this
+ * machine's own services: `safeFetch("http://127.0.0.1:9/")` refused, `safeFetch("http://[::ffff:127.0.0.1]:9/")`
+ * dialled out — and the engine on :4096, the adapter on :1235 and SearXNG all sit behind that spelling.
+ *
+ * A spelling-based test can only ever cover the spellings someone thought of. Sixteen bytes of address
+ * have one meaning however they are written, so they are parsed once and every rule reads the bytes.
+ */
+export function ipv6Groups(host: string): number[] | null {
+  let s = host.trim().toLowerCase().replace(/^\[|\]$/g, "").replace(/%.*$/, "") // drop any zone id
+  if (!s.includes(":")) return null
+  // A trailing dotted quad is legal in every IPv6 spelling (::ffff:1.2.3.4) — fold it into two groups.
+  const dotted = s.match(/(?:^|:)((?:\d{1,3}\.){3}\d{1,3})$/)
+  if (dotted) {
+    const n = ipv4ToInt(dotted[1])
+    if (n === null) return null
+    s = s.slice(0, s.length - dotted[1].length) + ((n >>> 16) & 0xffff).toString(16) + ":" + (n & 0xffff).toString(16)
+  }
+  const halves = s.split("::")
+  if (halves.length > 2) return null
+  const parse = (part: string): number[] | null => {
+    if (!part) return []
+    const out: number[] = []
+    for (const g of part.split(":")) {
+      if (!/^[0-9a-f]{1,4}$/.test(g)) return null
+      out.push(parseInt(g, 16))
+    }
+    return out
+  }
+  const head = parse(halves[0] ?? "")
+  const tail = halves.length === 2 ? parse(halves[1] ?? "") : []
+  if (head === null || tail === null) return null
+  if (halves.length === 1) return head.length === 8 ? head : null
+  const gap = 8 - head.length - tail.length
+  if (gap < 1) return null
+  return [...head, ...new Array(gap).fill(0), ...tail]
+}
+
+/** The IPv4 address an IPv6 literal embeds, in every shape that carries one, or null. */
+function embeddedV4(groups: readonly number[]): string | null {
+  const v4 = `${groups[6] >> 8}.${groups[6] & 0xff}.${groups[7] >> 8}.${groups[7] & 0xff}`
+  const zeroTo = (n: number) => groups.slice(0, n).every((g) => g === 0)
+  // ::ffff:a.b.c.d — IPv4-mapped, the form the URL parser produces.
+  if (zeroTo(5) && groups[5] === 0xffff) return v4
+  // ::a.b.c.d — IPv4-compatible (deprecated, still resolvable). ::0 and ::1 are their own specials.
+  if (zeroTo(6) && !(groups[6] === 0 && groups[7] <= 1)) return v4
+  // 64:ff9b::a.b.c.d and 64:ff9b:1::/48 — the well-known NAT64 prefixes carry a real v4 destination.
+  if (groups[0] === 0x64 && groups[1] === 0xff9b) return v4
+  return null
+}
+
 /** Classify a literal IP (v4 or v6) as private/loopback/link-local/metadata → blocked. */
 export function isBlockedIp(ip: string): { blocked: boolean; code: string } {
   const host = ip.replace(/^\[|\]$/g, "").toLowerCase()
   if (METADATA_IPS.has(host)) return { blocked: true, code: "cloud_metadata" }
 
-  // IPv4-mapped / -embedded IPv6 (::ffff:169.254.169.254, ::ffff:a.b.c.d) → classify the v4 part
-  const mapped = host.match(/(?:^|:)((?:\d{1,3}\.){3}\d{1,3})$/)
-  const v4 = ipv4ToInt(host) !== null ? host : mapped ? mapped[1] : null
+  const groups = ipv6Groups(host)
+  const v4 = ipv4ToInt(host) !== null ? host : groups ? embeddedV4(groups) : null
 
   if (v4) {
     const n = ipv4ToInt(v4)
@@ -61,11 +117,14 @@ export function isBlockedIp(ip: string): { blocked: boolean; code: string } {
     return { blocked: false, code: "" }
   }
 
-  // IPv6 specials
-  if (host === "::1" || host === "0:0:0:0:0:0:0:1") return { blocked: true, code: "loopback" }
-  if (host === "::" ) return { blocked: true, code: "this_host" }
-  if (/^fe80:/.test(host)) return { blocked: true, code: "link_local" }       // link-local
-  if (/^f[cd][0-9a-f][0-9a-f]:/.test(host)) return { blocked: true, code: "ula" } // fc00::/7 unique-local
+  // IPv6 specials, read off the parsed bytes so every spelling of one address gets one answer.
+  if (groups) {
+    if (groups.every((g, i) => (i < 7 ? g === 0 : g === 1))) return { blocked: true, code: "loopback" }
+    if (groups.every((g) => g === 0)) return { blocked: true, code: "this_host" }
+    if ((groups[0] & 0xffc0) === 0xfe80) return { blocked: true, code: "link_local" } // fe80::/10
+    if ((groups[0] & 0xfe00) === 0xfc00) return { blocked: true, code: "ula" }        // fc00::/7
+    if ((groups[0] & 0xffc0) === 0xfec0) return { blocked: true, code: "site_local" } // fec0::/10, deprecated but routable on real internal networks
+  }
   return { blocked: false, code: "" }
 }
 

@@ -50,3 +50,46 @@ def test_one_measured_ratio_for_characters_to_tokens():
     # 320 134 characters came back from the runtime as 60 332 tokens.
     assert abs(U.estimate_tokens(320134) - 60332) < 50
     assert U.CHARS_PER_TOKEN == 5.306
+
+
+# ── the overflow classifier needs a WINDOW, and nobody was ever going to type one (2026-08-01) ───────
+# MEASURED: `grep -c CONTEXT-OVERFLOW adapter.err.log` -> 0 across 564 KB, alongside 72 live
+# `BUDGET … OVER` lines. The classifier is fine — handed a real window it returns silent-truncation-length
+# and silent-overflow-accepted correctly. Its INPUT was the problem: the call site read
+# FABULA_CONTEXT_WINDOW, and that variable is set NOWHERE (not .env, not the plist, not the running
+# process). At 0 both silent branches return "" and only the explicit HTTP>=400 case can fire — i.e. the
+# two failures the detector exists FOR were the two it could not see.
+def test_effective_window_prefers_an_explicit_setting():
+    prev = os.environ.get("FABULA_CONTEXT_WINDOW")
+    os.environ["FABULA_CONTEXT_WINDOW"] = "65536"
+    try:
+        assert A.effective_context_window("anything") == 65536
+    finally:
+        if prev is None:
+            os.environ.pop("FABULA_CONTEXT_WINDOW", None)
+        else:
+            os.environ["FABULA_CONTEXT_WINDOW"] = prev
+
+
+def test_effective_window_falls_back_to_the_runtime_not_to_zero_forever():
+    prev = os.environ.get("FABULA_CONTEXT_WINDOW")
+    os.environ.pop("FABULA_CONTEXT_WINDOW", None)
+    try:
+        # Whatever the runtime says (0 when it cannot be reached) — the point is that the env var is not
+        # the ONLY source, which is what made the classification permanently dead.
+        w = A.effective_context_window("no-such-model-anywhere")
+        assert isinstance(w, int) and w >= 0
+    finally:
+        if prev is not None:
+            os.environ["FABULA_CONTEXT_WINDOW"] = prev
+
+
+def test_both_silent_branches_fire_once_a_window_is_known():
+    w = 131072
+    assert U.classify_overflow(200, "", "length", output_tokens=0, input_tokens=w - 500,
+                                          context_window=w) == "silent-truncation-length"
+    assert U.classify_overflow(200, "", "stop", output_tokens=50, input_tokens=w + 5000,
+                                          context_window=w) == "silent-overflow-accepted"
+    # and an ordinary turn is still silent
+    assert U.classify_overflow(200, "", "stop", output_tokens=50, input_tokens=1000,
+                                          context_window=w) == ""

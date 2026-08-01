@@ -82,7 +82,10 @@ export function buildToolCards(servers: string[] = mcpServersFromConfig()): Tool
 }
 
 /** Web-relevant tools that the web-research profile KEEPS from the non-coding mask. */
-const WEB_KEEP = new Set(["web_fetch", "web_search", "image_search", "weather_fetch", "places_search", "webfetch"])
+/** The tools a WEB task needs visible. Exported because the belt wiring pins them when the harness has
+ *  already decided the ask needs the web (lib/webintent.ts) — one list, so the profile that keeps them
+ *  and the pin that requires them can never name different tools. */
+export const WEB_KEEP = new Set(["web_fetch", "web_search", "image_search", "weather_fetch", "places_search", "webfetch"])
 
 export type BeltProfile = {
   id: string

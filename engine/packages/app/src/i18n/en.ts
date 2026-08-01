@@ -1218,6 +1218,8 @@ export const dict = {
   "settings.usage.receipts": "Receipts minted",
   "settings.usage.secondOpinions": "Second opinions",
   "settings.usage.failedVerifies": "Red verifies",
+  "settings.usage.pendingGates": "Awaiting a gate",
+  "settings.usage.noVerifyCommand": "No verify command",
   "settings.usage.topTools": "Top tools",
   "settings.usage.byModel": "By model",
   "settings.usage.empty": "No usage yet",

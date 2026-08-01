@@ -22,7 +22,7 @@ import { readFileSync, writeFileSync, mkdirSync, renameSync, readdirSync, statSy
 import { join, dirname } from "node:path"
 import { homedir, totalmem } from "node:os"
 import { planWindow, DEFAULT_POLICY, type Resident, type WindowPlan } from "./windowplan"
-import { fitCost, fitCostFromSamples, addObservation, safeSecondWindow, marginalCost, MIN_SIGNAL_TOKENS, type Observation, type KvSample } from "./kvcost"
+import { fitCost, fitCostFromSamples, addObservation, safeSecondWindow, marginalCost, MIN_SIGNAL_TOKENS, SAMPLE_DISPERSION_LIMIT, type Observation, type KvSample } from "./kvcost"
 import { resolveModelDir } from "./modeldigest"
 
 /** GUI-launched apps do not inherit the shell PATH, so a bare `lms` is not found — the same trap the
@@ -102,26 +102,63 @@ export function usedBytes(): number {
 }
 
 /**
+ * A size unit as the printer MEANT it, not as it is convenient to read.
+ *
+ * MEASURED 2026-08-01, and the measurement is the whole point: `lms ps` prints `21.95 GB` for
+ * kat-coder-v2.5-dev-optiq, and that model's weight files on disk sum to 21,950,414,309 bytes — which is
+ * 21.95 × 10⁹, the DECIMAL reading, to four significant figures. The binary reading of the same string
+ * (21.95 × 1024³ = 23,568,633,036) is 1.51 GiB of weights that do not exist. Applying it inflated the
+ * "already spent" term in planWindow by 7.37% of the model's footprint, so every window this machine
+ * planned was smaller than it could afford, and the error grew with the model.
+ *
+ * A suffix WITH an `i` (GiB/MiB/KiB) is binary by definition; one without is decimal. Both spellings are
+ * honoured rather than one being guessed at, because which one a runtime prints is that runtime's choice
+ * and nothing here can make it consistent.
+ */
+export function unitBytes(unit: string): number {
+  const u = unit.toLowerCase()
+  if (u === "gib") return 1024 ** 3
+  if (u === "mib") return 1024 ** 2
+  if (u === "kib") return 1024
+  if (u === "gb") return 1e9
+  if (u === "mb") return 1e6
+  if (u === "kb") return 1e3
+  return 1 // bare "B"
+}
+
+/**
  * The model's weights, from the serving runtime. This IS reported and IS stable, which is exactly why it
  * is taken from here and the per-token cost is taken from the machine — each figure from the source that
  * actually varies with it.
  */
-export function weightsBytesOf(modelId: string): number {
+/** One `lms ps`, parsed. Callers that need SEVERAL models' weights must use this rather than calling
+ *  weightsBytesOf in a loop — each call is a process spawn with an 8s ceiling, and doing it per resident
+ *  turned a hermetic test from milliseconds into 175 seconds under load. One reading answers every id. */
+export function weightsFromLmsPs(): { line: string; bytes: number }[] {
   try {
     const out = execFileSync(lmsBin(), ["ps"], {
       encoding: "utf8",
       timeout: 8000,
       env: { ...process.env, PATH: `${PATH_PREFIX}:${process.env.PATH ?? ""}` },
     })
+    const rows: { line: string; bytes: number }[] = []
     for (const line of out.split("\n")) {
-      if (!line.includes(modelId)) continue
-      const m = line.match(/([\d.]+)\s*(GB|GiB|MB|MiB)/i)
+      const m = line.match(/([\d.]+)\s*(GB|GiB|MB|MiB|KB|KiB|B)\b/i)
       if (!m) continue
       const n = Number(m[1])
-      return /g/i.test(m[2]) ? n * 1024 ** 3 : n * 1024 ** 2
+      if (!Number.isFinite(n) || n <= 0) continue
+      rows.push({ line, bytes: n * unitBytes(m[2]!) })
     }
+    return rows
   } catch {
-    /* fall through */
+    return []
+  }
+}
+
+export function weightsBytesOf(modelId: string): number {
+  if (!modelId) return 0
+  for (const row of weightsFromLmsPs()) {
+    if (row.line.includes(modelId)) return row.bytes
   }
   return 0
 }
@@ -188,11 +225,40 @@ export async function readServed(timeoutMs = 2500): Promise<ServedModel[]> {
 
 /** Everything else currently holding memory. The model is not alone: an embedding model or a second
  *  model for cross-checking can be resident, and a ceiling that ignores them is wrong exactly when it
- *  matters — at the moment the second one loads. */
-export function residentsOther(served: readonly ServedModel[], selfId: string): Resident[] {
-  return served
-    .filter((m) => m.state === "loaded" && m.id !== selfId && m.bytes > 0)
-    .map((m) => ({ id: m.id, bytes: m.bytes }))
+ *  matters — at the moment the second one loads.
+ *
+ *  MEASURED 2026-08-01: this used to end in `.filter(m => m.bytes > 0)`, and `bytes` is
+ *  `size_bytes ?? bytes ?? 0` off the serving API — which omits BOTH fields entirely on this runtime,
+ *  even for the loaded model. So the filter dropped every resident there has ever been and the term
+ *  could not fire once. A filter that always empties its own input is not a filter, it is an assumption
+ *  that the machine is empty.
+ *
+ *  The size IS available, just not from that reader: `lms ps` prints a SIZE column for every loaded
+ *  model, and failing that the model's own files are on disk. Both are already used for the model being
+ *  loaded; a resident is the same question about a different id. A resident that STILL cannot be sized
+ *  is reported with `bytes: 0` and planWindow refuses on it — never dropped, because dropping it is the
+ *  reading that over-commits.
+ *
+ *  `resolveBytes` is injected so the decision stays testable without a running runtime. */
+export function residentsOther(
+  served: readonly ServedModel[],
+  selfId: string,
+  resolveBytes?: (id: string) => number,
+): Resident[] {
+  const others = served.filter((m) => m.state === "loaded" && m.id !== selfId && m.id !== "")
+  if (!others.length) return []
+  // ONE `lms ps` for the whole set, read lazily — a spawn per resident is an 8s ceiling per resident.
+  const resolve =
+    resolveBytes ??
+    (() => {
+      let rows: { line: string; bytes: number }[] | undefined
+      return (id: string) => {
+        if (others.every((m) => m.bytes > 0)) return 0 // nothing to look up; never spawn
+        rows ??= weightsFromLmsPs()
+        return rows.find((r) => r.line.includes(id))?.bytes ?? weightsOnDisk(id)
+      }
+    })()
+  return others.map((m) => ({ id: m.id, bytes: m.bytes > 0 ? m.bytes : Math.max(0, resolve(m.id) || 0) }))
 }
 
 /** Where request-time cache readings live. Separate from the load-time store: they are different
@@ -231,16 +297,93 @@ function writeSamples(s: SampleStore): void {
  *  real text; its LENGTH is what matters, and the ratio to tokens is measured per model, never assumed. */
 const FILLER_UNIT = "the quarterly inventory audit completed without material discrepancy. "
 
-export function recordKvSample(modelId: string, sample: KvSample, cap = 8): void {
-  if (!(sample?.contextTokens > 0 && sample?.kvBytes > 0)) return
+/** A calibration's filler must be UNIQUE to that calibration.
+ *
+ *  MEASURED 2026-08-01, and it is this project's most-repeated measurement error arriving for the third
+ *  time. A calibration ran against the resident model and reported 29,132 B/token where the stored
+ *  reading for the same model at the same provisioning said 123,758 — 4.25× apart, and in the direction
+ *  the module itself names as the dangerous one. The cause is that every calibration built its filler by
+ *  repeating one CONSTANT sentence, so the second calibration of a model sends a prefix the runtime has
+ *  already cached. A prefix-cache HIT allocates nothing, `peak - before` collapses, and the marginal
+ *  reports a fraction of the truth. The same shape is on record twice already: "a shared-prefix
+ *  benchmark of a prefix-cache mechanism measures nothing" (W5) and the 40x phantom concurrency win
+ *  that turned out to be a warm cache.
+ *
+ *  A nonce in front of the filler makes the prefix new every time, so the tokens really are allocated
+ *  and the growth really is the cache. */
+function fillerFor(chars: number, nonce: string): string {
+  const body = FILLER_UNIT.repeat(Math.max(1, Math.ceil(chars / FILLER_UNIT.length)))
+  return `${nonce} ${body}`
+}
+
+/** What happened to a reading offered to the store. `admitted:false` is not a failure — it is the store
+ *  refusing to be made worse by a reading it cannot reconcile. */
+export interface SampleAdmission {
+  admitted: boolean
+  reason: string
+}
+
+export function recordKvSample(modelId: string, sample: KvSample, cap = 8): SampleAdmission {
+  if (!(sample?.contextTokens > 0 && sample?.kvBytes > 0)) {
+    return { admitted: false, reason: "the reading carries no usable numbers" }
+  }
   // A reading the fit will discard must never be WRITTEN. Storing it accomplishes nothing and does real
   // harm: the store is FIFO-capped, so sub-floor readings evict good ones, and a run of them looks like
   // agreement to the dispersion guard. Measured 2026-07-31: six discarded readings accumulated for one
   // model while the fit reported "no readings", and four more would have evicted the only true one.
-  if (sample.contextTokens < MIN_SIGNAL_TOKENS) return
+  if (sample.contextTokens < MIN_SIGNAL_TOKENS) {
+    return {
+      admitted: false,
+      reason: `taken over ${sample.contextTokens} tokens, below the ${MIN_SIGNAL_TOKENS}-token floor where drift outweighs the cache`,
+    }
+  }
   const store = readSamples()
-  store[modelId] = [...(store[modelId] ?? []), sample].slice(-cap)
+  const existing = store[modelId] ?? []
+
+  // A NEW reading that cannot be reconciled with the old ones must not be allowed to break the store.
+  //
+  // MEASURED 2026-08-01: one honest calibration wrote a disagreeing reading and moved this model's fit
+  // from a usable 123,758 B/token to REFUSING — so planWindow could no longer size a window at all, and
+  // the loader went silent, all from a measurement that was itself the wrong one. The dispersion guard
+  // downstream behaved correctly; the defect was that the store admitted a reading it already had every
+  // reason to distrust. Screening on the floor alone was never enough: agreement is the other half.
+  //
+  // On a real disagreement the SAFE reading is the more expensive one. Under-reading is the direction
+  // that grants a window the machine cannot pay for and drives the desktop into swap; over-reading only
+  // costs some window. So a cheaper outlier is refused outright, and a dearer one REPLACES the store and
+  // says it did — never quietly averaged in, which is how a disagreement becomes a confident wrong number.
+  const newRate = sample.kvBytes / sample.contextTokens
+  const rates = existing
+    .filter((s) => s.contextTokens >= MIN_SIGNAL_TOKENS && s.kvBytes > 0)
+    .map((s) => s.kvBytes / s.contextTokens)
+  if (rates.length) {
+    const lo = Math.min(...rates, newRate)
+    const hi = Math.max(...rates, newRate)
+    if (lo > 0 && hi / lo > SAMPLE_DISPERSION_LIMIT) {
+      const known = Math.max(...rates)
+      if (newRate < known) {
+        return {
+          admitted: false,
+          reason:
+            `${Math.round(newRate).toLocaleString()} B/token disagrees with the ${Math.round(known).toLocaleString()} ` +
+            `B/token already measured for this model (${(known / newRate).toFixed(1)}×) and is the CHEAPER of the two; ` +
+            `a cheaper reading is the one that over-commits the machine, so the store keeps what it had`,
+        }
+      }
+      store[modelId] = [sample]
+      writeSamples(store)
+      return {
+        admitted: true,
+        reason:
+          `${Math.round(newRate).toLocaleString()} B/token disagrees with the ${Math.round(known).toLocaleString()} ` +
+          `B/token previously stored and is DEARER; the older readings were discarded because trusting the ` +
+          `cheaper one is what over-commits the machine`,
+      }
+    }
+  }
+  store[modelId] = [...existing, sample].slice(-cap)
   writeSamples(store)
+  return { admitted: true, reason: `recorded ${Math.round(newRate).toLocaleString()} B/token` }
 }
 
 /**
@@ -278,9 +421,13 @@ export async function calibrateCost(
   // can exercise the LOGIC without waiting out three settles.
   const settleMs = opts.settleMs ?? 3000
 
+  // One nonce for the whole calibration: the two sized probes must SHARE a prefix with each other (that
+  // is what makes the marginal cancel the warm pool) while sharing none with any earlier calibration.
+  const nonce = `calibration ${Date.now().toString(36)}-${process.pid.toString(36)}:`
+
   /** One sized request: returns what the runtime says it held and what the machine grew by. */
   const probe = async (chars: number): Promise<{ tokens: number; grew: number } | null> => {
-    const filler = FILLER_UNIT.repeat(Math.max(1, Math.ceil(chars / FILLER_UNIT.length)))
+    const filler = fillerFor(chars, nonce)
     // Settle before the baseline: memory keeps moving for a moment after the previous request.
     await new Promise((r) => setTimeout(r, settleMs))
     const before = usedBytes()
@@ -370,10 +517,15 @@ export async function calibrateCost(
   const m = marginalCost({ tokens: a.tokens, bytes: a.grew }, { tokens: b.tokens, bytes: b.grew })
   if (!(m.bytesPerToken > 0)) return { ok: false, reason: m.reason }
   const sample: KvSample = { contextTokens: m.deltaTokens, kvBytes: m.deltaBytes }
-  recordKvSample(modelId, sample)
+  const admission = recordKvSample(modelId, sample)
+  // A refused reading is reported as such rather than as a success. The caller decides what to do about
+  // a calibration the store would not take; pretending it landed is how a store silently stops matching
+  // what the caller believes it holds.
   return {
-    ok: true, sample,
-    reason: `${m.reason} (${m.bytesPerToken.toLocaleString()} B/token)`,
+    ok: admission.admitted, sample,
+    reason: admission.admitted
+      ? `${m.reason} (${m.bytesPerToken.toLocaleString()} B/token)`
+      : `${m.reason} (${m.bytesPerToken.toLocaleString()} B/token) — NOT recorded: ${admission.reason}`,
   }
 }
 

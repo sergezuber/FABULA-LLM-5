@@ -62,7 +62,21 @@ check("f: generic and verdict are different grammars",
       and schema_name(adapter.GENERIC_OBJECT_SCHEMA) != schema_name(adapter.VERDICT_SCHEMA))
 
 print()
-if _fails:
-    print(f"{len(_fails)} FAILED: {_fails}")
-    sys.exit(1)
-print("all object-schema tests passed")
+
+# ── pytest collection ───────────────────────────────────────────────────────────────────────────────
+# MEASURED 2026-08-01: `pytest -q` in proxy/ said "110 passed" while this file contributed ZERO tests —
+# it has no `test_*` callable, so pytest imported it and moved on. The checks above DO run at import, but
+# their verdict lived in a `sys.exit` that pytest never reaches, so a real failure showed up (at best) as
+# an obscure collection error and (at worst) as nothing at all. The assertion below is the same verdict,
+# in the form the runner actually reads.
+
+
+def test_object_schema():
+    assert not _fails, f"{len(_fails)} check(s) failed: {_fails}"
+
+
+if __name__ == "__main__":
+    if _fails:
+        print(f"{len(_fails)} FAILED: {_fails}")
+        sys.exit(1)
+    print("all object-schema tests passed")

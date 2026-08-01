@@ -102,7 +102,20 @@ def main():
         err = p.stderr.read().decode(errors="replace")
         idl = [l for l in err.splitlines() if "idle-timeout" in l]
         if idl: print("watchdog log:", idl[:3])
-    sys.exit(0 if all(results) else 1)
+    return bool(all(results))
+
+# ── pytest collection ───────────────────────────────────────────────────────────────────────────────
+# MEASURED 2026-08-01: `pytest -q` in proxy/ reported "110 passed" while FIVE of the 17 files
+# contributed ZERO tests — this one among them — because all of their work sat behind
+# `if __name__ == "__main__":`. pytest imported the module, found no `test_*` callable, and moved on.
+# A regression in the stall watchdog, the degeneration cut, the client-disconnect close, the json_object
+# rewrite or the reasoning map would have left the declared gate GREEN. `main()` now returns a verdict
+# instead of exiting, so the same body serves both the script and the suite.
+
+
+def test_watchdog():
+    assert main(), "see the printed report above for which case failed"
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(0 if main() else 1)

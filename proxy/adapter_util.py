@@ -387,7 +387,7 @@ def _is_volatile(text, role=None):
     return any(mk in t for mk in _VOLATILE_MARKERS)
 
 
-def injection_order_report(body):
+def injection_order_report(body, divergence_fraction=None):
     """Report every VOLATILE block injected into the STABLE HEAD — the run of structural messages before
     the conversation proper begins (system prompt, curated memory, replayed context). That head is what
     must stay byte-stable across turns; a per-turn injection inside it shifts every stable token below.
@@ -416,7 +416,37 @@ def injection_order_report(body):
         if str(b["role"]).strip().lower() in ("user", "assistant"):
             head_end = b["index"]
             break
-    body_blocks = blocks[:head_end]
+    # THE SCOPE THE HEAD ALONE COULD NEVER COVER.
+    #
+    # MEASURED 2026-08-01: 10 real position-shifts in the live log, 0 blame clauses — the actionable half
+    # of the classification was silent for every shift there has ever been. Cause: FABULA sends ONE system
+    # message and then the conversation, so `head_end` is 1 and the "stable head" is a single block; an
+    # offender needs a volatile block WITH a stable block below it INSIDE that head, which cannot happen
+    # when the head has one block in it. Meanwhile all 10 shifts diverged DEEP in the conversation (63-97%
+    # of prefixes 195k-506k chars). Reproduced on a realistic body — one system message, three
+    # conversation turns, three volatile blocks carrying `<system-reminder>`, a genuine deep shift:
+    # cls=position-shift, offenders reported 0.
+    #
+    # When the caller knows WHERE the prefix diverged it can be told, as a fraction of the prefix (the
+    # CACHE-BREAK line already has shared/total). Content BELOW the divergence cannot have caused it, so
+    # the search region is everything at or above it — which is the same rule the head version applies,
+    # against the real boundary instead of a proxy for it. Without a fraction the behaviour is unchanged.
+    if isinstance(divergence_fraction, (int, float)) and 0 <= divergence_fraction <= 1:
+        total_text = sum(len(b["text"]) for b in blocks)
+        cut = total_text * float(divergence_fraction)
+        acc = 0
+        region = []
+        for b in blocks:
+            region.append(b)
+            acc += len(b["text"])
+            if acc >= cut:
+                break  # the block containing the divergence is the last one that can be responsible
+        body_blocks = region
+        # NB the mapping from a serialized byte offset to a message index is PROPORTIONAL, not exact —
+        # the wire form carries JSON structure the block text does not. It is precise enough to name a
+        # block and is described as an estimate wherever it is printed.
+    else:
+        body_blocks = blocks[:head_end]
     offenders = []
     for b in body_blocks:
         stable_below = [x for x in body_blocks if x["index"] > b["index"] and not x["volatile"]]

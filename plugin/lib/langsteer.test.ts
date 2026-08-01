@@ -6,6 +6,8 @@ import {
   scriptCounts,
   scriptName,
   INTRUSION_MAX_SHARE,
+  languagePosture,
+  foreignScriptNames,
 } from "./langsteer"
 
 // The live defect, verbatim: a Russian answer with Chinese spliced into its own sentences.
@@ -80,5 +82,43 @@ describe("languageSteer", () => {
   test("malformed input never throws", () => {
     expect(() => languageSteer(undefined as any)).not.toThrow()
     expect(languageSteer(undefined as any)).toBe("")
+  })
+})
+
+// MEASURED 2026-08-01: the forbidden list was hardcoded "Chinese, Japanese, Korean or Arabic" whatever
+// was detected, so a Chinese question got "[Write the entire answer in Chinese ... check it contains no
+// Chinese ... characters]" — an instruction that forbids the script it demands, in one sentence. The
+// file had 13 tests and not one asserted the steer TEXT for a CJK or Arabic dominant script.
+describe("the steer never forbids the language it demands", () => {
+  const ASKS: Array<[string, string]> = [
+    ["Chinese", "请解释一下这段代码的作用，并给出改进建议好吗"],
+    ["Japanese", "このコードの動作を説明して、改善案を提案してください"],
+    ["Korean", "이 코드가 무엇을 하는지 설명하고 개선 방법을 제안해 주세요"],
+    ["Arabic", "اشرح لي ما تفعله هذه الشفرة وقدم اقتراحات للتحسين من فضلك"],
+    ["Russian", "объясни что делает этот код и предложи улучшения пожалуйста"],
+    ["English", "explain what this code does and suggest some improvements please"],
+  ]
+  for (const [lang, ask] of ASKS) {
+    test(`${lang}: demanded, and absent from its own forbidden list`, () => {
+      for (const text of [languageSteer(ask), languagePosture(ask)]) {
+        expect(text).toContain(lang)
+        // The two channels phrase it differently ("contains no X characters" / "Never emit X characters").
+        const forbidden = text.match(/(?:contains no|Never emit) ([^.]+?) characters/)
+        expect(forbidden).not.toBeNull()
+        expect(forbidden![1]).not.toContain(lang)
+      }
+    })
+  }
+
+  test("Japanese still permits Han — kanji is not an intrusion into Japanese", () => {
+    expect(foreignScriptNames("hiragana")).not.toContain("Chinese")
+    // and the reverse is NOT true: hiragana in a Chinese answer is an intrusion.
+    expect(foreignScriptNames("han")).toContain("Japanese")
+  })
+
+  test("Latin is never forbidden — names, URLs and identifiers live in it in every language", () => {
+    for (const id of ["cyrillic", "han", "hangul", "hiragana", "arabic"] as const) {
+      expect(foreignScriptNames(id)).not.toContain("English")
+    }
   })
 })

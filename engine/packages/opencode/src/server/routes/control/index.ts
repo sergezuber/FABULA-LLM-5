@@ -4,9 +4,13 @@ import { Log } from "@/util"
 import { Effect } from "effect"
 import { ProviderID } from "@/provider/schema"
 import { Hono } from "hono"
-import { describeRoute, resolver, validator, openAPIRouteHandler } from "hono-openapi"
+import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
 import { errors } from "../../error"
+
+/** The generated OpenAPI document, built once on first request (the route table is fixed at
+ *  startup). */
+let SPEC: unknown
 
 export function ControlPlaneRoutes(): Hono {
   const app = new Hono()
@@ -85,16 +89,26 @@ export function ControlPlaneRoutes(): Hono {
     )
     .get(
       "/doc",
-      openAPIRouteHandler(app, {
-        documentation: {
-          info: {
-            title: "fabula",
-            version: "0.0.3",
-            description: "fabula api",
-          },
-          openapi: "3.1.1",
-        },
-      }),
+      // DESCRIBE THE SERVER, NOT THIS ROUTER.
+      //
+      // MEASURED 2026-08-01: `curl /doc` returned 3338 bytes describing exactly TWO paths —
+      // DELETE/PUT /auth/{providerID} and POST /log — while roughly 150 real routes (38 global, 21
+      // instance/index, 32 session, 11 experimental, …) were absent. The cause is the argument on the
+      // line this replaces: `app` here is ControlPlaneRoutes' OWN Hono, so the document faithfully
+      // described the router it was handed and nothing else. Both routes it did list are control-plane
+      // routes, which is the tell.
+      //
+      // `openapi()` in server.ts builds a fresh app with every route registered directly, precisely so
+      // the describeRoute metadata survives; called directly it yields 133 paths. It is imported
+      // dynamically because server.ts mounts this router — a static import would be a cycle — and the
+      // result is cached, since the route table cannot change while the process runs.
+      async (c) => {
+        if (!SPEC) {
+          const { openapi } = await import("../../server")
+          SPEC = await openapi()
+        }
+        return c.json(SPEC as Record<string, unknown>)
+      },
     )
     .use(
       validator(

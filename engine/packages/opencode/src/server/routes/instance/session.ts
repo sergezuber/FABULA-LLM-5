@@ -563,9 +563,20 @@ export const SessionRoutes = lazy(() =>
       validator("param", z.object({ sessionID: SessionID.zod })),
       validator(
         "json",
-        z.object({
-          text: z.string().min(1),
-          agent: z.string().optional(),
+        z
+          .object({
+            // NOT `.min(1)`. MEASURED 2026-08-01: the corpus worker's whole streaming path was dead on
+            // every run, by a permanent contract mismatch rather than any environment failure. Opening a
+            // streaming message is `{text:"", final:false}` — there is no text yet, that is what opening
+            // means — and `min(1)` answered HTTP 400 `too_small` to it, every time. Both worker runs
+            // logged `stream failed: assistant-message HTTP 400` and fell back to the one-lump delivery,
+            // so the reader never once saw the report being written. Emptying a stump uses `text:""` too
+            // and would have 400'd identically.
+            //
+            // The rule `min(1)` was reaching for is real, but it is about the ONE-SHOT delivery: an
+            // answer with no text is meaningless. It is expressed below, where it can be stated exactly.
+            text: z.string(),
+            agent: z.string().optional(),
           // What the out-of-band pass actually spent. It ran real model calls; a delivered answer that
           // reports nothing makes the session's own accounting understate work that demonstrably happened.
           model: z.string().optional(),
@@ -573,10 +584,17 @@ export const SessionRoutes = lazy(() =>
           // Streaming: omit both to OPEN a message, pass them back to keep writing into it. `final`
           // stamps it complete. A report that lands in one lump after minutes of silence reads as a
           // freeze; written as it is produced, the reader can start reading and can see it is alive.
-          messageID: z.string().optional(),
-          partID: z.string().optional(),
-          final: z.boolean().optional(),
-        }),
+            messageID: z.string().optional(),
+            partID: z.string().optional(),
+            final: z.boolean().optional(),
+          })
+          .refine((b) => b.text.length > 0 || !!(b.messageID && b.partID) || b.final !== true, {
+            // Empty text is legitimate exactly twice: OPENING a stream (no ids yet, not final) and
+            // rewriting or emptying an already-open message (ids present). A one-shot delivery with no
+            // ids, no text and `final: true` is the meaningless case, and only that one is refused.
+            message: "an answer delivered in one shot must carry text",
+            path: ["text"],
+          }),
       ),
       async (c) =>
         jsonRequest("SessionRoutes.appendAssistantMessage", c, function* () {

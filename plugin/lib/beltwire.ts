@@ -1,7 +1,8 @@
 // Context OS Phase 1 — the tool-router plugin's wiring helpers (pure where possible; kept in
 // lib/ so fabula-toolrouter.ts exports EXACTLY ONE Fabula* factory, per the plugin contract).
 import { route, type Profile as RouteProfile } from "./toolrouter"
-import { BELT_PROFILES, buildToolCards, hideSetFor } from "./toolcards"
+import { BELT_PROFILES, buildToolCards, hideSetFor, WEB_KEEP } from "./toolcards"
+import { needsWeb } from "./webintent"
 
 export const BELT_CHANNEL_KEY = "__FABULA_SESSION_BELT__"
 
@@ -70,7 +71,12 @@ export function taskTextFrom(parts: unknown): string {
 export function decideBelt(taskText: string, current?: string): { entry: BeltEntry; reason: string } {
   const cards = buildToolCards()
   const profiles: RouteProfile[] = BELT_PROFILES.map((p) => ({ id: p.id, tools: p.visibleForScoring(cards) }))
-  const d = route(cards, profiles, taskText, { current })
+  // A lexical index cannot know that "look up news headlines about AI today" is a web task — none of
+  // those words appear in web_search's card, and all three profiles scored exactly 0.0000 on it. The
+  // harness already answers that question deterministically for the freshness steer, and the two answers
+  // must agree: ordering a web search on a turn whose belt has just hidden web_search is the one outcome
+  // neither mechanism may produce. So the same predicate PINS the web tools here (lib/webintent.ts).
+  const d = route(cards, profiles, taskText, { current, requirePins: needsWeb(taskText) ? [...WEB_KEEP] : [] })
   const hide = hideSetFor(d.profileId, [...d.pinned])
   return {
     entry: { profileId: d.profileId, hide: hide.exact, hideGlobs: hide.globs },

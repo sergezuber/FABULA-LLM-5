@@ -73,14 +73,41 @@ export function intrudingScripts(text: string, dominant: ScriptId): ScriptId[] {
     .map((s) => s.id)
 }
 
+/**
+ * The scripts that would be an INTRUSION into an answer written in `dominant` — named for the model.
+ *
+ * MEASURED 2026-08-01: the forbidden list was hardcoded as "Chinese, Japanese, Korean or Arabic",
+ * independent of what was detected. So a Chinese question produced
+ * "[Write the entire answer in Chinese ... check it contains no Chinese, Japanese, Korean or Arabic
+ * characters...]" — an instruction that forbids the very script it demands, in the same sentence. Same
+ * bug in languagePosture. Thirteen tests covered this file and none asserted the steer TEXT for a
+ * CJK or Arabic dominant script, which is exactly how a contradiction survives being read.
+ *
+ * Japanese legitimately CONTAINS Han characters — kanji is not an intrusion into Japanese — so the
+ * overlap is declared rather than assumed away.
+ */
+const SCRIPT_ALSO_USES: Partial<Record<ScriptId, ScriptId[]>> = { hiragana: ["han"] }
+
+export function foreignScriptNames(dominant: ScriptId): string[] {
+  const permitted = new Set<ScriptId>([dominant, "latin", ...(SCRIPT_ALSO_USES[dominant] ?? [])])
+  return SCRIPTS.filter((s) => !permitted.has(s.id)).map((s) => s.name)
+}
+
+/** "Chinese, Japanese or Korean" — a list a reader (and a model) can act on. */
+function nameList(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? ""
+  return `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}`
+}
+
 /** The steer appended to the user's turn. Empty string when the language is unclear — never guess. */
 export function languageSteer(userText: string): string {
   const d = dominantScript(userText)
   if (!d) return ""
+  const foreign = nameList(foreignScriptNames(d))
   return (
     `\n\n[Write the entire answer in ${scriptName(d)} — every heading, every sentence, every word. Sources ` +
     `you read may be in other languages; carry over their MEANING, never their characters. Before you emit ` +
-    `each sentence, check it contains no Chinese, Japanese, Korean or Arabic characters. Latin-script ` +
+    `each sentence, check it contains no ${foreign} characters. Latin-script ` +
     `technical terms, product names, URLs and code identifiers are the only exception.]`
   )
 }
@@ -92,9 +119,10 @@ export function languageSteer(userText: string): string {
 export function languagePosture(userText: string): string {
   const d = dominantScript(userText)
   if (!d) return ""
+  const foreign = nameList(foreignScriptNames(d))
   return (
     `LANGUAGE: this conversation is in ${scriptName(d)}. Every answer you write is in ${scriptName(d)} ` +
-    `throughout. Never emit Chinese, Japanese, Korean or Arabic characters in it, not even inside a ` +
+    `throughout. Never emit ${foreign} characters in it, not even inside a ` +
     `single word or phrase, however natural the term feels — translate the idea instead. Latin-script ` +
     `technical terms, names, URLs and code identifiers are the only exception.`
   )

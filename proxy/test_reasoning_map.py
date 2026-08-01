@@ -103,7 +103,68 @@ shipped = adapter.load_reasoning_map(os.path.join(HERE, "reasoning-map.json"))
 check("h: shipped reasoning-map.json loads with '*'", isinstance(shipped, dict) and "*" in shipped)
 
 print()
-if _fails:
-    print(f"{len(_fails)} FAILED: {_fails}")
-    sys.exit(1)
-print("all reasoning-map tests passed")
+
+# ── pytest collection ───────────────────────────────────────────────────────────────────────────────
+# MEASURED 2026-08-01: `pytest -q` in proxy/ said "110 passed" while this file contributed ZERO tests —
+# it has no `test_*` callable, so pytest imported it and moved on. The checks above DO run at import, but
+# their verdict lived in a `sys.exit` that pytest never reaches, so a real failure showed up (at best) as
+# an obscure collection error and (at worst) as nothing at all. The assertion below is the same verdict,
+# in the form the runner actually reads.
+
+
+def test_reasoning_map():
+    assert not _fails, f"{len(_fails)} check(s) failed: {_fails}"
+
+
+if __name__ == "__main__":
+    if _fails:
+        print(f"{len(_fails)} FAILED: {_fails}")
+        sys.exit(1)
+    print("all reasoning-map tests passed")
+
+
+# ── per-LEVEL fallback (2026-08-01) ──────────────────────────────────────────────────────────────────
+# MEASURED: `mapping.get(model) or mapping.get("*")` picks the model's table whenever it exists AT ALL,
+# so `*` was never consulted for that model at ANY level. Executed live: model=qwen3.5 level=off returned
+# the body UNCHANGED although `*` defines off -> extra_body.thinking.type=disabled, while a model with no
+# entry applied it correctly. Adding one level for a model silently deleted every other level for it.
+def test_star_fallback_is_per_level_not_per_model():
+    m = {
+        "*": {"off": {adapter.API_KIND: {"set": [{"path": ["extra_body", "thinking", "type"], "value": "disabled"}]}}},
+        "mine": {"high": {adapter.API_KIND: {"set": [{"path": ["extra_body", "budget"], "value": 8192}]}}},
+    }
+    # the model has NO "off" of its own -> the star table must still apply
+    b = {"model": "mine"}
+    adapter.apply_reasoning(b, m, "off", adapter.API_KIND)
+    assert b.get("extra_body", {}).get("thinking", {}).get("type") == "disabled", b
+
+    # the model's OWN level still wins over the star
+    star_and_own = {
+        "*": {"high": {adapter.API_KIND: {"set": [{"path": ["extra_body", "budget"], "value": 1}]}}},
+        "mine": {"high": {adapter.API_KIND: {"set": [{"path": ["extra_body", "budget"], "value": 8192}]}}},
+    }
+    b2 = {"model": "mine"}
+    adapter.apply_reasoning(b2, star_and_own, "high", adapter.API_KIND)
+    assert b2.get("extra_body", {}).get("budget") == 8192, b2
+
+    # a level neither table defines still leaves the body alone
+    b3 = {"model": "mine"}
+    adapter.apply_reasoning(b3, m, "nonexistent-level", adapter.API_KIND)
+    assert b3 == {"model": "mine"}, b3
+
+
+def test_shipped_map_answers_every_level_for_a_model_that_has_an_entry():
+    shipped = adapter.load_reasoning_map(os.path.join(HERE, "reasoning-map.json"))
+    star_levels = [k for k in shipped.get("*", {}) if isinstance(shipped["*"][k], dict)]
+    named = [k for k in shipped if k not in ("*", "_comment")]
+    assert star_levels and named, (star_levels, named)
+    for model in named:
+        for lvl in star_levels:
+            b = {"model": model}
+            adapter.apply_reasoning(b, shipped, lvl, adapter.API_KIND)
+            star = {"model": model}
+            adapter.apply_reasoning(star, {"*": shipped["*"]}, lvl, adapter.API_KIND)
+            own = shipped[model].get(lvl)
+            # Either the model overrides the level, or it inherits the star's answer — never nothing.
+            if not own:
+                assert b == star, (model, lvl, b, star)

@@ -910,13 +910,35 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
     // the rebuild path instead of silently doing nothing.
     @objc func checkUpdates() {
         let appVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "?"
-        var engineVersion = "?"
-        if let out = try? runCapture("/opt/homebrew/bin/mimo --version") {
-            engineVersion = out.trimmingCharacters(in: .whitespacesAndNewlines)
+        // ASK THE ENGINE THIS APP ACTUALLY RUNS.
+        //
+        // MEASURED 2026-08-01: this ran `/opt/homebrew/bin/mimo --version`, and that path does not
+        // exist — the binary was renamed to the `fabula` shim. runCapture pipes stderr into the SAME
+        // pipe as stdout, so the shell's error text became the "version": the dialog read
+        // "Движок: zsh:1: no such file or directory: /opt/homebrew/bin/mimo". A hardcoded path to a
+        // binary that moved, printed as if it were an answer.
+        //
+        // ENGINE is the one definition of which engine this app launches (line 19) — the same value
+        // startServer uses — so the version reported is the version running. PATH_PREFIX is prepended
+        // because an app launched from Finder does not inherit the shell PATH.
+        var engineVersion = "unavailable"
+        if let out = try? runCapture("\(PATH_PREFIX)\(ENGINE) --version 2>/dev/null") {
+            let v = out.trimmingCharacters(in: .whitespacesAndNewlines)
+            // A version is a short token. Anything else is a shell diagnostic wearing a version's place,
+            // and reporting it as one is how the previous defect read as working.
+            if !v.isEmpty, !v.contains("\n"), v.count < 64, v.rangeOfCharacter(from: CharacterSet.decimalDigits) != nil {
+                engineVersion = v
+            }
         }
         let alert = NSAlert()
         alert.messageText = "FABULA \(appVersion)"
-        alert.informativeText = "Движок: \(engineVersion)\n\nЭта сборка управляется исходниками — обновление выполняется пересборкой (см. README проекта). Автоматической проверки обновлений нет by design."
+        // Localized like every other dialog in this file. It was an unconditional Russian string, which
+        // is the one thing the release-hygiene rule forbids in a tracked file: a person who clones this
+        // repo must get an English app.
+        let ru = uiLang == "ru"
+        alert.informativeText = ru
+            ? "Движок: \(engineVersion)\n\nЭта сборка управляется исходниками — обновление выполняется пересборкой (см. README проекта). Автоматической проверки обновлений нет by design."
+            : "Engine: \(engineVersion)\n\nThis build is managed from source — updating means rebuilding it (see the project README). There is no update check by design."
         alert.alertStyle = .informational
         alert.runModal()
     }

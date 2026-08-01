@@ -12,7 +12,7 @@ import { DEFAULT_CHARS_PER_TOKEN as CHARS_PER_TOKEN } from "./ctxguard"
 import { discoverCorpus, planBatches, chapterSummaryPrompt, synthesizeReportPrompt, synthesizeWithFallback, cleanAnswer, accumulatorKey, seedAccumulator, markDone, pendingBatches, doneSummaries, emptyBatchCount, clearAccumulator, synthTokensFor, corpusBudgets } from "./corpus"
 import { budgetWindow } from "./handle"
 import { probeWindow } from "./ctxguard"
-import { writeFileSync, readFileSync, existsSync } from "node:fs"
+import { writeFileSync, readFileSync, existsSync, mkdirSync, unlinkSync } from "node:fs"
 import { join } from "node:path"
 
 // ── arg parsing (robust: taskText may contain shell-hostile chars, so accept it base64'd) ──────────
@@ -184,7 +184,7 @@ async function streamAnswer(model: string, prompt: string, maxTokens: number): P
 /** Deliver the finished report as an ANSWER. Handing it back through the prompt route made the producer
  *  speak as the USER, which the chat then renders as a narrow plain-text bubble — markdown shown as raw
  *  characters, and any marker the producer needs shown to the reader. An answer is what this actually is. */
-async function deliverAnswer(text: string): Promise<void> {
+async function deliverAnswer(text: string): Promise<boolean> {
   try {
     const r = await fetch(`${serverUrl}/session/${sessionID}/assistant-message?directory=${encodeURIComponent(cwd)}`, {
       method: "POST",
@@ -194,7 +194,47 @@ async function deliverAnswer(text: string): Promise<void> {
       body: JSON.stringify({ text, model: usedModel, tokens: usageTotal }),
     })
     if (!r.ok) console.error(`[corpus-worker] deliver HTTP ${r.status}`)
-  } catch (e: any) { console.error(`[corpus-worker] deliver failed: ${e?.message}`) }
+    return r.ok
+  } catch (e: any) {
+    console.error(`[corpus-worker] deliver failed: ${e?.message}`)
+    return false
+  }
+}
+
+/** Where a finished-but-undelivered report waits. Next to the accumulator, keyed the same way. */
+function reportPath(key: string): string {
+  return join(HB_DIR, `${key}.report.md`)
+}
+
+/**
+ * Deliver, and do not give up on the first refusal.
+ *
+ * MEASURED 2026-08-01: a 6173-character report costing about four model calls and four and a half
+ * minutes was produced, its delivery answered HTTP 500 (`session has no user message to answer` — the
+ * engine was mid-restart), and the report was LOST: `clearAccumulator` had already run and the heartbeat
+ * wrote `{"state":"done","reportChars":6173}`. The worker reported success for work whose entire output
+ * had just been thrown away, and the next attempt started again from batch 0 of 28 because the
+ * accumulator it would have resumed from was the thing that had been cleared.
+ *
+ * So the finished report is written to disk BEFORE the first delivery attempt, delivery is retried while
+ * the engine comes back, and nothing is cleared until it lands. The report on disk is the fallback of
+ * last resort — it is picked up by the next run of this same session+corpus.
+ */
+async function deliverPersistently(text: string, key: string, rewrite: (t: string) => Promise<boolean>): Promise<boolean> {
+  try {
+    mkdirSync(HB_DIR, { recursive: true })
+    writeFileSync(reportPath(key), text, "utf8")
+  } catch { /* the disk copy is a safety net, never the reason a delivery does not happen */ }
+  const waits = [0, 2000, 5000, 15000, 30000]
+  for (let i = 0; i < waits.length; i++) {
+    if (waits[i]) await new Promise((r) => setTimeout(r, waits[i]))
+    if (await rewrite(text)) {
+      try { unlinkSync(reportPath(key)) } catch {}
+      return true
+    }
+    hb("deliver-retry", { attempt: i + 1, of: waits.length, reportChars: text.length })
+  }
+  return false
 }
 
 /** Record that this session+corpus was handed back to the model, so the intercept does not fire again
@@ -240,6 +280,25 @@ async function main(): Promise<number> {
   hb("budget", { windowTokens, batchChars: BATCH_MAX_CHARS, chapterCap: CHAPTER_CAP })
   const batches = planBatches(disc.files, { maxFiles: BATCH_MAX_FILES, maxBatchChars: BATCH_MAX_CHARS })
   const key = accumulatorKey(sessionID, cwd)
+
+  // A FINISHED report from a previous attempt is delivered, not recomputed. This is the other half of
+  // the measured loss: the engine was restarting when the report was ready, delivery failed, and the
+  // next run began again at batch 0 of 28 — minutes of model time spent reproducing something already
+  // sitting on disk. If it is here, the work is done and only the handover failed.
+  try {
+    const saved = existsSync(reportPath(key)) ? readFileSync(reportPath(key), "utf8") : ""
+    if (saved.trim()) {
+      hb("redeliver", { reportChars: saved.length })
+      if (await deliverPersistently(saved, key, deliverAnswer)) {
+        clearAccumulator(key)
+        hb("done", { reportChars: saved.length, redelivered: true })
+        return 0
+      }
+      hb("undelivered", { reportChars: saved.length, savedTo: reportPath(key) })
+      return 1
+    }
+  } catch { /* a bad saved copy must never block a fresh run */ }
+
   seedAccumulator(key, taskText, batches)
   hb("seeded", { batches: batches.length })
 
@@ -292,18 +351,24 @@ async function main(): Promise<number> {
   hb("reduce", { summaries: summaries.length, budget, promptTokens, windowTokens })
   const streamed = await streamAnswer(model, synthPrompt, budget)
   if (streamed && !streamed.truncated && streamed.text.trim()) {
+    // It reached the reader through the stream itself, so there is nothing left to deliver — but the
+    // accumulator still goes only after the report exists somewhere the reader can see.
     clearAccumulator(key)
+    try { unlinkSync(reportPath(key)) } catch {}
     hb("done", { reportChars: streamed.text.length, streamed: true })
     return 0
   }
   // The streaming message (complete or a stump) is rewritten in place with whatever the fallback
   // produces — the reader sees ONE message that fills in, never a stump plus a second copy.
-  const rewrite = async (text: string) => {
+  const rewrite = async (text: string): Promise<boolean> => {
     if (streamed?.messageID && streamed?.partID) {
-      await post({ text, messageID: streamed.messageID, partID: streamed.partID, final: true, model, tokens: usageTotal }).catch(() => {})
-      return
+      // `.catch(() => {})` here is what turned a failed delivery into a silent success; the outcome has
+      // to travel back to the caller, which is the only thing that knows a whole report depends on it.
+      return await post({ text, messageID: streamed.messageID, partID: streamed.partID, final: true, model, tokens: usageTotal })
+        .then(() => true)
+        .catch(() => false)
     }
-    await deliverAnswer(text)
+    return await deliverAnswer(text)
   }
   const call = async (prompt: string, tokens: number): Promise<string> => {
     let b = tokens
@@ -328,12 +393,20 @@ async function main(): Promise<number> {
     hb("fallback-synthesis-failed")
     return 0
   }
-  clearAccumulator(key)
   // NO PROVENANCE LINE. It used to open every report with how the answer had been assembled — the file
   // count, the batch count, the words "map-reduce". That is bookkeeping about the machine, printed in the
   // one place reserved for the answer, and it is the first thing the reader's eye lands on. How the work
   // was divided is a fact for the log, where a maintainer looks for it; it is not part of what was asked.
-  await rewrite(report)
+  //
+  // The accumulator is cleared AFTER delivery lands, never before. Clearing first is what destroyed a
+  // finished report when the engine happened to be restarting.
+  const delivered = await deliverPersistently(report, key, rewrite)
+  if (!delivered) {
+    hb("undelivered", { reportChars: report.length, savedTo: reportPath(key) })
+    console.error(`[corpus-worker] report finished but UNDELIVERED — kept at ${reportPath(key)}`)
+    return 1
+  }
+  clearAccumulator(key)
   hb("done", { reportChars: report.length })
   return 0
 }

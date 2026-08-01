@@ -426,6 +426,14 @@ export class LoopGuard {
           `different (other entities, another angle, a different source). Do not re-issue paraphrases of this.`)
       }
       if (st.webQueries.size > this.cfg.webSearchBudgetPerTurn) {
+        // MEASURED 2026-08-01: the two BUDGET branches were the only stops in this file that did not
+        // increment the counter, and the omission silenced the mechanism built for exactly this moment.
+        // Through the real hooks: 20 distinct searches, the harness threw 5 times, and `session.post`
+        // then logged `attempts=20 blocked=false decision=silent reason=nothing was blocked` — so
+        // decideExhausted said nothing and the turn ended with NO ANSWER AT ALL, which is the dead turn
+        // exhausted.ts exists to prevent. The control is one line down: an ordinary near-duplicate block
+        // in the same shape sets blocked=true and does produce the exhaustion answer.
+        st.blockedCount++ // every stop this guard issues, counted where it is issued
         return mk("stop", "web_search_budget_exceeded", st.webQueries.size,
           `LOOP BLOCKED: ${st.webQueries.size} distinct outside lookups this turn (searches and page fetches share ` +
           `one budget — reaching out is the same activity whichever verb asks) — far past the point of diminishing ` +
@@ -457,6 +465,7 @@ export class LoopGuard {
     }
 
     if (st.searchCalls > this.cfg.searchBudgetPerTurn) {
+      st.blockedCount++ // same gap as the web budget above — a stop that is not counted is not seen
       return mk("stop", "search_budget_exceeded", st.searchCalls,
         `LOOP BLOCKED: ${st.searchCalls} searches this turn — far past what any task needs. STOP searching; you have more than ` +
         `enough material. Synthesize your findings and produce the answer now — do not issue more grep/glob calls.`)

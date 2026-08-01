@@ -50,7 +50,10 @@ export const DEFAULT_POLICY: WindowPolicy = {
   quantumTokens: 4096,
 }
 
-/** Something else already holding memory: another model, an embedding model, anything loaded. */
+/** Something else already holding memory: another model, an embedding model, anything loaded.
+ *
+ *  `bytes: 0` means UNKNOWN, not free — see the refusal in planWindow. A resident is by definition
+ *  occupying memory; the only question is how much, and a size nobody measured is not a size of zero. */
 export interface Resident {
   id: string
   bytes: number
@@ -138,6 +141,27 @@ export function planWindow(input: WindowPlanInput): WindowPlan {
     return {
       tokens: 0, cappedByMachine: false, fits: false, budgetBytes, ceilingTokens: 0,
       reason: "the model did not report a maximum window; nothing to plan from",
+    }
+  }
+
+  // A resident whose size nobody could measure is the same class of unknown as an unmeasured per-token
+  // cost, and it gets the same answer: refuse.
+  //
+  // MEASURED 2026-08-01. This was silently the OTHER way. residentsOther dropped any model whose bytes
+  // it could not read, and the live serving API omits `size_bytes` ENTIRELY — even for the loaded model
+  // — so the residents term could never fire on this runtime at all. A second resident therefore cost
+  // the budget nothing, and the ceiling was computed as if the machine were empty. That is precisely
+  // the over-commit this module exists to prevent, arriving through the one path that looked like a
+  // filter rather than an assumption. Treating unknown as zero is the only reading that can take the
+  // desktop down with it, so it is the one reading forbidden here.
+  const unmeasured = residents.filter((r) => !(Number(r.bytes) > 0))
+  if (unmeasured.length) {
+    return {
+      tokens: 0, cappedByMachine: true, fits: false, budgetBytes, ceilingTokens: 0,
+      reason:
+        `${unmeasured.length} other model(s) are resident but their size could not be measured ` +
+        `(${unmeasured.map((r) => r.id).join(", ")}); planning a window against an unknown occupant would ` +
+        `over-commit this machine, so no window is planned`,
     }
   }
 

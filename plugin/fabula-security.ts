@@ -14,13 +14,15 @@ import type { Plugin } from "@mimo-ai/plugin"
 import { gate } from "./lib/manage"
 import { checkCommand, blockedMessage } from "./lib/cmdguard"
 import { checkUrl, ssrfBlockedMessage } from "./lib/ssrf"
-import { checkWritePath, writeBlockedMessage } from "./lib/pathguard"
+import { checkWritePath, writeBlockedMessage, isWriteToolName, writeTargets } from "./lib/pathguard"
+import { shellWriteTargets, shellUrls } from "./lib/shelltargets"
 import { redactSecrets } from "./lib/redact"
 import { wrapUntrusted, isUntrustedTool } from "./lib/untrusted"
 import { scanThreats, threatBanner } from "./lib/threatscan"
 import { recordSessionAgent, isReadOnlyViolation, readOnlyBlockMessage } from "./lib/roles"
 import { isPlanBlocked, planBlockMessage, shouldBypassGuards, editsPreApproved,
-  permissionMode, setPermissionMode, commandSignature, allowCommand, revokeCommand } from "./lib/permissions"
+  permissionMode, setPermissionMode, commandSignature, allowCommand, revokeCommand,
+  commandAllowanceOrigin } from "./lib/permissions"
 import { tool } from "@mimo-ai/plugin"
 
 const z = tool.schema
@@ -56,6 +58,25 @@ export const FabulaSecurity: Plugin = async () => gate("security", ({
       const cmd = args.command ?? args.cmd ?? ""
       const v = checkCommand(cmd)
       if (v.blocked) throw new Error(blockedMessage(v, cmd))
+
+      // THE SHELL IS A DOOR ONTO THE SAME ROOMS, so it asks the same rules.
+      //
+      // MEASURED 2026-08-01 through the LIVE app: the write guard refused `create_file` on
+      // `~/Library/LaunchAgents/…plist` and the SSRF guard refused `web_fetch` on
+      // `http://[::ffff:127.0.0.1]:4096/…` — and the model then did BOTH ANYWAY via `bash_tool`, with a
+      // redirect and with curl, reporting each as completed. Not an attack: an agent routing around a
+      // refusal to finish its task, which is the behaviour a guard has to survive. The rules were always
+      // right; the shell simply never consulted them.
+      for (const p of shellWriteTargets(cmd)) {
+        const wv = checkWritePath(p)
+        if (wv.blocked && (wv.code === "supervision_state" || !editsPreApproved())) {
+          throw new Error(writeBlockedMessage(wv, p) + `\n(via the shell: ${String(cmd).slice(0, 160)})`)
+        }
+      }
+      for (const u of shellUrls(cmd)) {
+        const uv = await checkUrl(u)
+        if (uv.blocked) throw new Error(ssrfBlockedMessage(uv, u) + `\n(via the shell: ${String(cmd).slice(0, 160)})`)
+      }
     }
 
     // SSRF / cloud-metadata floor (async DNS resolve, fail-closed)
@@ -71,9 +92,11 @@ export const FabulaSecurity: Plugin = async () => gate("security", ({
     // as blanket pre-approval let two sanctioned calls re-open every guard here — including the
     // authorized_keys / sudoers / cron / LaunchAgents rules that predate this wave. Pre-approving your
     // edits is not the same as pre-approving the file that says whether your edits are checked.
-    if (WRITE_TOOLS.has(tool)) {
-      const p = args.filePath ?? args.path ?? args.file ?? ""
-      if (p) {
+    // EVERY write, and every path it lands on — not five names and one argument. See isWriteToolName /
+    // writeTargets in lib/pathguard.ts for what the old shape let through (apply_patch among them, which
+    // for a gpt-class model is the ONLY write tool the engine exposes).
+    if (WRITE_TOOLS.has(tool) || isWriteToolName(tool)) {
+      for (const p of writeTargets(args)) {
         const v = checkWritePath(p)
         if (v.blocked && (v.code === "supervision_state" || !editsPreApproved())) {
           throw new Error(writeBlockedMessage(v, p))
@@ -98,9 +121,10 @@ export const FabulaSecurity: Plugin = async () => gate("security", ({
       },
     }),
     allow_command: tool({
-      description: "Pre-approve a specific command/tool call so the guards skip it in future (without a " +
-        "global bypass). Pass the tool name and its key arg (a shell command, or a file path/URL). Use " +
-        "revoke=true to remove it.",
+      description: "Record a request to pre-approve a specific command/tool call (a shell command, or a " +
+        "file path/URL). NOTE: an allowance asked for here is RECORDED but NOT honoured — skipping the " +
+        "guards for a call is an OWNER decision, exactly like 'bypass'. The owner approves it in the app " +
+        "(Settings ▸ Permissions). Use revoke=true to remove one.",
       args: {
         tool_name: z.string().describe("The tool, e.g. bash_tool"),
         value: z.string().describe("The command string, or the path/url"),
@@ -110,8 +134,20 @@ export const FabulaSecurity: Plugin = async () => gate("security", ({
         const isBash = args.tool_name === "bash" || args.tool_name === "bash_tool"
         const sig = commandSignature(args.tool_name, isBash ? { command: args.value } : { path: args.value })
         if (args.revoke) { revokeCommand(sig); return `Revoked allowance for ${sig}.` }
-        allowCommand(sig)
-        return `Allowed ${sig} — the guards will skip this exact call. Current mode: ${permissionMode()}.`
+        // origin "agent": this came from the model, so it is stored and reported but never honoured —
+        // the same rule set_permission_mode applies to bypass. An allow-list its own subject can extend
+        // is not an allow-list; it is a bypass switch with extra steps, and it was measured working as
+        // one (`rm -rf /` blocked, then allowed, after a single call from inside a run).
+        // Report the truth about what is already on the record before adding to it: if the owner has
+        // ALREADY approved this exact signature, saying "not in effect" would be a lie in the other
+        // direction, and the model would work around a guard that is not actually in its way.
+        if (commandAllowanceOrigin(sig) === "owner") {
+          return `${sig} is already allowed by the owner — the guards skip this exact call. Current mode: ${permissionMode()}.`
+        }
+        allowCommand(sig, "agent")
+        return `Recorded a request to allow ${sig}, but it is NOT in effect: skipping the guards for a ` +
+          `call is an owner decision. Ask the owner to approve it in Settings ▸ Permissions. ` +
+          `Current mode: ${permissionMode()}.`
       },
     }),
   },

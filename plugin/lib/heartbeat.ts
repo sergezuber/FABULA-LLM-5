@@ -42,8 +42,26 @@ function ago(ms: number): string {
 }
 
 // Human annotation for one job in list_scheduled.
+/**
+ * The ONE way a run record is looked up, whichever key it was written under.
+ *
+ * MEASURED 2026-08-01 by running the real post-run CLI exactly as a generated job invokes it: it wrote
+ * `{"fabula-verify-probe":{"ranAt":…,"ok":true}}` — keyed by the BARE SLUG — while `list_scheduled`
+ * pointed at that same file still printed "never ran", because it looked the entry up under
+ * `com.fabula.schedule.<slug>`. The writer (`fabula-ops.ts` passes `label: slug` → `stampLedger(ledger,
+ * slug, …)`) and the reader (`annotate(slug, LABEL_PREFIX + slug, …)`) had simply never agreed on the
+ * key. Consequence: `isOverdue` was true-by-absence forever, so the OVERDUE warning the ledger exists
+ * for could not fire, and a nightly job failing silently stayed invisible.
+ *
+ * The slug is the key going forward; the prefixed label is still read so an existing ledger keeps
+ * working. Two spellings of one name, resolved in one place, is what stops them diverging again.
+ */
+export function ledgerEntry(led: Ledger, slug: string, label?: string): Ledger[string] | undefined {
+  return led[slug] ?? (label ? led[label] : undefined)
+}
+
 export function annotate(slug: string, label: string, led: Ledger, nowMs: number, maxAgeMs = OVERDUE_MS): string {
-  const e = led[label]
+  const e = ledgerEntry(led, slug, label)
   if (!e || typeof e.ranAt !== "number") return `${slug} — never ran`
   const failed = e.ok ? "" : " (last run FAILED)"
   const overdue = nowMs - e.ranAt > maxAgeMs ? " ⚠️ OVERDUE" : ""

@@ -23,6 +23,8 @@ type Stats = {
     autoRewinds: number
     receiptsMinted: number
     secondOpinions: number
+    pendingGates?: number
+    noVerifyCommand?: number
   }
 }
 
@@ -85,6 +87,13 @@ export const SettingsUsage = () => {
       { label: language.t("settings.usage.receipts"), value: fmt(v.receiptsMinted), green: v.receiptsMinted > 0 },
       { label: language.t("settings.usage.secondOpinions"), value: fmt(v.secondOpinions), green: false },
       { label: language.t("settings.usage.failedVerifies"), value: fmt(v.failedVerifies), green: false },
+      // MEASURED 2026-08-01: the panel read 0 across the board while the harness had run 161 verify_done
+      // checks and minted 37 receipts. Two whole categories were counted nowhere — a green check still
+      // held by a gate, and a check in a project with no verify command — so real work rendered as
+      // nothing at all. A number that is genuinely zero and a number nobody counts look identical, which
+      // is the one thing a dashboard must not allow.
+      { label: language.t("settings.usage.pendingGates"), value: fmt(v.pendingGates ?? 0), green: false },
+      { label: language.t("settings.usage.noVerifyCommand"), value: fmt(v.noVerifyCommand ?? 0), green: false },
     ]
   })
   const heatMax = createMemo(() => Math.max(1, ...(stats()?.daily ?? []).map((d) => d.count)))

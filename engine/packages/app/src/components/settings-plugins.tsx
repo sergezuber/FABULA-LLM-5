@@ -52,6 +52,12 @@ export const SettingsPlugins = () => {
   // One short line, rendered immediately — no long-text flash. The full text lives in the
   // hover/click detail below.
   const shortDesc = (row: PluginRow) => (ru() ? (row.descRu ?? row.desc) : (row.desc ?? row.descRu)) ?? row.file
+  // The card's TITLE. MEASURED 2026-08-01: it rendered `row.id` — so every card showed a raw slug
+  // ("goaudit", "ctxguard") while `PluginRow` had declared `name`/`nameRu` for exactly this and the route
+  // populated them; neither field was referenced anywhere in this file. The id is still shown, as the
+  // secondary line, because it IS what the toggles and the env kill-switch are keyed on and a user
+  // reading the panel needs to know it.
+  const humanName = (row: PluginRow) => (ru() ? (row.nameRu ?? row.name) : (row.name ?? row.nameRu)) ?? row.id
   const detailOpen = (row: PluginRow) => expanded() === row.id || hovered() === row.id
   const pluginPath = (row: PluginRow) => {
     const root = data.latest?.root
@@ -222,7 +228,10 @@ export const SettingsPlugins = () => {
                     </div>
                     <div class="min-w-0 flex-1">
                       <div class="flex items-center gap-2">
-                        <span class="text-14-medium text-text-strong">{row.id}</span>
+                        <span class="text-14-medium text-text-strong">{humanName(row)}</span>
+                        <Show when={humanName(row) !== row.id}>
+                          <span class="shrink-0 font-mono text-[11px] text-text-weak">{row.id}</span>
+                        </Show>
                         <span class="inline-flex h-5 items-center rounded-md bg-surface-base px-1.5 text-[11px] text-text-weak">
                           {language.t("settings.plugins.builtin")}
                         </span>

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.102.0"
+export const FABULA_VERSION = "0.103.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.103.0",
+    date: "2026-08-01",
+    items: [
+      {
+        ru: "Сторож развёртывания стал сверять и сам номер версии, а не только время и содержимое. Раньше он смотрел лишь на движок: собранный веб-интерфейс и паспорт приложения не проверял никто, а бинарь, собранный пять минут назад из другой копии репозитория, проходил как свежий — по времени он новее всех исходников и несёт все нужные механизмы. Теперь номер, объявленный в источнике, обязан лежать в каждом из трёх артефактов — в собранном интерфейсе, в байтах самого движка и в паспорте приложения; каждый артефакт отвечает отдельной строкой отчёта, а при расхождении сторож называет номер, который артефакт несёт на самом деле. Проверки закреплены тестом, который гоняет сам скрипт по подставным деревьям, где каждый артефакт по очереди несёт чужой номер: убери любую из трёх проверок — упадёт именно её тест.",
+        en: "The deploy guard now checks the version number itself, not only timestamps and contents. It used to look at the engine alone: nobody checked the built web interface or the app bundle's manifest, and a binary built five minutes ago from a different copy of the repository passed as fresh — newer than every source file and carrying every required mechanism. Now the number declared in the source must sit inside each of the three artifacts — the built interface, the bytes of the engine itself, and the app bundle's manifest; each artifact answers with its own report line, and on a mismatch the guard names the number the artifact actually carries. The checks are pinned by a test that runs the script itself over synthetic trees where each artifact in turn carries a foreign number: remove any one of the three checks and exactly its test falls.",
+      },
+    ],
+  },
   {
     version: "0.102.0",
     date: "2026-08-01",

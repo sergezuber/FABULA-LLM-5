@@ -14,6 +14,7 @@ import { promises as fs } from "node:fs"
 import * as path from "node:path"
 import { refHuntTerms } from "./lib/unknowns"
 import { triagePrompt, parseTriage, looksUnderspecified, INTERVIEW_NUDGE } from "./lib/interview"
+import { spawnShell } from "./lib/platform/shell"
 
 const z = tool.schema
 
@@ -23,7 +24,7 @@ function grepRepo(dir: string, terms: string[], maxBytes = 6000): Promise<string
     const pat = terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")
     const q = JSON.stringify(pat)
     const cmd = `(rg -n --no-heading -S -m 3 -g '!node_modules' -e ${q} . 2>/dev/null || grep -rnI -m 3 --exclude-dir=node_modules --exclude-dir=.git -E ${q} . 2>/dev/null) | head -60`
-    const c = spawn("bash", ["-lc", cmd], { cwd: dir, env: process.env })
+    const c = spawnShell(cmd, { cwd: dir, env: process.env })
     let out = ""
     const t = setTimeout(() => { try { c.kill() } catch {} }, 8000)
     c.stdout.on("data", (d) => { if (out.length < maxBytes) out += d.toString() })

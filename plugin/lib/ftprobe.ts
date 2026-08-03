@@ -17,6 +17,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symli
 import { tmpdir } from "node:os"
 import * as path from "node:path"
 import { listCheckpoints, readFileAtCommit, baseTreeFiles } from "./checkpoint"
+import { shellArgv } from "./platform/shell"
 
 export interface FtpResult {
   ran: boolean
@@ -101,7 +102,7 @@ export function materializePrePatch(workspace: string): string | null {
 export function siblingSuitePasses(workspace: string): boolean | null {
   const cmd = process.env.FABULA_VERIFY_CMD
   if (!cmd) return null
-  const r = spawnSync("bash", ["-c", cmd], { cwd: workspace, encoding: "utf8", timeout: 300_000 })
+  const r = spawnSync(shellArgv(cmd, { login: false })[0]!, shellArgv(cmd, { login: false }).slice(1), { cwd: workspace, encoding: "utf8", timeout: 300_000 })
   if (r.error) return null
   return (r.status ?? 1) === 0
 }

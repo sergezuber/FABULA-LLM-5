@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url"
 import { homedir } from "node:os"
 import { join, dirname } from "node:path"
 import { MANIFEST, allDeps, pluginById, type Dep, type PluginMeta } from "./manifest"
+import { configPath } from "./platform/paths"
+import { shellArgv } from "./platform/shell"
 
 /** repo root = plugin/lib/manage.ts → up 3. realpathSync resolves the ~/.config/mimocode/plugin symlink. */
 export function repoRoot(): string {
@@ -17,7 +19,7 @@ export function repoRoot(): string {
 
 function sh(cmd: string, timeoutMs = 600000): Promise<{ ok: boolean; out: string }> {
   return new Promise((resolve) => {
-    execFile("/bin/bash", ["-lc", cmd], { timeout: timeoutMs, cwd: repoRoot(), maxBuffer: 8 * 1024 * 1024 }, (err, stdout, stderr) => {
+    execFile(shellArgv(cmd)[0]!, shellArgv(cmd).slice(1), { timeout: timeoutMs, cwd: repoRoot(), maxBuffer: 8 * 1024 * 1024 }, (err, stdout, stderr) => {
       resolve({ ok: !err, out: ((stdout || "") + (stderr || "")).trim() })
     })
   })
@@ -65,7 +67,7 @@ export function statePath(): string {
   // NOT ~/.config/mimocode. Reading the wrong path made the UI enable/disable toggle and the plugin's
   // own self-gating disagree. FABULA_PLUGIN_STATE overrides (used by hermetic tests).
   return process.env.FABULA_PLUGIN_STATE ||
-    join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "fabula", "fabula-state.json")
+    configPath("fabula-state.json")
 }
 export interface State { disabled: string[]; enabled: string[] }
 export function readState(): State {

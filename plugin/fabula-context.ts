@@ -67,7 +67,21 @@ if (CODING_PROFILE && !process.env.FABULA_TOOL_MASK) {
 const BELT_ACTIVE = Object.keys(TOOL_META).filter((id) => !CODING_MASK.has(id))
 
 const TTL_MS = 20_000
-const GIT_TIMEOUT = 1500
+/**
+ * Ceiling on a single `git` probe for the per-turn project block.
+ *
+ * It exists to stop a WEDGED git (a network-mounted worktree, an iCloud folder mid-sync — the engine
+ * already lost three hours to that one) from holding up a turn. It does NOT exist to make the probe
+ * quick, and at 1500 ms it was doing the second job instead of the first: MEASURED 2026-08-03, under a
+ * loaded machine `git rev-parse --abbrev-ref HEAD` — one of the cheapest commands git has — exceeded it,
+ * and the branch then vanished from the block WITHOUT A WORD. The model was told the working directory
+ * and not the branch, and nothing anywhere said a fact had been dropped.
+ *
+ * A turn is measured in tens of seconds and the result is cached for TTL_MS, so the difference between
+ * 1.5 s and 5 s costs nothing anyone can perceive, while the guard against a genuinely hung filesystem is
+ * unchanged. `FABULA_GIT_PROBE_TIMEOUT_MS` tunes it for a worktree slower than any of that.
+ */
+const GIT_TIMEOUT = Math.max(250, Number(process.env.FABULA_GIT_PROBE_TIMEOUT_MS) || 5000)
 const cache = new Map<string, { facts: ProjectFacts; ts: number }>()
 
 // Curated operating-memory injection. Resolves <FABULA-LLM-5>/.fabula/memory/MEMORY.md

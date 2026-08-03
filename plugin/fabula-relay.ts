@@ -19,14 +19,13 @@ import * as os from "node:os"
 import { gate } from "./lib/manage"
 import { pickCloudProvider, resolveApiKey, type CloudTarget } from "./lib/escalate"
 import { budgetFromEnv, withinBudget, relayMessages, parseDiff, attemptEntry, ESCALATION_LADDER, type AttemptEntry } from "./lib/relay"
+import { engineConfigFile } from "./lib/platform/paths"
 
 const z = tool.schema
 
 function configPath(): string {
-  if (process.env.MIMOCODE_CONFIG) return process.env.MIMOCODE_CONFIG
-  const xdg = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config")
-  const cand = [path.join(xdg, "fabula", "fabula.config.json"), path.join(xdg, "mimocode", "fabula.config.json")]
-  return cand.find((p) => fs.existsSync(p)) || cand[0]
+  // One resolver for all five modules that read the engine config — see platform/paths.
+  return engineConfigFile()
 }
 function readConfig(): any {
   try { return JSON.parse(fs.readFileSync(configPath(), "utf8")) } catch { return null }

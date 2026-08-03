@@ -23,6 +23,7 @@
 import { readFileSync, writeFileSync, mkdirSync, renameSync } from "node:fs"
 import { join, dirname } from "node:path"
 import { homedir } from "node:os"
+import { dataPath } from "./platform/paths"
 
 export interface ChildRecord {
   pid: number
@@ -36,8 +37,7 @@ export interface ChildRecord {
 export function registryPath(): string {
   const override = process.env.FABULA_CHILDREG_FILE
   if (override) return override
-  const data = process.env.XDG_DATA_HOME || join(homedir(), ".local/share")
-  return join(data, "fabula", "children.json")
+  return dataPath("children.json")
 }
 
 export function readRegistry(): ChildRecord[] {

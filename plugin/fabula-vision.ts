@@ -23,6 +23,7 @@ import {
   parseLMStudioTypes, resolveCapability, shouldGate, visionNotice,
   isLocalBaseURL, lmStudioApiBase, desiredVisionConfig,
 } from "./lib/vision"
+import { engineConfigFile } from "./lib/platform/paths"
 
 const z = tool.schema
 const TTL = 60_000
@@ -34,14 +35,8 @@ let lmTypeCache: { at: number; base: string; map: Map<string, string> } | null =
 let cfgCache: { at: number; data: any } | null = null
 
 function configPath(): string {
-  // The app passes the config path via MIMOCODE_CONFIG (engine env contract); fall back to the
-  // engine's config dir with FABULA's renamed config file.
-  if (process.env.MIMOCODE_CONFIG) return process.env.MIMOCODE_CONFIG
-  const xdg = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config")
-  // Engine config dir is ~/.config/fabula (global.ts APP="fabula"); keep the legacy mimocode path only
-  // as a fallback for older installs.
-  const cand = [path.join(xdg, "fabula", "fabula.config.json"), path.join(xdg, "mimocode", "fabula.config.json")]
-  return cand.find((p) => existsSync(p)) || cand[0]
+  // One resolver for all five modules that read the engine config — see platform/paths.
+  return engineConfigFile()
 }
 
 async function readConfig(fresh = false): Promise<any> {

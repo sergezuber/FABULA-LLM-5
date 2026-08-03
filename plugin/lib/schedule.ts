@@ -1,10 +1,16 @@
-// Self-scheduling via macOS launchd LaunchAgents (real firing, user-scoped, no daemon to
-// maintain). Pure builders/parsers (unit-testable); the file write + launchctl load live in the tool.
+// Self-scheduling — the FABULA-shaped half. WHICH scheduler runs the job (launchd, systemd user timers,
+// Task Scheduler) is `platform/scheduler.ts`; what a FABULA job CONTAINS is here: the id rules, the
+// clock parsing, and the command line that sources .env, runs the engine and reports the outcome.
 // The scheduled prompt is threat-scanned (injection guard) before a job is ever written.
 
-export const LABEL_PREFIX = "com.fabula.schedule."
+import { LABEL_PREFIX, selfRemoveCommand, buildPlist as buildPlatformPlist } from "./platform/scheduler"
+import { current } from "./platform/index"
 
-/** Safe launchd label slug from a user name. */
+export { LABEL_PREFIX }
+
+/** Safe job-id slug from a user name. Deliberately the intersection of what all three schedulers accept:
+ *  lowercase, digits and hyphens survive a launchd label, a systemd unit name and a Task Scheduler name
+ *  alike, so one id names the same job everywhere. */
 export function sanitizeJobId(name: string): string | null {
   if (typeof name !== "string") return null
   const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48)
@@ -18,45 +24,28 @@ export function parseTime(t: string): { hour: number; minute: number } | null {
   return { hour: parseInt(m[1], 10), minute: parseInt(m[2], 10) }
 }
 
-/** Shell-quote a string for safe inclusion in a bash -lc command. */
+/** Shell-quote a string for safe inclusion in a `-lc` command. */
 export function shQuote(s: string): string {
   return `'${String(s).replace(/'/g, "'\\''")}'`
 }
 
 export interface PlistOpts {
   label: string
-  command: string        // bash -lc <command>
+  command: string
   hour: number
   minute: number
   logPath: string
 }
 
-/** Build a LaunchAgent plist XML that runs `command` daily at hour:minute. */
+/** Build a LaunchAgent plist XML that runs `command` daily at hour:minute.
+ *  Kept as a named export because callers and tests speak in plists; the rendering itself lives with the
+ *  other two schedulers, so adding a field to a job means editing one file rather than three. */
 export function buildPlist(o: PlistOpts): string {
-  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key><string>${esc(o.label)}</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>/bin/bash</string>
-    <string>-lc</string>
-    <string>${esc(o.command)}</string>
-  </array>
-  <key>StartCalendarInterval</key>
-  <dict><key>Hour</key><integer>${o.hour}</integer><key>Minute</key><integer>${o.minute}</integer></dict>
-  <key>StandardOutPath</key><string>${esc(o.logPath)}</string>
-  <key>StandardErrorPath</key><string>${esc(o.logPath)}</string>
-  <key>RunAtLoad</key><false/>
-</dict>
-</plist>
-`
+  return buildPlatformPlist({ ...o, id: "", shell: "/bin/bash" })
 }
 
-/** Build the bash command that a scheduled job runs (sources .env, runs the engine; optional one-shot self-unload).
- *  With `notify`: adds a fail-loud preflight (if the local model endpoint is down → ping
+/** Build the command that a scheduled job runs (sources .env, runs the engine; optional one-shot
+ *  self-removal). With `notify`: adds a fail-loud preflight (if the local model endpoint is down → ping
  *  "did not run" + stamp, and stop) and captures the run output, piping it to the jobpostrun CLI helper
  *  (untrusted-wrap + threat-scan + ntfy + ledger-stamp). See lib/jobpostrun.ts. */
 export function buildJobCommand(o: {
@@ -79,8 +68,9 @@ export function buildJobCommand(o: {
   } else {
     cmd += engineRun
   }
+  // A one-shot job removes ITSELF, in whatever way this platform's scheduler understands.
   if (o.oneShot && o.plistPath && o.label) {
-    cmd += `; launchctl unload ${shQuote(o.plistPath)} 2>/dev/null; rm -f ${shQuote(o.plistPath)}`
+    cmd += `; ${selfRemoveCommand(o.label, o.plistPath, current())}`
   }
   return cmd
 }

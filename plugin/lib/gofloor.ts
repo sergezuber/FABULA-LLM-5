@@ -1,3 +1,4 @@
+import { goBinDirs, systemBinDirs, appendToPath } from "./platform/paths"
 // FABULA-LLM-5 — the DETERMINISTIC Go analysis floor: pure core, zero IO.
 //
 // WHY THIS EXISTS, and it is measured rather than assumed. arXiv:2602.16741 (9,366 trials over
@@ -621,14 +622,11 @@ export function goToolPath(env: Record<string, string | undefined>, home?: strin
   const extra = [
     env.GOBIN,
     env.GOPATH ? `${env.GOPATH}/bin` : h ? `${h}/go/bin` : undefined,
-    "/usr/local/go/bin", // the official Go installer's own location for `go`
-    "/opt/homebrew/bin",
-    "/usr/local/bin",
+    ...goBinDirs(env as NodeJS.ProcessEnv), // GOBIN / GOPATH/bin / the official installer's own dir
+    ...systemBinDirs(),
   ].filter((p): p is string => Boolean(p))
-  const current = env.PATH ? env.PATH.split(":") : []
-  const seen = new Set(current)
-  const appended = extra.filter((p) => !seen.has(p) && !seen.has(p.replace(/\/$/, "")))
-  return [...current, ...appended].join(":")
+  // The caller's own PATH stays in front — an operator who put a directory there has decided.
+  return appendToPath(env.PATH, extra)
 }
 
 /**

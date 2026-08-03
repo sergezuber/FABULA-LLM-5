@@ -8,10 +8,11 @@
 import { promises as fs } from "node:fs"
 import * as path from "node:path"
 import * as os from "node:os"
+import { dataPath } from "./platform/paths"
 
 // Under the engine data dir (app id "fabula"); FABULA_HANDOFF_DIR overrides for hermetic tests.
 export const HANDOFF_DIR = process.env.FABULA_HANDOFF_DIR ||
-  path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share"), "fabula", "handoff")
+  dataPath("handoff")
 const KEY_CAP = 64
 const SUMMARY_CAP = 400
 const DATA_CAP = 4000 // hard cap → never re-introduces the context-drowning / re-read surface (the #1 pain)

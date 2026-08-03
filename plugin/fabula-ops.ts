@@ -16,13 +16,22 @@ import { sanitizeJobId, parseTime, buildPlist, buildJobCommand, LABEL_PREFIX } f
 import { scanThreats, threatBanner } from "./lib/threatscan"
 import { readLedger, annotate } from "./lib/heartbeat"
 import { isUncensoredModel, uncensoredPattern } from "./lib/distillguard"
+import { dataPath, findProgram } from "./lib/platform/paths"
+import { jobDir, jobFile, planInstall, parseKnownJobs } from "./lib/platform/scheduler"
+import { shellBin } from "./lib/platform/shell"
 
-/** The labels launchd is actually running, or null when launchd could not be asked. `null` is NOT an
+/** argv that asks THIS platform's scheduler what it knows. */
+function schedulerListArgv(): string[] {
+  return planInstall({ id: "probe", command: "", hour: 0, minute: 0, logPath: "" }, { shell: shellBin() }).listArgv
+}
+
+/** The labels the system scheduler is actually running, or null when launchd could not be asked. `null` is NOT an
  *  empty set: reporting every job as an orphan because a probe failed would be its own false claim. */
 async function loadedLabels(): Promise<Set<string> | null> {
   return new Promise((resolve) => {
     try {
-      const c = spawn("launchctl", ["list"])
+      const listArgv = schedulerListArgv()
+      const c = spawn(listArgv[0]!, listArgv.slice(1))
       let out = ""
       const t = setTimeout(() => { try { c.kill() } catch {} ; resolve(null) }, 4000)
       c.stdout.on("data", (d) => { out += d.toString() })
@@ -30,34 +39,31 @@ async function loadedLabels(): Promise<Set<string> | null> {
       c.on("close", (code) => {
         clearTimeout(t)
         if (code !== 0 && !out) return resolve(null)
-        const labels = new Set<string>()
-        for (const line of out.split("\n")) {
-          const label = line.trim().split(/\s+/).pop() ?? ""
-          if (label.startsWith(LABEL_PREFIX)) labels.add(label)
-        }
-        resolve(labels)
+        // Every scheduler prints the label somewhere on its line and formats the rest differently;
+        // only "does it know this label" is being asked, so only that is parsed.
+        resolve(new Set(parseKnownJobs(out).map((id) => LABEL_PREFIX + id)))
       })
     } catch { resolve(null) }
   })
 }
 
 const z = tool.schema
-const ENGINE = process.env.FABULA_ENGINE_BIN ||
-  ["/opt/homebrew/bin/fabula", "/usr/local/bin/fabula", path.join(os.homedir(), ".local", "bin", "fabula"),
-   "/opt/homebrew/bin/mimo"].find((p) => existsSync(p)) || "fabula"
+const ENGINE = process.env.FABULA_ENGINE_BIN || findProgram("fabula")
 const DOTENV = process.env.FABULA_DOTENV || path.join(os.homedir(), "GitHub", "FABULA-LLM-5", ".env")
-const AGENTS_DIR = path.join(os.homedir(), "Library", "LaunchAgents")
+// WHERE job definitions live is the scheduler's business, not this file's: a LaunchAgents directory on
+// macOS, `~/.config/systemd/user` on Linux, and NOTHING on Windows (Task Scheduler owns its own store,
+// which is also why there is no orphan file to mistake for a job there).
+const AGENTS_DIR = jobDir()
 // Under the engine data dir (app id "fabula"), namespaced in an ops/ subdir so scheduled-job logs don't
 // mix with the engine's own ~/.local/share/fabula/log.
 const OPS_DATA = process.env.FABULA_OPS_DIR ||
-  path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share"), "fabula", "ops")
+  dataPath("ops")
 const LOG_DIR = path.join(OPS_DATA, "log")
 // Scheduled-job post-run harness wiring.
 const LEDGER = path.join(OPS_DATA, "schedule-state.json")
 const PLUGIN_DIR = (() => { try { return path.dirname(realpathSync(fileURLToPath(import.meta.url))) } catch { return path.dirname(fileURLToPath(import.meta.url)) } })()
 const JOBPOSTRUN = path.join(PLUGIN_DIR, "lib", "jobpostrun.ts")
-const BUN_BIN = process.env.FABULA_BUN_BIN ||
-  [path.join(os.homedir(), ".bun", "bin", "bun"), "/opt/homebrew/bin/bun", "/usr/local/bin/bun"].find((p) => existsSync(p)) || "bun"
+const BUN_BIN = process.env.FABULA_BUN_BIN || findProgram("bun")
 const PREFLIGHT_URL = process.env.FABULA_PREFLIGHT_URL || "http://localhost:1235/v1/models"
 const UNCENSORED_PAT = uncensoredPattern(process.env)
 
@@ -123,7 +129,7 @@ export const FabulaOps: Plugin = async () => gate("ops", ({
           return `[BLOCKED] schedule_task refused: recurring unattended jobs are not allowed on the uncensored model "${args.model}". Use one_shot, or schedule on the aligned default model.`
         }
         const label = LABEL_PREFIX + slug
-        const plistPath = path.join(AGENTS_DIR, `${label}.plist`)
+        const plistPath = jobFile(slug)
         const logPath = path.join(LOG_DIR, `schedule-${slug}.log`)
         // Opt-in post-run notify+ledger. Preflight only for a LOCAL model (cloud is always up).
         const local = !args.model || /^lmstudio\//.test(args.model)
@@ -132,27 +138,39 @@ export const FabulaOps: Plugin = async () => gate("ops", ({
           : undefined
         const command = buildJobCommand({
           workspace: ctx.directory, dotenv: DOTENV, engine: ENGINE, model: args.model, prompt: args.prompt,
-          oneShot: !!args.one_shot, plistPath, label, notify,
+          oneShot: !!args.one_shot, plistPath: plistPath ?? undefined, label, notify,
         })
-        const plist = buildPlist({ label, command, hour: time.hour, minute: time.minute, logPath })
+        // Same three steps on every platform: write the definition (if this scheduler keeps one), drop any
+        // prior version, register. Which commands those are is the platform's answer, not this file's.
+        const plan = planInstall(
+          { id: slug, command, hour: time.hour, minute: time.minute, logPath },
+          { shell: shellBin() },
+        )
         try {
-          await fs.mkdir(AGENTS_DIR, { recursive: true }); await fs.mkdir(LOG_DIR, { recursive: true })
-          await fs.writeFile(plistPath, plist, "utf8")
-          await run("launchctl", ["unload", plistPath]) // idempotent: drop a prior version
-          const r = await run("launchctl", ["load", plistPath])
-          if (r.code !== 0) return `schedule_task: wrote ${plistPath} but launchctl load failed: ${r.out.slice(-200)}`
-          return { output: `Scheduled "${slug}" daily at ${args.at_time}${args.one_shot ? " (one-shot)" : ""}. Logs → ${logPath}. Cancel with cancel_scheduled.`, metadata: { label, plistPath } }
+          await fs.mkdir(LOG_DIR, { recursive: true })
+          if (plan.filePath && plan.fileBody) {
+            await fs.mkdir(path.dirname(plan.filePath), { recursive: true })
+            await fs.writeFile(plan.filePath, plan.fileBody, "utf8")
+          }
+          await run(plan.unregisterArgv[0]!, plan.unregisterArgv.slice(1)) // idempotent: drop a prior version
+          const r = await run(plan.registerArgv[0]!, plan.registerArgv.slice(1))
+          if (r.code !== 0) return `schedule_task: could not register "${slug}" with the system scheduler (${plan.registerArgv[0]}): ${r.out.slice(-200)}`
+          return { output: `Scheduled "${slug}" daily at ${args.at_time}${args.one_shot ? " (one-shot)" : ""}. Logs → ${logPath}. Cancel with cancel_scheduled.`, metadata: { label, plistPath: plan.filePath } }
         } catch (e: any) { return `schedule_task error: ${e.message}` }
       },
     }),
 
     list_scheduled: tool({
-      description: "List FABULA scheduled jobs (launchd LaunchAgents created by schedule_task).",
+      description: "List FABULA scheduled jobs created by schedule_task, cross-checked against the system scheduler.",
       args: { description: z.string().nullish().describe("Why") },
       async execute() {
         try {
-          if (!existsSync(AGENTS_DIR)) return "No scheduled jobs."
-          const jobs = (await fs.readdir(AGENTS_DIR)).filter((f) => f.startsWith(LABEL_PREFIX) && f.endsWith(".plist"))
+          // A scheduler that keeps no files of ours (Task Scheduler) is asked directly; one that does is
+          // read from disk AND cross-checked against the scheduler below, because a file is not a schedule.
+          const known0 = await loadedLabels()
+          const jobs = AGENTS_DIR && existsSync(AGENTS_DIR)
+            ? (await fs.readdir(AGENTS_DIR)).filter((f) => f.startsWith(LABEL_PREFIX) && (f.endsWith(".plist") || f.endsWith(".timer")))
+            : [...(known0 ?? [])].map((l) => `${l}.plist`)
           if (!jobs.length) return "No scheduled jobs."
           const led = await readLedger(LEDGER)
           const now = Date.now()
@@ -165,14 +183,14 @@ export const FabulaOps: Plugin = async () => gate("ops", ({
           // that cannot ever fire. A file on disk is a job description; only launchd knows what is
           // LOADED. When launchd cannot be asked at all, nothing is claimed either way rather than the
           // old claim being made silently.
-          const loaded = await loadedLabels()
+          const loaded = known0
           const lines = jobs.map((j) => {
-            const slug = j.slice(LABEL_PREFIX.length, -6)
+            const slug = j.replace(/\.(plist|timer)$/, "").slice(LABEL_PREFIX.length)
             const label = LABEL_PREFIX + slug
             const state = !loaded ? "" : loaded.has(label) ? "" : "  ⚠️ NOT LOADED (launchd does not know this job — it cannot fire; cancel_scheduled removes the leftover file)"
             return "  - " + annotate(slug, label, led, now) + state
           })
-          const live = loaded ? jobs.filter((j) => loaded.has(LABEL_PREFIX + j.slice(LABEL_PREFIX.length, -6))).length : jobs.length
+          const live = loaded ? jobs.filter((j) => loaded.has(LABEL_PREFIX + j.replace(/\.(plist|timer)$/, "").slice(LABEL_PREFIX.length))).length : jobs.length
           return {
             output: "Scheduled jobs:\n" + lines.join("\n"),
             metadata: { count: jobs.length, loaded: live, orphans: jobs.length - live },
@@ -187,10 +205,15 @@ export const FabulaOps: Plugin = async () => gate("ops", ({
       async execute(args: any) {
         const slug = sanitizeJobId(args.name)
         if (!slug) return `cancel_scheduled: invalid name "${args.name}".`
-        const plistPath = path.join(AGENTS_DIR, `${LABEL_PREFIX}${slug}.plist`)
-        if (!existsSync(plistPath)) return `cancel_scheduled: no job named "${slug}".`
-        await run("launchctl", ["unload", plistPath])
-        try { await fs.rm(plistPath, { force: true }) } catch {}
+        const plistPath = jobFile(slug)
+        // On a scheduler that keeps no file of ours (Task Scheduler), existence is the scheduler's answer,
+        // not the filesystem's — so ask it rather than concluding "no such job" from an empty directory.
+        const known = await loadedLabels()
+        const exists = plistPath ? existsSync(plistPath) : !!known?.has(LABEL_PREFIX + slug)
+        if (!exists && !known?.has(LABEL_PREFIX + slug)) return `cancel_scheduled: no job named "${slug}".`
+        const plan = planInstall({ id: slug, command: "", hour: 0, minute: 0, logPath: "" }, { shell: shellBin() })
+        await run(plan.unregisterArgv[0]!, plan.unregisterArgv.slice(1))
+        if (plistPath) { try { await fs.rm(plistPath, { force: true }) } catch {} }
         return `Cancelled scheduled job "${slug}".`
       },
     }),

@@ -21,6 +21,7 @@ import { join, basename, isAbsolute, dirname } from "node:path"
 import { languageSteer } from "./langsteer"
 import { tmpdir } from "node:os"
 import { sliceBudgetChars } from "./handle"
+import { baseDirs } from "./platform/paths"
 
 // ── corpus discovery ────────────────────────────────────────────────────────
 
@@ -317,10 +318,7 @@ export function cleanAnswer(text: string): string {
  *  default ~/.local/share/fabula/corpus. */
 export function accumulatorDir(): string {
   if (process.env.FABULA_CORPUS_DIR) return process.env.FABULA_CORPUS_DIR
-  const xdg = process.env.XDG_DATA_HOME
-  if (xdg) return join(xdg, "fabula", "corpus")
-  const home = "HOME" in process.env && process.env.HOME ? process.env.HOME : tmpdir()
-  return join(home, ".local", "share", "fabula", "corpus")
+  return join(baseDirs().data, "corpus")
 }
 
 export interface AccBatch { path: string; name: string; done: boolean; summary: string }

@@ -20,7 +20,12 @@ const SKILL_PATTERNS: Array<[RegExp, string]> = [
   [/\bnc\b\s+-[a-z]*e|\b(bash|sh)\s+-i\s+>&\s*\/dev\/tcp\//i, "reverse_shell"],
   [/\/dev\/tcp\/\d/i, "raw_socket_exec"],
   [/~\/\.(ssh|aws|config\/gcloud)\b|\.env\b|id_rsa\b/i, "credential_path_access"],
+  // Every platform's persistence targets, not just this one's: a skill is a text file that travels,
+  // so the same downloaded skill has to read as dangerous on the machine it lands on. The Windows
+  // registry Run key has no path at all, which is exactly why it is matched here as a COMMAND.
   [/\bcrontab\b|LaunchAgents|LaunchDaemons|\.bashrc|\.zshrc|\.profile\b/i, "persistence_target"],
+  [/\.config\/(autostart|systemd\/user)\b|\bsystemctl\s+--user\s+(enable|link)\b/i, "persistence_target"],
+  [/currentversion\\run\b|\bschtasks\b|\bregister-scheduledtask\b|Start Menu\\Programs\\Startup/i, "persistence_target"],
   [/\b(pip|npm|pnpm|yarn|gem|cargo)\s+install\b/i, "installs_packages"],
 ]
 

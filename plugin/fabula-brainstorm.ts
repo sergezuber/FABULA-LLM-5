@@ -10,6 +10,7 @@ import { callAux } from "./lib/auxLLM"
 import { spawn } from "node:child_process"
 import { refHuntTerms } from "./lib/unknowns"
 import { brainstormPrompt, looksLikeBrainstorm } from "./lib/brainstorm"
+import { spawnShell } from "./lib/platform/shell"
 
 const z = tool.schema
 
@@ -19,7 +20,7 @@ function grepRepo(dir: string, terms: string[], maxBytes = 4000): Promise<string
     const pat = terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")
     const q = JSON.stringify(pat)
     const cmd = `(rg -n --no-heading -S -m 2 -g '!node_modules' -e ${q} . 2>/dev/null || grep -rnI -m 2 --exclude-dir=node_modules --exclude-dir=.git -E ${q} . 2>/dev/null) | head -40`
-    const c = spawn("bash", ["-lc", cmd], { cwd: dir, env: process.env })
+    const c = spawnShell(cmd, { cwd: dir, env: process.env })
     let out = ""
     const t = setTimeout(() => { try { c.kill() } catch {} }, 6000)
     c.stdout.on("data", (d) => { if (out.length < maxBytes) out += d.toString() })

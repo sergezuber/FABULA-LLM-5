@@ -70,6 +70,7 @@ function countReadableFiles(dir: string, depth = 2): number {
   }
 }
 import { existsSync, statSync } from "node:fs"
+import { dataPath, findProgram } from "./lib/platform/paths"
 
 const REPORT_TAG = "[fabula-corpus-report]"
 const RECURSION_PREFIX = REPORT_TAG // a re-injected report must not re-trigger the intercept
@@ -93,20 +94,14 @@ const WORKER = join(HERE, "lib", "corpus-worker.ts")
 function bunBin(): string {
   const named = process.env.FABULA_BUN_BIN
   if (named) return named
-  const cands = [join(process.env.HOME || "", ".bun", "bin", "bun"), "/opt/homebrew/bin/bun", "/usr/local/bin/bun"]
-  for (const c of cands) {
-    try { if (statSync(c).isFile()) return c } catch { /* not here; try the next */ }
-  }
-  return "bun" // last resort: whatever PATH resolves
+  return findProgram("bun") // the search order is the platform's answer; PATH is the last resort
 }
 
 /** Did a previous attempt hand this session's task back to the model? The worker writes the marker
  *  beside its accumulator (same key), so the answer survives the process boundary between the two. */
 function handedBack(sessionID: string, dir: string | undefined): boolean {
   try {
-    const base = process.env.XDG_DATA_HOME
-      ? join(process.env.XDG_DATA_HOME, "fabula", "corpus")
-      : join(process.env.HOME || "/tmp", ".local", "share", "fabula", "corpus")
+    const base = dataPath("corpus")
     return existsSync(join(base, `${accumulatorKey(sessionID, dir || process.cwd())}.handback.json`))
   } catch { return false }
 }

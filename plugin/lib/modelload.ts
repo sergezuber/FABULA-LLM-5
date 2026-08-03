@@ -20,20 +20,25 @@
 import { spawn, execFileSync } from "node:child_process"
 import { readFileSync, writeFileSync, mkdirSync, renameSync, readdirSync, statSync } from "node:fs"
 import { join, dirname } from "node:path"
-import { homedir, totalmem } from "node:os"
+import { homedir } from "node:os"
+// The memory question is asked in ONE place. Which pool it reads — unified, GPU, or plain system memory —
+// is that module's decision, and on macOS its answer is byte-identical to the `os.totalmem()` / `vm_stat`
+// pair these call sites used to inline. Imported under their real names: an alias that made
+// `platform/memory.totalBytes` read as `totalmem` would leave the seam correct and unfindable, which in
+// practice is the same as absent.
+import { totalBytes, usedBytes as platformUsedBytes } from "./platform/memory"
+import { bunBinDir, servingBinDir, systemBinDirs, localBinDir, joinPathList, dataPath } from "./platform/paths"
 import { planWindow, DEFAULT_POLICY, type Resident, type WindowPlan } from "./windowplan"
 import { fitCost, fitCostFromSamples, addObservation, safeSecondWindow, marginalCost, MIN_SIGNAL_TOKENS, SAMPLE_DISPERSION_LIMIT, type Observation, type KvSample } from "./kvcost"
 import { resolveModelDir } from "./modeldigest"
 
 /** GUI-launched apps do not inherit the shell PATH, so a bare `lms` is not found — the same trap the
- *  other shell-outs in this project already carry a prefix for. */
-const PATH_PREFIX = [
-  join(homedir(), ".bun/bin"),
-  join(homedir(), ".lmstudio/bin"),
-  "/opt/homebrew/bin",
-  "/usr/local/bin",
-  join(homedir(), ".local/bin"),
-].join(":")
+ *  other shell-outs in this project already carry a prefix for. The directories are NAMED by
+ *  `platform/paths.ts` (which knows where each one is per platform); the ORDER stays here, because it is
+ *  this module's decision that the serving CLI should be found before a homebrew copy of it. */
+function pathPrefix(): string {
+  return joinPathList([bunBinDir(), servingBinDir(), ...systemBinDirs(), localBinDir()])
+}
 
 /** Read at CALL time, never at import. A value captured when the module loads is a snapshot, and this
  *  project has now been bitten by that shape three times in one day — a window cached for the life of a
@@ -58,8 +63,9 @@ function lmsBin(): string {
 function storePath(): string {
   const base = process.env.FABULA_KVCOST_FILE
   if (base) return base
-  const data = process.env.XDG_DATA_HOME || join(homedir(), ".local/share")
-  return join(data, "fabula", "kvcost.json")
+  // Resolved the way the ENGINE resolves its data dir, which twenty-six hand-written copies of this line
+  // did not: `MIMOCODE_HOME` moves the engine's whole tree and every one of them stayed behind.
+  return dataPath("kvcost.json")
 }
 
 type Store = Record<string, Observation[]>
@@ -89,16 +95,13 @@ function writeStore(s: Store): void {
  * Bytes in use on this machine right now. Read from the kernel, because nothing else reports it: the
  * serving API returns no memory field, and `lms ps` reports a SIZE that stays at 21.95 GB whether the
  * window is 32768 or 262144 — that is the weights, and a cost model built on it fits a flat line.
+ *
+ * WHICH kernel, and which pool, is decided in `platform/memory.ts`. It stays exported here because the
+ * whole calibration path below is written in terms of it, and because this is where a reader of the cost
+ * model looks for it. On macOS the answer is byte-identical to the `vm_stat` parse this used to inline.
  */
 export function usedBytes(): number {
-  try {
-    const out = execFileSync("vm_stat", { encoding: "utf8", timeout: 3000 })
-    const page = Number(out.match(/page size of (\d+)/)?.[1]) || 16384
-    const grab = (label: string) => Number(out.match(new RegExp(`${label}:\\s+(\\d+)`))?.[1]) || 0
-    return (grab("Pages active") + grab("Pages wired down") + grab("Pages occupied by compressor")) * page
-  } catch {
-    return 0
-  }
+  return platformUsedBytes()
 }
 
 /**
@@ -139,7 +142,7 @@ export function weightsFromLmsPs(): { line: string; bytes: number }[] {
     const out = execFileSync(lmsBin(), ["ps"], {
       encoding: "utf8",
       timeout: 8000,
-      env: { ...process.env, PATH: `${PATH_PREFIX}:${process.env.PATH ?? ""}` },
+      env: { ...process.env, PATH: `${pathPrefix()}:${process.env.PATH ?? ""}` },
     })
     const rows: { line: string; bytes: number }[] = []
     for (const line of out.split("\n")) {
@@ -266,8 +269,7 @@ export function residentsOther(
 function samplePath(): string {
   const base = process.env.FABULA_KVSAMPLE_FILE
   if (base) return base
-  const data = process.env.XDG_DATA_HOME || join(homedir(), ".local/share")
-  return join(data, "fabula", "kvsamples.json")
+  return dataPath("kvsamples.json")
 }
 
 type SampleStore = Record<string, KvSample[]>
@@ -588,7 +590,7 @@ export function stillResident(modelId: string): boolean {
     const out = execFileSync(lmsBin(), ["ps"], {
       encoding: "utf8",
       timeout: 8000,
-      env: { ...process.env, PATH: `${PATH_PREFIX}:${process.env.PATH ?? ""}` },
+      env: { ...process.env, PATH: `${pathPrefix()}:${process.env.PATH ?? ""}` },
     })
     return out.split("\n").some((l) => l.includes(modelId) && !/IDENTIFIER/.test(l))
   } catch {
@@ -602,7 +604,7 @@ export async function anyModelBusy(): Promise<boolean> {
     const out = execFileSync(lmsBin(), ["ps"], {
       encoding: "utf8",
       timeout: 8000,
-      env: { ...process.env, PATH: `${PATH_PREFIX}:${process.env.PATH ?? ""}` },
+      env: { ...process.env, PATH: `${pathPrefix()}:${process.env.PATH ?? ""}` },
     })
     return /PROCESSING|GENERATING/i.test(out)
   } catch {
@@ -619,7 +621,7 @@ function lmsLoad(modelId: string, window: number, timeoutMs: number, slots = pla
   try {
     execFileSync(lmsBin(), ["unload", modelId], {
       timeout: 30_000,
-      env: { ...process.env, PATH: `${PATH_PREFIX}:${process.env.PATH ?? ""}` },
+      env: { ...process.env, PATH: `${pathPrefix()}:${process.env.PATH ?? ""}` },
       stdio: "ignore",
     })
   } catch {
@@ -647,7 +649,7 @@ function lmsLoad(modelId: string, window: number, timeoutMs: number, slots = pla
   return new Promise((resolve) => {
     const args = ["load", modelId, "--context-length", String(window), "--parallel", String(slots), "-y"]
     const child = spawn(lmsBin(), args, {
-      env: { ...process.env, PATH: `${PATH_PREFIX}:${process.env.PATH ?? ""}` },
+      env: { ...process.env, PATH: `${pathPrefix()}:${process.env.PATH ?? ""}` },
       stdio: ["ignore", "pipe", "pipe"],
     })
     let out = ""
@@ -721,7 +723,7 @@ export async function ensureLoadedAtPlannedWindow(
       // establishes the baseline (it unloads before it loads). Requiring a prior reading here was the
       // deadlock one layer down — no baseline, no footprint, no reading, no step, forever.
       const basis = { windowTokens: me.loadedWindow || 0, totalBytes: 1 }
-      const free = Math.max(0, totalmem() - usedBytes() - DEFAULT_POLICY.systemReserveBytes)
+      const free = Math.max(0, totalBytes() - usedBytes() - DEFAULT_POLICY.systemReserveBytes)
       const second = basis.windowTokens > 0 ? safeSecondWindow(basis, free, me.passport) : 0
       if (!second) {
         return {
@@ -786,7 +788,7 @@ export async function ensureLoadedAtPlannedWindow(
 
     const plan = planWindow({
       passportTokens: me.passport,
-      totalBytes: totalmem(),
+      totalBytes: totalBytes(),
       weightsBytes: weights,
       bytesPerToken: cost.bytesPerToken,
       residents: residentsOther(served, modelId),
@@ -860,7 +862,7 @@ export async function ensureLoadedAtPlannedWindow(
           `the runtime REFUSED the window: asked for ${plan.tokens}, it loaded at ${got} ` +
           `(${overshoot.toFixed(2)}x the plan). Nothing here can lower it — that model's own configuration ` +
           `outranks the load flag. At the measured cost this provisioning needs ${needGiB} GiB, and the ` +
-          `machine is sized for ${((totalmem() - DEFAULT_POLICY.systemReserveBytes) * DEFAULT_POLICY.commitFraction / 1024 ** 3).toFixed(1)} GiB.`,
+          `machine is sized for ${((totalBytes() - DEFAULT_POLICY.systemReserveBytes) * DEFAULT_POLICY.commitFraction / 1024 ** 3).toFixed(1)} GiB.`,
       }
     }
 

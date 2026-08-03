@@ -10,11 +10,12 @@ import * as path from "node:path"
 import * as os from "node:os"
 import { removeHandoffsForSession } from "./lib/handoff"
 import { sessionArtifacts } from "./lib/corpus"
+import { dataPath } from "./lib/platform/paths"
 
 // The engine's XDG data dir follows its app id ("fabula"): ~/.local/share/fabula, where per-session
 // checkpoint memory (memory/sessions/<id>) actually lives. Pointing at the legacy "mimocode" dir made
 // this real-time purge no-op on the live data — deleted-chat memory survived (privacy). Matches fabula-purge.sh.
-const DATA = path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share"), "fabula")
+const DATA = dataPath()
 
 export const FabulaPurgeHook: Plugin = async () => gate("purge-hook", ({
   async event({ event }: any) {

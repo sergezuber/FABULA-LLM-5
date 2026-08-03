@@ -81,29 +81,11 @@ if [ -n "$ENGINE_REAL" ]; then
 fi
 
 echo "▸ 5/5  Local-model adapter (:1235)…"
-# Never touch a live adapter: if ANYTHING answers on :1235 (even a 502 while LM Studio is off),
-# an adapter instance owns the port — a LaunchAgent or a manual run. Leave it alone.
-if curl -s -o /dev/null -m 2 http://localhost:1235/v1/models 2>/dev/null; then
-  echo "  adapter already running — left untouched."
-elif [ -f "$HOME/Library/LaunchAgents/com.fabula.lmstudio-adapter.plist" ]; then
-  echo "  LaunchAgent installed but not answering — start LM Studio, then: launchctl kickstart -k gui/$(id -u)/com.fabula.lmstudio-adapter"
-else
-  PLIST="$HOME/Library/LaunchAgents/com.fabula.lmstudio-adapter.plist"
-  mkdir -p "$HOME/Library/LaunchAgents"
-  PY="$(command -v python3 || echo /usr/bin/python3)"
-  cat > "$PLIST" <<PLIST_EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>Label</key><string>com.fabula.lmstudio-adapter</string>
-  <key>ProgramArguments</key><array><string>$PY</string><string>$HERE/proxy/lmstudio-adapter.py</string></array>
-  <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
-</dict></plist>
-PLIST_EOF
-  launchctl load "$PLIST" 2>/dev/null || true
-  echo "  adapter installed as a LaunchAgent (starts with your session)."
-fi
+# WHICH service manager promises "start this with my session" is the platform's answer, not this
+# script's: a LaunchAgent, a systemd user service, or a Task Scheduler logon task. The installer holds
+# all three and refuses to touch a live adapter — if ANYTHING answers on :1235, even a 502 while the
+# serving runtime is off, an instance owns that port and replacing it would lose somebody's turn.
+bun scripts/install-adapter-service.ts || echo "  (adapter service not installed — run it manually: bun scripts/install-adapter-service.ts --status)"
 
 echo ""
 echo "✓ Setup complete.  →  open FABULA-LLM-5.app"

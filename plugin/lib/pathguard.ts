@@ -4,6 +4,7 @@
 
 import * as os from "node:os"
 import * as path from "node:path"
+import { hardlineTargets } from "./platform/persistence"
 
 export interface PathVerdict { blocked: boolean; reason: string; code: string }
 const OK: PathVerdict = { blocked: false, reason: "", code: "allow" }
@@ -91,29 +92,22 @@ function stripPrivate(p: string): string {
   return p.replace(/^\/private(\/(?:etc|var|tmp)(?:\/|$))/, "$1")
 }
 
+/**
+ * The rules themselves live in `platform/persistence.ts`, in ONE ordered list per platform, because the
+ * kernel profile in `lib/sandbox.ts` has to enforce the same set and used to carry its own hand-written
+ * copy of it. A mirror is something that can stop reflecting: add a target to one list and the other
+ * keeps enforcing the old set, so the in-process rules and the kernel disagree exactly where nobody looks.
+ *
+ * This function is now only the MATCHER — first rule that matches wins, and order is contract (a write to
+ * this user's own `~/.ssh/authorized_keys` reports `ssh_authorized_keys`; anyone else's reports the
+ * generic `ssh_key`).
+ */
 function matchWriteRules(p: string): PathVerdict {
-  const home = os.homedir()
-  const hits: Array<[RegExp | string, string, string]> = [
-    [path.join(home, ".ssh", "authorized_keys"), "ssh_authorized_keys", "writing SSH authorized_keys installs a login backdoor."],
-    [/\/\.ssh\/(authorized_keys|id_[a-z0-9]+)$/, "ssh_key", "writing into ~/.ssh keys/authorized_keys is an SSH backdoor vector."],
-    ["/etc/sudoers", "sudoers", "modifying /etc/sudoers escalates privileges."],
-    [/^\/etc\/sudoers\.d\//, "sudoers", "modifying sudoers.d escalates privileges."],
-    ["/etc/passwd", "passwd", "modifying /etc/passwd tampers with system accounts."],
-    ["/etc/shadow", "shadow", "modifying /etc/shadow tampers with password hashes."],
-    [/\/cron(tab|\.d)\b|\/var\/(at|spool\/cron)\//, "cron", "writing cron entries installs persistence."],
-    [/\/(Library|System)\/LaunchDaemons\//, "launchd", "writing LaunchDaemons installs persistence."],
-    [path.join(home, "Library", "LaunchAgents"), "launchagent", "writing LaunchAgents installs persistence."],
-    // THE SUPERVISION LAYER'S OWN STATE. `set_permission_mode` and `disable_plugin` refuse to disarm the
-    // guards from inside a run — but both of those decisions are stored as plain JSON, and a run that can
-    // write the file does not need the tools at all: one `echo '{"mode":"bypass"}' >` and every guard is
-    // off, or one `{"disabled":["security", …]}` and the whole layer stops loading. Guarding the tool and
-    // leaving the file is guarding the front door of a house with no walls.
-    [/fabula-permissions\.json$/, "supervision_state", "this file records whether the guards are on; editing it from inside a run disarms them."],
-    [/fabula-state\.json$/, "supervision_state", "this file records which plugins load; editing it from inside a run can switch the guards off."],
-  ]
-  for (const [pat, code, reason] of hits) {
-    const m = typeof pat === "string" ? p === pat || p.startsWith(pat) : pat.test(p)
-    if (m) return { blocked: true, code, reason }
+  for (const target of hardlineTargets()) {
+    for (const pat of target.match) {
+      const m = typeof pat === "string" ? p === pat || p.startsWith(pat) : pat.test(p)
+      if (m) return { blocked: true, code: target.code, reason: target.reason }
+    }
   }
   return OK
 }

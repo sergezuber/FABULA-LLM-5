@@ -1,3 +1,4 @@
+import { baseDirs } from "./platform/paths"
 // W6 — the escalation decision ledger, and the metric that judges it.
 //
 // arXiv:2604.09408 (HiL-Bench) names the thing this harness could not do at all: nothing recorded WHEN
@@ -196,9 +197,11 @@ export function askLedgerPath(env: Record<string, string | undefined> = process.
   const nodeOs = require("node:os") as typeof import("node:os")
   const override = (env[LEDGER_ENV] || "").trim()
   if (override && nodePath.isAbsolute(override)) return override
-  const xdg = (env.XDG_DATA_HOME || "").trim()
-  if (!xdg && (env.NODE_ENV === "test" || env.BUN_TEST || env.FABULA_TEST)) {
+  // A NAMED root — XDG_DATA_HOME or MIMOCODE_HOME — has already decided, and is honoured even under a
+  // test runner. With neither named, a test runner is kept out of the user's real store.
+  const named = (env.XDG_DATA_HOME || "").trim() || (env.MIMOCODE_HOME || "").trim()
+  if (!named && (env.NODE_ENV === "test" || env.BUN_TEST || env.FABULA_TEST)) {
     return nodePath.join(nodeOs.tmpdir(), "fabula-ask-ledger-test.json")
   }
-  return nodePath.join(xdg || nodePath.join(nodeOs.homedir(), ".local", "share"), "fabula", "ask-ledger.json")
+  return nodePath.join(baseDirs(env as NodeJS.ProcessEnv).data, "ask-ledger.json")
 }

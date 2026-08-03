@@ -13,6 +13,7 @@ import { callAux } from "./lib/auxLLM"
 import { spawn } from "node:child_process"
 import { quizPrompt, gradePrompt, parseGrade, newQuizState, shouldSteerQuiz, shouldInjectQuizReminder, CHANGE_QUIZ_STEER, CHANGE_QUIZ_REMINDER, type QuizState } from "./lib/changequiz"
 import { isSourceFile } from "./lib/unknowns"
+import { spawnShell } from "./lib/platform/shell"
 
 const z = tool.schema
 
@@ -25,7 +26,7 @@ function stateFor(sid: string): QuizState {
 /** The uncommitted change (working tree vs HEAD), capped. Empty if not a git repo / no changes. */
 function gitDiff(dir: string, maxBytes = 14000): Promise<string> {
   return new Promise((resolve) => {
-    const c = spawn("bash", ["-lc", "git diff HEAD -- . 2>/dev/null || git diff 2>/dev/null"], { cwd: dir, env: process.env })
+    const c = spawnShell("git diff HEAD -- . 2>/dev/null || git diff 2>/dev/null", { cwd: dir, env: process.env })
     let out = ""
     const t = setTimeout(() => { try { c.kill() } catch {} }, 6000)
     c.stdout.on("data", (d) => { if (out.length < maxBytes) out += d.toString() })

@@ -14,6 +14,7 @@ import { budgetWindow } from "./handle"
 import { probeWindow } from "./ctxguard"
 import { writeFileSync, readFileSync, existsSync, mkdirSync, unlinkSync } from "node:fs"
 import { join } from "node:path"
+import { dataPath } from "./platform/paths"
 
 // ── arg parsing (robust: taskText may contain shell-hostile chars, so accept it base64'd) ──────────
 const [_node, _script, cwdArg, sessionID, taskB64, serverUrlArg, reportTagArg] = process.argv
@@ -37,7 +38,7 @@ const SYNTH_HARD_CAP = Math.max(2000, parseInt(process.env.FABULA_CORPUS_SYNTH_H
 const MIN_FILES = Math.max(2, parseInt(process.env.FABULA_CORPUS_MIN || "2", 10) || 2)
 
 // ── heartbeat file: the spawner + any watchdog can see the worker is alive + how far it got ───────
-const HB_DIR = process.env.XDG_DATA_HOME ? join(process.env.XDG_DATA_HOME, "fabula", "corpus") : join(process.env.HOME || "/tmp", ".local", "share", "fabula", "corpus")
+const HB_DIR = dataPath("corpus")
 const HB = join(HB_DIR, `${accumulatorKey(sessionID, cwd)}.heartbeat.json`)
 const HANDBACK = join(HB_DIR, `${accumulatorKey(sessionID, cwd)}.handback.json`)
 function hb(state: string, extra: Record<string, unknown> = {}): void {

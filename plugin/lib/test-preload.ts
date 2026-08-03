@@ -72,3 +72,21 @@ if (!process.env.FABULA_TEST_ALLOW_CLOUD) {
 // ~/.local/share/fabula/memstore while its own tests read a temp dir and reported the records missing.
 // Any new on-disk store MUST be added here AND carry its own test-runner guard in its path resolver,
 // because whichever of the two someone forgets, the other still holds.
+
+// ── The machine's memory is pinned, so a test's verdict never depends on the developer's free RAM ──
+//
+// MEASURED 2026-08-03. The window planner reads the REAL machine (`vm_stat` / `/proc/meminfo` /
+// `os.freemem`), so three of its tests moved with whatever else happened to be running: in isolation they
+// passed five times out of five, and under the full 163-file suite — or simply with the app open — they
+// flipped, because a few gigabytes of live memory is exactly the difference between "this window fits"
+// and "it does not". A suite whose answer depends on how much RAM is free is not hermetic, and this
+// project's rule is that it must be.
+//
+// Pinned at the SOURCE (`platform/memory.ts` reads these at call time) rather than in any test file, so
+// nothing had to be rewritten to match a machine — the recurring shape where a test is quietly adjusted
+// until it agrees with the environment instead of the environment being made deterministic.
+//
+// The figures are a plausible 48 GiB machine with ~24 GiB in use. A test that needs different ones sets
+// them itself; a test that needs the REAL machine deletes them, and then owns its own flakiness.
+if (!process.env.FABULA_MEMORY_TOTAL_BYTES) process.env.FABULA_MEMORY_TOTAL_BYTES = String(48 * 1024 ** 3)
+if (!process.env.FABULA_MEMORY_USED_BYTES) process.env.FABULA_MEMORY_USED_BYTES = String(24 * 1024 ** 3)

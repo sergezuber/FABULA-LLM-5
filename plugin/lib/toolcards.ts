@@ -9,6 +9,7 @@ import { codingMask, ALWAYS_ON } from "./toolbelt"
 import { TOOL_META } from "./toolmeta"
 import { GATE_REQUIRED_TOOLS } from "./toolusage"
 import type { ToolCard } from "./toolrouter"
+import { engineConfigFile } from "./platform/paths"
 
 /** Engine builtin tools (stable ids) with routing utterances for the head of the distribution.
  *  Kept curated — the engine registry can't be enumerated from plugin land at load time. */
@@ -28,9 +29,8 @@ export const ENGINE_BUILTIN_CARDS: ToolCard[] = [
 // deployments name servers freely, e.g. "code-go-serena" / "web-search-internet"). ----
 
 function configPath(): string {
-  if (process.env.MIMOCODE_CONFIG) return process.env.MIMOCODE_CONFIG
-  const xdg = process.env.XDG_CONFIG_HOME || `${process.env.HOME}/.config`
-  return `${xdg}/fabula/fabula.config.json`
+  // One resolver for all five modules that read the engine config — see platform/paths.
+  return engineConfigFile()
 }
 
 /** MCP server names from the engine config ([] when unreadable — fail open). */

@@ -3,7 +3,8 @@
 // A kernel-enforced profile is a strictly lower layer: even a command we didn't anticipate cannot
 // READ ~/.ssh/~/.aws/~/.gnupg or WRITE a .env/.key/.pem. Opt-in (FABULA_SANDBOX=1). "the harness
 // assumes the model will fail — and so does the OS." Pure profile builder here; wiring in fabula-tools.
-import * as path from "node:path"
+import { CREDENTIAL_WRITE_REGEX, credentialReadDirs, hardlineKernelRegex } from "./platform/persistence"
+import { shellArgv } from "./platform/shell"
 
 export interface SandboxConfig {
   home: string
@@ -14,22 +15,24 @@ export interface SandboxConfig {
 export function defaultSandboxConfig(home: string): SandboxConfig {
   return {
     home,
-    denyReadPaths: [".ssh", ".aws", ".gnupg", ".config/gh", ".netrc"].map((p) => path.join(home, p)),
+    denyReadPaths: credentialReadDirs(home),
     denyWriteRegex: [
-      "\\.env$", "\\.key$", "\\.pem$", "\\.p12$", "id_rsa", "id_ed25519",
+      ...CREDENTIAL_WRITE_REGEX,
       // THE PERSISTENCE AND SUPERVISION TARGETS, enforced by the kernel rather than by a path string.
       //
       // MEASURED 2026-08-01 through the live app: the write guard refused a LaunchAgent plist on every
       // file tool AND (after the shell door was closed) on bash too — and the model then wrote it with
       // `execute_code`, four lines of Node calling the ordinary filesystem API. A path a program COMPUTES
       // is invisible to every rule that reads arguments, which is exactly what a kernel profile is for:
-      // it does not care how the path was arrived at. These mirror lib/pathguard's hardline set, so the
-      // in-process rules and the kernel agree on what must not be written.
-      "/LaunchAgents/", "/LaunchDaemons/",
-      "authorized_keys",
-      "/etc/sudoers", "/etc/passwd", "/etc/shadow",
-      "/cron(tab|\\.d)", "/var/at/", "/var/spool/cron/",
-      "fabula-permissions\\.json$", "fabula-state\\.json$",
+      // it does not care how the path was arrived at.
+      //
+      // These used to be a hand-written COPY of `lib/pathguard`'s hardline set, with a comment saying so.
+      // They are now RENDERED from it (`platform/persistence.ts`), which is the whole difference between
+      // two lists that agree today and one list that cannot disagree tomorrow. One deliberate consequence:
+      // this profile now also denies `~/.ssh/id_*`, which the copy had lost while the in-process guard
+      // kept refusing it — the drift a mirror always eventually develops, found the moment the two were
+      // rendered from one source.
+      ...hardlineKernelRegex(),
     ],
   }
 }
@@ -57,14 +60,9 @@ export function hardlineSandboxConfig(home: string): SandboxConfig {
     // Reads are NOT restricted here. The shell legitimately reads everything; the claim being enforced
     // is about WRITES, and widening it silently would break ordinary work in a way nobody asked for.
     denyReadPaths: [],
-    denyWriteRegex: [
-      "/LaunchAgents/", "/LaunchDaemons/",
-      "authorized_keys",
-      "/\\.ssh/id_",
-      "/etc/sudoers", "/etc/passwd", "/etc/shadow",
-      "/cron(tab|\\.d)", "/var/at/", "/var/spool/cron/",
-      "fabula-permissions\\.json$", "fabula-state\\.json$",
-    ],
+    // Exactly the in-process hardline set, rendered — no extension rules. That the two profiles differ by
+    // one array spread, rather than by two hand-maintained lists, is what keeps the difference deliberate.
+    denyWriteRegex: hardlineKernelRegex(),
   }
 }
 
@@ -102,9 +100,12 @@ export function buildSeatbeltProfile(cfg: SandboxConfig): string {
   return lines.join("\n")
 }
 
-/** argv to run a bash command under the sandbox profile. */
+/** argv to run a shell command under the sandbox profile. The shell itself comes from the one place
+ *  that decides it (`platform/shell.ts`), so the confined shell and the unconfined one can never be
+ *  different programs — a difference that would make the guards read one grammar and the kernel confine
+ *  another. */
 export function sandboxArgv(command: string, profile: string): string[] {
-  return ["sandbox-exec", "-p", profile, "bash", "-lc", command]
+  return ["sandbox-exec", "-p", profile, ...shellArgv(command)]
 }
 
 /**

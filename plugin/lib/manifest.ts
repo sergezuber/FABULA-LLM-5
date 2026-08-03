@@ -1,3 +1,4 @@
+import { current as currentPlatform } from "./platform/index"
 // FABULA-LLM-5 — plugin + dependency MANIFEST (single source of truth).
 //
 // Every plugin and EVERY artifact it needs is declared here. Consumed by:
@@ -44,6 +45,50 @@ export interface PluginMeta {
 }
 
 // ── shared dependency fragments ──────────────────────────────────────────────
+/**
+ * The scheduling backend, named for the platform that actually provides it.
+ *
+ * Declared as a FUNCTION rather than a literal because it was `{ name: "launchd", required: true }` on
+ * every platform: on Linux and Windows the dependency panel would have reported a REQUIRED dependency
+ * missing and pointed at a command that does not exist there, while the real backend — systemd or Task
+ * Scheduler — sat installed and unmentioned. A required dependency that cannot be satisfied is worse
+ * than an absent one: it makes a working install read as broken.
+ */
+function SCHEDULING_BACKEND(): Artifact {
+  const p = currentPlatform()
+  if (p === "linux") {
+    return { kind: "builtin", name: "systemd (user timers)", required: true, purpose: "scheduling backend",
+      check: "command -v systemctl >/dev/null",
+      note: "Standard on most distributions. A session with no user instance needs `loginctl enable-linger $USER` so timers fire while logged out." }
+  }
+  if (p === "win32") {
+    return { kind: "builtin", name: "Task Scheduler", required: true, purpose: "scheduling backend",
+      check: "where schtasks >NUL 2>&1", note: "Built into Windows." }
+  }
+  return { kind: "builtin", name: "launchd", required: true, purpose: "scheduling backend",
+    check: "command -v launchctl >/dev/null", note: "Built into macOS." }
+}
+
+/** The system speech synthesiser, when the platform ships one. Piper is the cross-platform answer and is
+ *  declared separately; this is only the no-install fallback, so it is never required anywhere. */
+function SYSTEM_TTS(): Artifact {
+  const p = currentPlatform()
+  if (p === "linux") {
+    return { kind: "system", name: "espeak-ng", required: false, purpose: "text_to_speech fallback",
+      check: "command -v espeak-ng >/dev/null || command -v spd-say >/dev/null",
+      install: "sudo apt install espeak-ng  # or: dnf install espeak-ng",
+      note: "Optional — Piper gives far better quality and works on every platform." }
+  }
+  if (p === "win32") {
+    return { kind: "builtin", name: "SAPI (Windows speech)", required: false, purpose: "text_to_speech fallback",
+      check: "where powershell >NUL 2>&1",
+      note: "Built into Windows via System.Speech; Piper gives better quality." }
+  }
+  return { kind: "builtin", name: "say (macOS TTS)", required: false, purpose: "text_to_speech fallback",
+    check: "command -v say >/dev/null",
+    note: "Built into macOS — text_to_speech works out of the box (Milena voice for Russian)." }
+}
+
 const NPM_BUNDLED: Dep[] = [
   { kind: "npm", name: "@mimo-ai/plugin", required: true, purpose: "plugin SDK (tool/hook API)", check: "test -d plugin/node_modules/@mimo-ai/plugin", install: "cd plugin && bun install" },
 ]
@@ -137,7 +182,7 @@ export const MANIFEST: PluginMeta[] = [
     tools: ["schedule_task", "list_scheduled", "cancel_scheduled", "send_notification"],
     deps: [
       ...NPM_BUNDLED,
-      { kind: "builtin", name: "launchd", required: true, purpose: "scheduling backend (macOS)", check: "command -v launchctl >/dev/null", note: "Built into macOS." },
+      SCHEDULING_BACKEND(),
       { kind: "system", name: "bun", required: false, purpose: "runs the scheduled-job helper (FABULA_BUN_BIN)", check: "command -v bun >/dev/null", install: "brew install oven-sh/bun/bun" },
     ],
   },
@@ -148,7 +193,7 @@ export const MANIFEST: PluginMeta[] = [
     deps: [
       ...NPM_BUNDLED,
       { kind: "service", name: "vision endpoint (VLM)", required: false, purpose: "vision_analyze", check: "true", install: "Load a VLM in LM Studio (set LMSTUDIO_VLM_MODEL) or set FABULA_VISION_URL+FABULA_VISION_MODEL", manual: true, note: "vision_analyze returns a clear message if no VLM is configured." },
-      { kind: "builtin", name: "say (macOS TTS)", required: false, purpose: "text_to_speech fallback", check: "command -v say >/dev/null", note: "Built into macOS — text_to_speech works out of the box (Milena voice for Russian)." },
+      SYSTEM_TTS(),
       { kind: "system", name: "piper", required: false, purpose: "text_to_speech (higher quality than say)", check: "command -v piper >/dev/null || test -n \"$FABULA_PIPER_BIN\"", install: "pip3 install piper-tts  # then set FABULA_PIPER_VOICE to a .onnx voice", note: "Optional — say is used if piper is absent." },
       { kind: "python", name: "faster-whisper", required: false, purpose: "transcribe_audio (speech-to-text)", check: "python3 -c 'import faster_whisper' 2>/dev/null || command -v whisper >/dev/null", install: "pip3 install faster-whisper", note: "No built-in macOS fallback — transcribe_audio needs this." },
     ],

@@ -33,6 +33,7 @@ import { join } from "node:path"
 import { homedir, tmpdir } from "node:os"
 import { charsPerToken, contextWindow } from "./ctxguard"
 import { MATERIAL_SHARE, MIN_FILES } from "./traversal"
+import { baseDirs } from "./platform/paths"
 
 // ── policy ──────────────────────────────────────────────────────────────────
 // These are POLICY, named once so a reader can find and argue with them instead of discovering them
@@ -77,10 +78,7 @@ export const HANDLE_ID_RE = /^h-[a-z0-9]{6,40}$/
  *  wins, then XDG_DATA_HOME, then the engine's data dir under the app id `fabula`. */
 export function handlesDir(env: NodeJS.ProcessEnv = process.env): string {
   if (env.FABULA_HANDLE_DIR) return env.FABULA_HANDLE_DIR
-  const xdg = env.XDG_DATA_HOME
-  if (xdg) return join(xdg, "fabula", "handles")
-  const home = env.HOME || homedir() || tmpdir()
-  return join(home, ".local", "share", "fabula", "handles")
+  return join(baseDirs(env).data, "handles")
 }
 
 export interface HandleMeta {

@@ -28,6 +28,8 @@ import { pickDescriptor, descriptorHash, weightsDigestForDir, resolveModelDir, l
 import { homedir } from "node:os"
 import { gitDiffAllInfo } from "./lib/gitdiff"
 import { EDIT_TOOLS, BASH_TOOLS, editUnits } from "./lib/edittools"
+import { dataPath } from "./lib/platform/paths"
+import { spawnShell } from "./lib/platform/shell"
 
 const z = tool.schema
 const DISABLED = process.env.FABULA_RECEIPT === "0"
@@ -64,7 +66,7 @@ function gitDiff(dir: string, maxBytes = 200_000): Promise<{ diff: string; trunc
  *  `bun test` recorded in a subproject must never sweep the whole worktree on replay. */
 function gitRootRel(dir: string): Promise<string | undefined> {
   return new Promise((resolve) => {
-    const c = spawn("bash", ["-lc", "git rev-parse --show-prefix 2>/dev/null"], { cwd: dir, env: process.env })
+    const c = spawnShell("git rev-parse --show-prefix 2>/dev/null", { cwd: dir, env: process.env })
     let out = ""
     const t = setTimeout(() => { try { c.kill() } catch {} ; resolve(undefined) }, 4000)
     c.stdout.on("data", (d) => { out += d.toString() })
@@ -76,7 +78,7 @@ function gitRootRel(dir: string): Promise<string | undefined> {
 /** git HEAD at mint time — the deterministic replay base (empty outside a git repo). */
 function gitHead(dir: string): Promise<string | undefined> {
   return new Promise((resolve) => {
-    const c = spawn("bash", ["-lc", "git rev-parse HEAD 2>/dev/null"], { cwd: dir, env: process.env })
+    const c = spawnShell("git rev-parse HEAD 2>/dev/null", { cwd: dir, env: process.env })
     let out = ""
     const t = setTimeout(() => { try { c.kill() } catch {} }, 4000)
     c.stdout.on("data", (d) => { out += d.toString() })
@@ -166,7 +168,7 @@ async function enrichedProvenance(sessionID: string | undefined, state: ReceiptS
     try {
       const dir = resolveModelDir(modelId, join(homedir(), ".lmstudio", "models"), process.env.FABULA_MODEL_DIR)
       if (dir) {
-        const cacheFile = join(process.env.XDG_DATA_HOME || join(homedir(), ".local", "share"), "fabula", "weights-cache.json")
+        const cacheFile = dataPath("weights-cache.json")
         const cache = loadWeightsCache(cacheFile)
         const wd = weightsDigestForDir(dir, cache)
         if (wd) {

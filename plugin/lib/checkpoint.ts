@@ -16,6 +16,7 @@ import { createHash } from "node:crypto"
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs"
 import * as os from "node:os"
 import * as path from "node:path"
+import { dataPath } from "./platform/paths"
 
 const IDENTITY = {
   GIT_AUTHOR_NAME: "FABULA Checkpoint",
@@ -45,7 +46,7 @@ function storeRoot(): string {
   // rest of the engine's data. FABULA_CHECKPOINT_DIR overrides (hermetic tests). The 225MB of existing
   // per-workspace undo history was migrated from the legacy ~/.local/share/mimocode/checkpoints (2026-07-11).
   return process.env.FABULA_CHECKPOINT_DIR ||
-    path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share"), "fabula", "checkpoints")
+    dataPath("checkpoints")
 }
 
 /** Private git dir + ledger path for a workspace. */

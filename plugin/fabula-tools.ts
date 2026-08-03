@@ -56,6 +56,8 @@ import { sanitizeSkillName, buildSkillMd } from "./lib/skillio"
 import { assessSkill, skillBlockedMessage } from "./lib/skillsguard"
 import { buildDockerRun, SANDBOX_IMAGES, interpreterCmd, sandboxNote } from "./lib/dockerbox"
 import { aggregateCost, formatCostReport, UsageRow } from "./lib/costledger"
+import { dataPath } from "./lib/platform/paths"
+import { spawnShell } from "./lib/platform/shell"
 
 // Cached Docker availability probe (sandbox for execute_code).
 let _dockerOk: boolean | null = null
@@ -583,7 +585,7 @@ export const FabulaTools: Plugin = async () => {
             cmd = det.cmd; label = det.label
           }
           return await new Promise((resolve) => {
-            const child = spawn("bash", ["-lc", cmd], { cwd: dir, env: process.env })
+            const child = spawnShell(cmd, { cwd: dir, env: process.env })
             let outp = "", killed = false
             const cap = 200_000
             const timer = setTimeout(() => { killed = true; child.kill("SIGKILL") }, 300_000)
@@ -673,7 +675,7 @@ export const FabulaTools: Plugin = async () => {
           if (!match) return "session_search: query has no searchable terms."
           const limit = Math.min(Math.max(args.limit ?? 8, 1), 30)
           const exclude = args.exclude_current !== false
-          const dbPath = process.env.MIMOCODE_DB || path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share"), "fabula", "fabula.db")
+          const dbPath = process.env.MIMOCODE_DB || dataPath("fabula.db")
           if (!existsSync(dbPath)) return `session_search: history DB not found at ${dbPath}.`
           let db: Database | null = null
           try {
@@ -861,7 +863,7 @@ export const FabulaTools: Plugin = async () => {
           since_days: z.number().int().nullish().describe("Only count the last N days"),
         },
         async execute(args, ctx) {
-          const dbPath = process.env.MIMOCODE_DB || path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share"), "fabula", "fabula.db")
+          const dbPath = process.env.MIMOCODE_DB || dataPath("fabula.db")
           if (!existsSync(dbPath)) return `cost_report: history DB not found at ${dbPath}.`
           const all = args.scope === "all"
           let db: Database | null = null

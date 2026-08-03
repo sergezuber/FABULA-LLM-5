@@ -18,6 +18,7 @@ import { callAux } from "./lib/auxLLM"
 import { spawn } from "node:child_process"
 import { promises as fs } from "node:fs"
 import * as path from "node:path"
+import { spawnShell } from "./lib/platform/shell"
 import {
   refHuntTerms, refDigestPrompt, blindspotPrompt, parseBlindspot,
   newUnknownsState, shouldSteerReferenceFirst, REFERENCE_FIRST_STEER, type UnknownsState,
@@ -45,7 +46,7 @@ function grepRepo(dir: string, terms: string[], maxBytes = 6000): Promise<string
     const cmd =
       `(rg -n --no-heading -S -m 3 -g '!node_modules' -g '!*.min.*' -g '!*.lock' -e ${q} . 2>/dev/null ` +
       `|| grep -rnI -m 3 --exclude-dir=node_modules --exclude-dir=.git -E ${q} . 2>/dev/null) | head -60`
-    const c = spawn("bash", ["-lc", cmd], { cwd: dir, env: process.env })
+    const c = spawnShell(cmd, { cwd: dir, env: process.env })
     let out = ""
     const t = setTimeout(() => { try { c.kill() } catch {} }, 8000)
     c.stdout.on("data", (d) => { if (out.length < maxBytes) out += d.toString() })

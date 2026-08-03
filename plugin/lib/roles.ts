@@ -30,7 +30,10 @@ const MUTATING_CMD = new RegExp(
     /\bgit\s+(commit|add|push|reset|checkout|restore|rm|clean|stash|merge|rebase|apply|mv|tag|branch\s+-[dD])/.source,
     /\bnpm\s+(i\b|install|ci|update|uninstall)|\byarn\s+add|\bpnpm\s+(add|install)|\bbun\s+(add|install)/.source,
     /\bpip\d*\s+install|\bbrew\s+(install|uninstall|upgrade)|\bcargo\s+(add|install)/.source,
+    // Process control and "make this run again later", on every platform — a write guard that only
+    // knew launchctl would read a systemd or schtasks install as a harmless read-only command.
     /\bkill\b|\bpkill\b|\blaunchctl\b|\bdefaults\s+write|\bcrontab\b/.source,
+    /\bsystemctl\b|\bschtasks\b|\bsc\.exe\b|\bnew-service\b|\breg(\.exe)?\s+(add|delete)\b|\btaskkill\b/.source,
     />>|(^|[^0-9<>])>[^>&]/.source, // output redirection to a file
   ].join("|"),
 )

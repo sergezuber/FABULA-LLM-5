@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.103.0"
+export const FABULA_VERSION = "0.104.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.104.0",
+    date: "2026-08-03",
+    items: [
+      {
+        ru: "Правила, которые зависят от операционной системы, собраны в одно место — и по дороге нашлись два расхождения, работавшие уже давно. Первое: двадцать шесть мест внутри обвязки сами вычисляли, где лежат её данные, и ни одно не знало о переменной, которой движок переносит свой корень целиком; поставь её — движок уносит базу и настройки, а история отмен, передачи, память и замеры остаются на старом месте. Второе: список того, что запрещено записывать, существовал в двух рукописных копиях — для проверок внутри процесса и для запрета на уровне ядра, — и копия успела потерять ключи SSH: проверка отказывала, ядро пропускало. Теперь это один список, из которого обе формы выводятся, и разойтись они больше не могут. Заодно ветка репозитория перестала молча исчезать из контекста под нагрузкой: полторы секунды на опрос было мало, факт пропадал без единого слова.",
+        en: "Rules that depend on the operating system are collected in one place — and two long-standing divergences surfaced on the way. First: twenty-six places inside the harness each worked out where its data lives, and none knew about the variable with which the engine relocates its whole root; set it, and the engine moves its database and settings while the undo history, handoffs, memory and measurements stay behind. Second: the list of what must never be written existed as two hand-written copies — one for the in-process checks, one for the kernel-level denial — and the copy had lost SSH keys: the check refused, the kernel allowed. It is now one list from which both forms are rendered, and they can no longer disagree. Separately, the repository branch stopped silently vanishing from the model's context under load: a second and a half was too little for the probe, and the fact disappeared without a word.",
+      },
+    ],
+  },
   {
     version: "0.103.0",
     date: "2026-08-01",

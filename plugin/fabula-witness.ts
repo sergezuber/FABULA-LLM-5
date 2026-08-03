@@ -28,6 +28,8 @@ import {
 } from "./lib/witness"
 import { goFloorBlock, goSourceEdits } from "./lib/gofloor"
 import { findGoModuleRoot, floorEnabled, runFloor, spawnExec } from "./lib/gofloorrun"
+import { engineConfigFile } from "./lib/platform/paths"
+import { spawnShell } from "./lib/platform/shell"
 
 const z = tool.schema
 
@@ -64,10 +66,8 @@ async function goFloorEvidence(dir: string, diff: string): Promise<GroundingEvid
 }
 
 function configPath(): string {
-  if (process.env.MIMOCODE_CONFIG) return process.env.MIMOCODE_CONFIG
-  const xdg = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config")
-  const cand = [path.join(xdg, "fabula", "fabula.config.json"), path.join(xdg, "mimocode", "fabula.config.json")]
-  return cand.find((p) => fs.existsSync(p)) || cand[0]
+  // One resolver for all five modules that read the engine config — see platform/paths.
+  return engineConfigFile()
 }
 function readConfig(): any {
   try { return JSON.parse(fs.readFileSync(configPath(), "utf8")) } catch { return null }
@@ -75,7 +75,7 @@ function readConfig(): any {
 
 function gitDiff(dir: string): Promise<string> {
   return new Promise((resolve) => {
-    const c = spawn("bash", ["-lc", "git diff HEAD -- . 2>/dev/null || git diff 2>/dev/null"], { cwd: dir, env: process.env })
+    const c = spawnShell("git diff HEAD -- . 2>/dev/null || git diff 2>/dev/null", { cwd: dir, env: process.env })
     let out = ""
     c.stdout.on("data", (d) => (out += d))
     c.on("close", () => resolve(out))

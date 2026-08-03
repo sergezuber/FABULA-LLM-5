@@ -28,6 +28,7 @@
 import * as fs from "node:fs"
 import * as path from "node:path"
 import * as os from "node:os"
+import { baseDirs } from "./platform/paths"
 
 export interface MemRecord {
   id: string
@@ -80,11 +81,13 @@ export function storeDir(env: Record<string, string | undefined> = process.env a
   // default, it is a hazard. Named directories are honoured; a test runner never reaches the real one.
   const override = (env[STORE_ENV] || "").trim()
   if (override && path.isAbsolute(override)) return override
-  const xdg = (env.XDG_DATA_HOME || "").trim()
-  if (!xdg && (env.NODE_ENV === "test" || env.BUN_TEST || env.FABULA_TEST)) {
+  // A NAMED root — XDG_DATA_HOME or MIMOCODE_HOME — has already decided, and is honoured even under a
+  // test runner. With neither named, a test runner never reaches the real one.
+  const named = (env.XDG_DATA_HOME || "").trim() || (env.MIMOCODE_HOME || "").trim()
+  if (!named && (env.NODE_ENV === "test" || env.BUN_TEST || env.FABULA_TEST)) {
     return path.join(os.tmpdir(), "fabula-memstore-test")
   }
-  return path.join(xdg || path.join(os.homedir(), ".local", "share"), "fabula", "memstore")
+  return path.join(baseDirs(env as NodeJS.ProcessEnv).data, "memstore")
 }
 
 const RAW = "raw.jsonl"

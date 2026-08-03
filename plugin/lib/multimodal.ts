@@ -2,22 +2,22 @@
 // are pure/testable; the actual whisper/piper/VLM calls live in the plugin and degrade gracefully
 // (return install guidance) when a dependency isn't present.
 
-import { execFile } from "node:child_process"
 import { localInferenceBase } from "./moa"
+import { whichFirst } from "./platform/shell"
 
-/** Resolve the first available binary from candidates via `which`. A per-spawn timeout keeps a
- *  wedged lookup (loaded machine, network-mounted PATH) from hanging the promise forever — a
- *  candidate that can't be resolved in time is treated as absent. */
+/**
+ * Resolve the first available binary from a candidate list.
+ *
+ * This used to spawn `which` once per candidate, with a 3s timeout apiece guarding against a wedged
+ * lookup on a loaded machine. Two things were wrong with that and both are now gone: `which` is not a
+ * program on Windows, and a spawn-per-candidate under a loaded test run is exactly what made this the
+ * suite's one intermittent failure. PATH is a string; reading it is cheaper than asking a process to read
+ * it, cannot wedge, and gives the same answer on every platform.
+ *
+ * Still async: every caller awaits it, and changing that would be a churn of its own with no payoff.
+ */
 export function whichAny(cands: string[]): Promise<string | null> {
-  return new Promise((resolve) => {
-    let i = 0
-    const next = () => {
-      if (i >= cands.length) return resolve(null)
-      const c = cands[i++]
-      execFile("which", [c], { timeout: 3000 }, (err, out) => (!err && out.trim() ? resolve(out.trim()) : next()))
-    }
-    next()
-  })
+  return Promise.resolve(whichFirst(cands))
 }
 
 export interface VisionEndpoint { url: string; model: string; headers: Record<string, string> }

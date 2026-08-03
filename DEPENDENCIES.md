@@ -126,7 +126,7 @@ Recurring/one-off jobs via launchd, a run-ledger with overdue detection, notific
 | Dependency | Kind | Required | Purpose | Install / note |
 |---|---|---|---|---|
 | @mimo-ai/plugin | npm | **yes** | plugin SDK (tool/hook API) | `cd plugin && bun install` |
-| launchd | builtin | **yes** | scheduling backend (macOS) | Built into macOS. |
+| launchd | builtin | **yes** | scheduling backend | Built into macOS. |
 | bun | system | optional | runs the scheduled-job helper (FABULA_BUN_BIN) | `brew install oven-sh/bun/bun` |
 
 ## multimodal — Multimodal (vision/TTS/STT)

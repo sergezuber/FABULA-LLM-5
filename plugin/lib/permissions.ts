@@ -18,6 +18,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs"
 import * as os from "node:os"
 import * as path from "node:path"
 import { isWriteTool } from "./roles"
+import { configPath } from "./platform/paths"
 
 export type PermissionMode = "default" | "acceptEdits" | "plan" | "bypass"
 /** Who put the run in its current mode. Only an owner-set `bypass` actually disarms the guards. */
@@ -34,12 +35,7 @@ interface Store {
 
 function storeFile(): string {
   if (process.env.FABULA_PERMISSIONS_FILE) return process.env.FABULA_PERMISSIONS_FILE
-  const cfg = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config")
-  // Must match where the engine's /global/fabula/pmode route WRITES this file
-  // (Global.Path.config/fabula-permissions.json). The engine app id is "fabula" (global.ts: APP="fabula"),
-  // so the config dir is ~/.config/fabula — NOT ~/.config/mimocode. Reading the wrong path made the UI
-  // permission-mode + allow-list set by the user never reach the security guards (a security desync).
-  return path.join(cfg, "fabula", "fabula-permissions.json")
+  return configPath("fabula-permissions.json")
 }
 
 function load(): Store {

@@ -5,6 +5,7 @@
 // the user's real index and working tree are never touched.
 
 import { spawn } from "node:child_process"
+import { spawnShell } from "./platform/shell"
 
 const SCRIPT = `
 set -e
@@ -49,7 +50,7 @@ function appendCapped(state: { out: string; dropped: boolean }, chunk: Buffer, m
 
 function gitDiffAllOnce(dir: string, maxBytes: number, timeoutMs: number): Promise<GitDiffResult> {
   return new Promise((resolve) => {
-    const c = spawn("bash", ["-c", SCRIPT], { cwd: dir, env: process.env })
+    const c = spawnShell(SCRIPT, { cwd: dir, env: process.env, login: false })
     const s = { out: "", dropped: false }
     let killed = false
     let fallbackNeeded = false
@@ -62,7 +63,7 @@ function gitDiffAllOnce(dir: string, maxBytes: number, timeoutMs: number): Promi
       }
       fallbackNeeded = true
       // Fallback (e.g. no HEAD yet): plain diff of tracked changes.
-      const f = spawn("bash", ["-lc", "git diff HEAD -- . 2>/dev/null || git diff 2>/dev/null"], { cwd: dir, env: process.env })
+      const f = spawnShell("git diff HEAD -- . 2>/dev/null || git diff 2>/dev/null", { cwd: dir, env: process.env })
       const fs2 = { out: "", dropped: false }
       let fkilled = false
       const ft = setTimeout(() => { fkilled = true; try { f.kill() } catch {} }, timeoutMs)

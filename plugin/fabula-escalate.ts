@@ -16,15 +16,13 @@ import * as os from "node:os"
 import { gate } from "./lib/manage"
 import { pickCloudProvider, resolveApiKey, buildEscalationMessages, CloudTarget } from "./lib/escalate"
 import { transformForProvider } from "./lib/xprovider"
+import { engineConfigFile } from "./lib/platform/paths"
 
 const z = tool.schema
 
 function configPath(): string {
-  if (process.env.MIMOCODE_CONFIG) return process.env.MIMOCODE_CONFIG
-  const xdg = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config")
-  // FABULA's renamed config lives in the engine config dir (fabula.config.json).
-  const cand = [path.join(xdg, "fabula", "fabula.config.json"), path.join(xdg, "mimocode", "fabula.config.json")]
-  return cand.find((p) => fs.existsSync(p)) || cand[0]
+  // One resolver for all five modules that read the engine config — see platform/paths.
+  return engineConfigFile()
 }
 
 function readConfig(): any {

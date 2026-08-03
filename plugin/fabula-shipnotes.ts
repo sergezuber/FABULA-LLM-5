@@ -11,6 +11,7 @@ import { callAux } from "./lib/auxLLM"
 import { spawn } from "node:child_process"
 import { newNotesLog, describeEdit, addNote, renderNotes, pitchPrompt, type NotesLog } from "./lib/shipnotes"
 import { isSourceFile } from "./lib/unknowns"
+import { spawnShell } from "./lib/platform/shell"
 
 const z = tool.schema
 
@@ -22,7 +23,7 @@ function logFor(sid: string): NotesLog {
 }
 function gitDiff(dir: string, maxBytes = 12000): Promise<string> {
   return new Promise((resolve) => {
-    const c = spawn("bash", ["-lc", "git diff HEAD -- . 2>/dev/null || git diff 2>/dev/null"], { cwd: dir, env: process.env })
+    const c = spawnShell("git diff HEAD -- . 2>/dev/null || git diff 2>/dev/null", { cwd: dir, env: process.env })
     let out = ""
     const t = setTimeout(() => { try { c.kill() } catch {} }, 6000)
     c.stdout.on("data", (d) => { if (out.length < maxBytes) out += d.toString() })

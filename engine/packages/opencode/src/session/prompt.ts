@@ -1236,7 +1236,26 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               start: part.state.status === "running" ? part.state.time.start : Date.now(),
               end: Date.now(),
             },
-            metadata: part.state.status === "pending" ? undefined : part.state.metadata,
+            // A FAILED SUBTASK STILL KNOWS WHICH SESSION IT WAS AND WHICH MODEL IT WAS ASKED FOR.
+            //
+            // MEASURED 2026-08-01 by instrumenting this branch and reading the part back: it is reached
+            // with the part still `running` and its metadata absent entirely. A subtask that dies on its
+            // first model call — a missing model, an unreachable provider — never reaches the point where
+            // the actor reports its identity, so the error arrived carrying nothing: no session to open
+            // and no model to blame, in exactly the failure where a reader needs both.
+            //
+            // The model recorded is the one the subtask was ASKED to use (`taskAgent.model`, from the
+            // agent's own configuration), not what resolution fell back to. Recording the fallback names
+            // a model that was never the problem and hides the one that was — the same defect class as
+            // an error message naming the command when the directory is what is missing. Anything the
+            // tool DID manage to report still wins; this only fills what was never set.
+            metadata: {
+              sessionId: sessionID,
+              model: taskAgent.model
+                ? { providerID: taskAgent.model.providerID, modelID: taskAgent.model.modelID }
+                : { providerID: taskModel.providerID, modelID: taskModel.id },
+              ...(part.state.status === "pending" ? {} : (part.state.metadata ?? {})),
+            },
             input: part.state.input,
           },
         } satisfies MessageV2.ToolPart)

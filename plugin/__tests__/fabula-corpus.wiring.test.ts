@@ -162,7 +162,7 @@ test("TRAVERSAL: reading a corpus fires the worker with no word ever matched", a
     else process.env.FABULA_BUN_BIN = prevBun
     rmSync(dir, { recursive: true, force: true })
   }
-})
+}, 60_000)
 
 // The control: an ordinary turn touching a couple of files must never be taken over.
 test("TRAVERSAL stays out of an ordinary turn", async () => {
@@ -289,7 +289,7 @@ test("a chapter offloaded before this hook still counts for what it weighed", as
     else process.env.FABULA_BUN_BIN = prevBun
     rmSync(dir, { recursive: true, force: true })
   }
-})
+}, 60_000)
 
 test("never throws on malformed input (fail-silent)", async () => {
   const h = await hooks(mockClient(), "/tmp/nope")

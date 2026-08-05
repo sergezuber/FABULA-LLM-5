@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.140.0"
+export const FABULA_VERSION = "0.141.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.141.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Две проверки, которые ждут ЗАПУСКА отдельной программы, получили собственный бюджет времени. Прежде их обрывал общий бюджет прогонщика на пятой секунде — раньше, чем истекало их собственное ожидание, — поэтому продление ожидания ничего не меняло, а результат читался как «механизм не сработал». Бюджет должен принадлежать той проверке, которая ждёт, и соответствовать тому, чего она ждёт.",
+        en: "Two checks that wait for a separate program to START were given a time budget of their own. The runner's shared budget cut them at the fifth second — sooner than their own wait expired — so extending that wait changed nothing while the result read as «the mechanism never fired». A budget belongs to the check that waits, and has to match what it is waiting for.",
+      },
+    ],
+  },
   {
     version: "0.140.0",
     date: "2026-08-05",

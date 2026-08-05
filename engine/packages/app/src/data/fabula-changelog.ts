@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.158.0"
+export const FABULA_VERSION = "0.159.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.159.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Отказ передать разбор корпуса отдельному процессу теперь называет себя. Механизм объявлял о себе, когда СРАБАТЫВАЛ, и молчал, когда отказывался, — поэтому «корпус не был принят к обработке» и «был принят, а помощник не запустился» давали одно и то же свидетельство: никакого. Отказ пишется один раз за ход, поэтому обычный ход, читающий пару файлов, остаётся тихим.",
+        en: "A refusal to hand a corpus pass to a separate process now names itself. The mechanism announced itself when it ACTED and stayed silent when it declined, so «the corpus was never taken over» and «it was taken over and the helper never started» produced the same evidence: none. The refusal is written once per turn, so an ordinary turn reading a couple of files stays quiet.",
+      },
+    ],
+  },
   {
     version: "0.158.0",
     date: "2026-08-06",

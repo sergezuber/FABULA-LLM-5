@@ -181,7 +181,7 @@ try {
 /** What the turn has actually read, per session. Cleared when a new turn starts.
  *  `fired` — the verdict has been reached, so stop measuring.
  *  `owned` — a worker really started, so the model's own turn should end at its next step. */
-const traces = new Map<string, { state: ReturnType<typeof initTraversal>; task: string; fired: boolean; owned: boolean }>()
+const traces = new Map<string, { state: ReturnType<typeof initTraversal>; task: string; fired: boolean; owned: boolean; declined?: boolean }>()
 
 export const FabulaCorpus: Plugin = async (pluginInput) =>
   process.env.FABULA_CORPUS === "0" ? {} : gate("corpus", {
@@ -204,7 +204,17 @@ export const FabulaCorpus: Plugin = async (pluginInput) =>
         // The window is MEASURED from the runtime, never assumed; unmeasured decides nothing.
         const windowTokens = await probeWindow().catch(() => 0)
         const v = traversalVerdict(t.state, { windowTokens, filesInDir: countReadableFiles, taskRoot: pluginInput?.directory })
-        if (!v.offload) return
+          if (!v.offload) {
+            // A DECLINE IS A DECISION, and it was the only one here that said nothing. The mechanism
+            // announced itself when it acted and stayed silent when it did not, so "the corpus was never
+            // taken over" and "it was taken over and the worker never started" produced the same evidence:
+            // none at all. Once per turn, so an ordinary turn reading a few files stays quiet.
+            if (!t.declined) {
+              t.declined = true
+              console.error(`[fabula-corpus] traversal declined: ${v.reason} (window ${windowTokens})`)
+            }
+            return
+          }
         // When the pipeline cannot own a task (corpus too small, no model reachable, nothing summarized)
         // it hands the ORIGINAL text back so the model answers it normally — and the model then reads the
         // same files again, which looks like the same traversal. Without a record of the hand-back the

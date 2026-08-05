@@ -381,3 +381,24 @@ test("never throws on malformed input (fail-silent)", async () => {
   await expect(h["session.userQuery.pre"]({ step: 1 }, out)).resolves.toBeUndefined()
   expect(out.cancel).toBeUndefined()
 })
+
+// ── A read is counted whatever dialect its path is written in ──────────────────────────────────────
+//
+// The traversal watches which files a turn has pulled in, and it decided that by asking whether the path
+// starts with a slash. That is a POSIX fact. Where absolute paths carry a drive letter it is false for
+// every real path, so no read was ever counted, the traversal never saw a corpus, and the whole
+// mechanism sat inert while every one of its own checks passed. Found only after each decision
+// downstream had been taught to announce itself and none of them announced anything — because none of
+// them was ever reached.
+test("a read is observed whether its path is written with a slash or a drive letter", async () => {
+  // A PURE check, deliberately: driving the hooks would leave state in the shared ledger this plugin and
+  // its neighbour both read, and three of that neighbour's checks went red for exactly that reason.
+  const { readTargetOf } = await import("../lib/traversal")
+  expect(readTargetOf("view", { file_path: "/home/u/ch.md" })).toBe("/home/u/ch.md")
+  expect(readTargetOf("view", { file_path: "C:\\Users\\u\\ch.md" })).toBe("C:\\Users\\u\\ch.md")
+  expect(readTargetOf("view", { file_path: "D:/data/ch.md" })).toBe("D:/data/ch.md")
+  // Still not a file the turn pulled in: a relative path, an empty one, a tool that reads nothing.
+  expect(readTargetOf("view", { file_path: "relative/ch.md" })).toBe("")
+  expect(readTargetOf("view", { file_path: "" })).toBe("")
+  expect(readTargetOf("bash", { file_path: "/home/u/ch.md" })).toBe("")
+})

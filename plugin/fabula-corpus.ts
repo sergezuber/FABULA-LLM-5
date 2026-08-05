@@ -34,19 +34,10 @@ import { dirname, join } from "node:path"
 import { gate } from "./lib/manage"
 import { registerChild, unregisterChild, reapOrphans } from "./lib/childreg"
 import { accumulatorKey } from "./lib/corpus"
-import { initTraversal, observeRead, traversalVerdict } from "./lib/traversal"
+import { initTraversal, observeRead, traversalVerdict, readTargetOf } from "./lib/traversal"
 import { probeWindow } from "./lib/ctxguard"
 import { readdirSync } from "node:fs"
 
-/** The file a read-family call actually pulled into the context, or nothing. Tools are named differently
- *  across the belt and across MCP servers, so the ARGUMENT is what is read — a call carrying a file path
- *  and returning text has brought a file in, whatever it is called. */
-function readTargetOf(tool: unknown, args: any): string {
-  const name = String(tool ?? "")
-  if (!/read|view|cat|open|file/i.test(name)) return ""
-  const p = args?.file_path ?? args?.path ?? args?.filePath ?? args?.filename
-  return typeof p === "string" && p.startsWith("/") ? p : ""
-}
 
 /** How many readable files that directory holds. Unknown (unreadable, gone) counts as zero, and zero
  *  never fires the verdict — an unmeasured quantity must not restructure somebody's turn. */

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.160.0"
+export const FABULA_VERSION = "0.161.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.161.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "🔴 На третьей системе разбор больших наборов текстов был МЁРТВ целиком — и молча. Механизм следит, какие файлы ход втянул в себя, и решал это вопросом «начинается ли путь с косой черты». Это факт об одной системе: там, где абсолютный путь начинается с буквы диска, ответ ложен для КАЖДОГО настоящего пути, поэтому ни одно чтение не засчитывалось, обход не видел набора никогда, и всё, что стоит за ним, не запускалось ни разу — при полностью зелёных собственных проверках. Теперь путь признаётся абсолютным в любом из двух написаний.",
+        en: "🔴 On the third system the pass over large sets of texts was ENTIRELY DEAD — and silent. The mechanism watches which files a turn has pulled in, and decided that by asking whether the path starts with a slash. That is a fact about one system: where an absolute path begins with a drive letter the answer is false for EVERY real path, so no read was ever counted, the traversal never saw a set, and nothing downstream of it ever ran — with all of its own checks green. A path is now recognised as absolute in either spelling.",
+      },
+      {
+        ru: "Найдено в конце длинной цепочки, и цепочка стоит того, чтобы её записать: каждое решение ниже по течению научили называть себя — сработал, отказался, промолчал по прежней передаче, не запустился помощник. Не назвалось НИ ОДНО. Значит до них не доходило, и искать надо было выше — в самом первом вопросе, который задаётся раньше всех остальных.",
+        en: "Found at the end of a long chain, and the chain is worth writing down: every decision downstream was taught to announce itself — acted, declined, stood down on an earlier hand-back, helper failed to start. NONE of them announced anything. Which meant none was being reached, and the search belonged further up: at the very first question, the one asked before all the others.",
+      },
+    ],
+  },
   {
     version: "0.160.0",
     date: "2026-08-06",

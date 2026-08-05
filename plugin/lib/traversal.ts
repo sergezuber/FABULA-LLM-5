@@ -1,3 +1,4 @@
+import { posix, win32 } from "node:path"
 // What is happening, not what was said.
 //
 // The corpus intercept used to fire on the WORDING of the ask: a regex looking for "read all chapters",
@@ -191,4 +192,20 @@ export function traversalVerdict(st: TraversalState, o: VerdictOpts): Verdict {
     materialTokens,
     budgetTokens: budget,
   }
+}
+
+/** The file a read-family call actually pulled into the context, or nothing. Tools are named differently
+ *  across the belt and across MCP servers, so the ARGUMENT is what is read — a call carrying a file path
+ *  and returning text has brought a file in, whatever it is called. */
+export function readTargetOf(tool: unknown, args: any): string {
+  const name = String(tool ?? "")
+  if (!/read|view|cat|open|file/i.test(name)) return ""
+  const p = args?.file_path ?? args?.path ?? args?.filePath ?? args?.filename
+  // ABSOLUTE IN EITHER DIALECT. Testing for a leading `/` is a POSIX fact, and on a filesystem that
+  // spells absolute paths with a drive letter it is false for every real path — so no read was ever
+  // counted, the traversal never saw a corpus, and the entire mechanism was inert there while every one
+  // of its own checks passed. Found at the end of a long chain: each decision downstream was taught to
+  // announce itself, and none of them announced anything, because none of them was ever reached.
+  if (typeof p !== "string" || !p) return ""
+  return posix.isAbsolute(p) || win32.isAbsolute(p) ? p : ""
 }

@@ -27,7 +27,7 @@ import { checkCommand, blockedMessage } from "./lib/cmdguard"
 import { safeFetch } from "./lib/ssrf"
 import { fileState, neverReadNote } from "./lib/filestate"
 import { findMatch, checkEscapeDrift } from "./lib/fuzzymatch"
-import { capToolOutput } from "./lib/outputcap"
+import { takeCapped, capToolOutput } from "./lib/outputcap"
 import { buildSeatbeltProfile, defaultSandboxConfig, hardlineSandboxConfig, sandboxExecArgv } from "./lib/sandbox"
 import { bashArgv, resolveBackend } from "./lib/execbackend"
 import { homedir } from "node:os"
@@ -418,8 +418,8 @@ export const FabulaTools: Plugin = async () => {
             const timer = setTimeout(() => { killed = true; child.kill("SIGKILL") }, 120_000)
             const onAbort = () => { killed = true; child.kill("SIGKILL") }
             ctx.abort?.addEventListener?.("abort", onAbort)
-            child.stdout.on("data", (d) => { if (out.length < cap) out += d.toString() })
-            child.stderr.on("data", (d) => { if (err.length < cap) err += d.toString() })
+            child.stdout.on("data", (d) => { out = takeCapped(out, d, cap) })
+            child.stderr.on("data", (d) => { err = takeCapped(err, d, cap) })
             child.on("close", (code) => {
               clearTimeout(timer)
               ctx.abort?.removeEventListener?.("abort", onAbort)
@@ -807,8 +807,8 @@ export const FabulaTools: Plugin = async () => {
               const timer = setTimeout(() => { killed = true; spawn("docker", ["kill", name]); child.kill("SIGKILL") }, 60_000)
               const onAbort = () => { killed = true; spawn("docker", ["kill", name]); child.kill("SIGKILL") }
               ctx.abort?.addEventListener?.("abort", onAbort)
-              child.stdout.on("data", (d) => { if (out.length < cap) out += d.toString() })
-              child.stderr.on("data", (d) => { if (out.length < cap) out += d.toString() })
+              child.stdout.on("data", (d) => { out = takeCapped(out, d, cap) })
+              child.stderr.on("data", (d) => { out = takeCapped(out, d, cap) })
               child.on("close", (code) => {
                 clearTimeout(timer); ctx.abort?.removeEventListener?.("abort", onAbort); cleanup()
                 let body = out.trim() || "(no output)"
@@ -866,8 +866,8 @@ export const FabulaTools: Plugin = async () => {
             const timer = setTimeout(() => { killed = true; child.kill("SIGKILL") }, 60_000)
             const onAbort = () => { killed = true; child.kill("SIGKILL") }
             ctx.abort?.addEventListener?.("abort", onAbort)
-            child.stdout.on("data", (d) => { if (out.length < cap) out += d.toString() })
-            child.stderr.on("data", (d) => { if (err.length < cap) err += d.toString() })
+            child.stdout.on("data", (d) => { out = takeCapped(out, d, cap) })
+            child.stderr.on("data", (d) => { err = takeCapped(err, d, cap) })
             child.on("close", (code) => {
               clearTimeout(timer)
               ctx.abort?.removeEventListener?.("abort", onAbort)

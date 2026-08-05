@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.138.0"
+export const FABULA_VERSION = "0.139.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.139.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Ограничитель захватываемого вывода теперь ограничивает. Прежняя форма переставала добавлять только ПОСЛЕ превышения потолка, поэтому последний кусок ложился целиком, и настоящей границей было «потолок плюс одно чтение». Программа, напечатавшая пять мегабайт одной записью, проходила стотысячный предел насквозь. Коварство в том, что промах зависел от РАЗБИЕНИЯ на куски: та же программа при другой настройке интерпретатора приходит мелкими порциями и укладывается — то есть один и тот же код выглядел верным на одной машине и неверным на другой по причине, не относящейся ни к той, ни к другой. Теперь берётся ровно остаток бюджета, и зависимость исчезает.",
+        en: "The cap on captured output now caps. The old form stopped adding only AFTER the ceiling was crossed, so the last chunk landed whole and the real bound was «the ceiling plus one read». A program printing five megabytes in a single write went straight through a hundred-thousand-character limit. What made it slippery is that the miss depended on CHUNKING: the same program under a different interpreter setting arrives in small pieces and stays under — so identical code looked correct on one machine and wrong on another for a reason belonging to neither. It now takes exactly the remaining budget, and the dependency is gone.",
+      },
+    ],
+  },
   {
     version: "0.138.0",
     date: "2026-08-05",

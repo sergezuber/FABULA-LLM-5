@@ -62,3 +62,19 @@ export function capToolOutput(text: string, o: { direction?: "head" | "tail"; ma
   } catch { spillPath = undefined }
   return { output: cap.shown + cursorMessage(cap, { fullPath: spillPath, direction: o.direction }), spillPath, truncated: true }
 }
+
+/**
+ * Append a chunk to a growing capture WITHOUT letting it pass the ceiling.
+ *
+ * `if (buf.length < cap) buf += chunk` is not a cap: it stops adding only AFTER the ceiling is crossed,
+ * so the real bound is "cap plus whatever one read happened to be". MEASURED — a program printing five
+ * megabytes in one write sailed straight past a hundred-kilobyte limit. What made it worth its own
+ * function is that the miss depends on the CHUNKING: the same program under a different interpreter
+ * setting arrives in many small reads and stays under, so the same code looked correct on one machine
+ * and wrong on another, for a reason nothing to do with either. Taking the remaining budget removes the
+ * dependency entirely.
+ */
+export function takeCapped(current: string, chunk: unknown, cap: number): string {
+  if (current.length >= cap) return current
+  return current + String(chunk).slice(0, cap - current.length)
+}

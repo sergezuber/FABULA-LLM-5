@@ -48,6 +48,14 @@ beforeAll(() => {
   process.env.FABULA_MODEL_API = `http://127.0.0.1:${srv.port}/api/v0/models`
 })
 
+// The window this suite teaches the process belongs to THIS suite. It is a process-wide cache, so a
+// neighbour would otherwise size its own thresholds against a number it never saw — which is what
+// happened the moment this mechanism came alive on a second platform.
+afterAll(async () => {
+  const { forgetLearnedWindow } = await import("../lib/ctxguard")
+  forgetLearnedWindow()
+})
+
 afterAll(() => { try { modelsServer?.stop() } catch {} })
 
 import { FabulaCorpus } from "../fabula-corpus"

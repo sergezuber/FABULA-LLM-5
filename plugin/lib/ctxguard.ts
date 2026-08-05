@@ -60,6 +60,20 @@ export function setLearnedWindow(n: number): void {
   if (Number.isFinite(n) && n > 0) { LEARNED = n; LEARNED_AT = Date.now() }
 }
 
+/**
+ * Forget what was learned about the window.
+ *
+ * The learned figure is a cache with a lifetime, and a cache that only ever fills has no way back. That
+ * matters wherever one part of a run teaches the process a window that belongs to another part: the
+ * figure is process-wide, so a neighbour then sizes its own thresholds against a window it never saw —
+ * measured exactly that way, three checks in an adjacent area going red for a number set elsewhere.
+ * Symmetric with the setter, so whoever teaches can also un-teach.
+ */
+export function forgetLearnedWindow(): void {
+  LEARNED = 0
+  LEARNED_AT = 0
+}
+
 /** Forget the measured ceiling, so the next probe asks the runtime again.
  *
  *  Separate from `setLearnedWindow(0)` on purpose: a zero there means "a probe reported nothing useful",

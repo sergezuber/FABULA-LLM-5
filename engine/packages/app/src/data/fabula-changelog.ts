@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.162.0"
+export const FABULA_VERSION = "0.163.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.163.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Измеренное окно принадлежит МОДЕЛИ, и смена модели его отбрасывает. Величина хранится на весь процесс и живёт по времени, поэтому без этого окно прежней модели подменяло собой окно новой, пока не истечёт срок, — и всякое решение о размере в промежутке считалось от машины, держащей нечто иное. Оно же перетекало между несвязанными частями прогона: три проверки в соседней области краснели из-за числа, выставленного здесь. Отбрасывание — только при СМЕНЕ: при первом появлении отбрасывать нечего, а сделать это значило бы выкинуть замер, взятый до того, как всё началось.",
+        en: "A measured window belongs to a MODEL, and a change of model discards it. The figure is held for the whole process and lives on a timer, so without this the previous model's window stood in for the new one until that timer ran out — and every size decision in between was computed against a machine holding something else. It also leaked between unrelated parts of a run: three checks in an adjacent area went red for a number set here. Discarded only on a CHANGE: on first sight there is nothing to invalidate, and doing it then would throw away a measurement taken before any of this began.",
+      },
+    ],
+  },
   {
     version: "0.162.0",
     date: "2026-08-06",

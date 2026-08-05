@@ -57,8 +57,12 @@ test("a config limit larger than the loaded window is brought DOWN to what is re
 test("a config limit smaller than the loaded window is brought UP — the engine may use what exists", async () => {
   // The measurement is injected rather than served, because a measured window is CACHED for a minute and
   // a stub started after that cache is filled is never consulted — which is the contract, not a defect.
-  setLearnedWindow(262144)
+  // The model is REGISTERED with the hook before the measurement is injected. A measured window belongs
+  // to a model, so meeting a different one invalidates it — which is the point of the invalidation and
+  // makes "a cached figure is reused" a claim about the SAME model, never about any model that follows.
   const model: any = { id: "m2", providerID: "lmstudio", limit: { context: 131072, output: 8000 } }
+  await (await hook())({ model: { ...model, limit: { ...model.limit } }, provider: { id: "lmstudio" } })
+  setLearnedWindow(262144)
   await (await hook())({ model, provider: { id: "lmstudio" } })
   expect(model.limit.context).toBe(262144)
 })
@@ -79,9 +83,13 @@ test("nothing measured and nothing cached → the config figure is left exactly 
 })
 
 test("a cached measurement is reused when the runtime cannot be reached — a stale figure beats none", async () => {
-  setLearnedWindow(65536)
+  // The model is REGISTERED with the hook before the measurement is injected. A measured window belongs
+  // to a model, so meeting a different one invalidates it — which is the point of the invalidation and
+  // makes "a cached figure is reused" a claim about the SAME model, never about any model that follows.
   process.env.FABULA_MODEL_API = "http://127.0.0.1:1/nope"
   const model: any = { id: "m6", providerID: "lmstudio", limit: { context: 262144, output: 8000 } }
+  await (await hook())({ model: { ...model, limit: { ...model.limit } }, provider: { id: "lmstudio" } })
+  setLearnedWindow(65536)
   await (await hook())({ model, provider: { id: "lmstudio" } })
   expect(model.limit.context).toBe(65536)
 })
@@ -115,6 +123,10 @@ test("the measured window is written into the launch config even when the loader
   process.env.MIMOCODE_CONFIG = cfgPath
   try {
     const model: any = { id: "m", providerID: "lmstudio", limit: { context: 65536, output: 32768 } }
+    // Registered first, then measured: a measured window belongs to a model, and meeting a different one
+    // discards it. Same reason as the reuse case above.
+    await (await hook())({ model: { ...model, limit: { ...model.limit } }, provider: { id: "lmstudio" } })
+    setLearnedWindow(135168)
     await (await hook())({ model, provider: { id: "lmstudio" } })
     expect(model.limit.context).toBe(135168) // the request object, as before
     const written = JSON.parse(await Bun.file(cfgPath).text())
@@ -124,4 +136,30 @@ test("the measured window is written into the launch config even when the loader
     if (prevCfg === undefined) delete process.env.MIMOCODE_CONFIG
     else process.env.MIMOCODE_CONFIG = prevCfg
   }
+})
+
+// ── A measured window belongs to a model ───────────────────────────────────────────────────────────
+//
+// The figure is a process-wide cache with a lifetime. Without discarding it when the model changes, the
+// last model's window kept standing in for the new one until that lifetime ran out, and every size
+// decision in between was computed against a machine holding something else. It also leaked between
+// unrelated parts of a run: three checks in an adjacent area went red for a number set here.
+test("a different model discards what was learned about the last one", async () => {
+  clearLearnedWindow()
+  // Nothing can be reached, so the ONLY figure available is whatever was learned.
+  process.env.FABULA_MODEL_API = "http://127.0.0.1:1/nope"
+  const first: any = { id: "model-A", providerID: "lmstudio", limit: { context: 200000, output: 8000 } }
+  await (await hook())({ model: first, provider: { id: "lmstudio" } })
+  setLearnedWindow(65536)
+
+  // The same model still gets it — that is the cache doing its job.
+  const again: any = { id: "model-A", providerID: "lmstudio", limit: { context: 200000, output: 8000 } }
+  await (await hook())({ model: again, provider: { id: "lmstudio" } })
+  expect(again.limit.context).toBe(65536)
+
+  // A different one must NOT: its window is unknown, and unknown leaves the configured figure alone
+  // rather than borrowing a number measured on something else.
+  const other: any = { id: "model-B", providerID: "lmstudio", limit: { context: 200000, output: 8000 } }
+  await (await hook())({ model: other, provider: { id: "lmstudio" } })
+  expect(other.limit.context).toBe(200000)
 })

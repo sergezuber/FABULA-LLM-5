@@ -15,7 +15,10 @@
 
 import { gate } from "./lib/manage"
 import { ensureLoadedAtPlannedWindow, syncEngineLimit, anyModelBusy } from "./lib/modelload"
-import { probeWindow } from "./lib/ctxguard"
+import { probeWindow, forgetLearnedWindow } from "./lib/ctxguard"
+
+/** The model this process last planned for. A change in it invalidates what was learned. */
+let lastSeenModel = ""
 
 export const FabulaWindow = async () =>
   gate("window", {
@@ -26,6 +29,15 @@ export const FabulaWindow = async () =>
         // Only a local model has a window we can set; a cloud endpoint has none to plan.
         const provider = String(input?.provider?.id ?? input?.model?.providerID ?? "")
         if (provider && !/lmstudio|local/i.test(provider)) return
+          // A DIFFERENT MODEL HAS A DIFFERENT WINDOW, so what was learned about the last one stops being
+          // an answer about this one. The learned figure is a process-wide cache with a lifetime, and
+          // without this it stood in for the new model's window until that lifetime ran out — every size
+          // decision in between computed against a machine holding something else.
+          // Only on a CHANGE. On first sight there is nothing to invalidate, and forgetting then would
+          // throw away a measurement taken before this hook ever ran — which is the cache's whole reason
+          // for existing when the runtime cannot be reached.
+          if (lastSeenModel && id !== lastSeenModel) forgetLearnedWindow()
+          lastSeenModel = id
         // CORRECT THE ENGINE'S ARITHMETIC BEFORE IT IS USED. Everything the engine decides about size —
         // when to prune, when to compact, how much it may send — is computed by overflow.ts `usable()`
         // from `model.limit.context`, and that number comes from a config file somebody typed. When it

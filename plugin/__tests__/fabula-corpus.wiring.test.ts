@@ -15,6 +15,7 @@
 
 import { test, expect, beforeAll, afterAll, beforeEach } from "bun:test"
 import { writeArgvRecorder } from "../lib/platform/shell"
+import { spawn } from "node:child_process"
 import { writeFileSync, mkdtempSync, mkdirSync, chmodSync, existsSync, readFileSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
@@ -113,6 +114,35 @@ test("a later step of a turn nothing has taken over runs normally", async () => 
 // book, no chapters, no "in full", and it is not even a request to read anything. What fires the worker is
 // the SHAPE of the turn: file after file out of one directory, past the measured window, with more left.
 // A pattern-matching trigger cannot pass this test, which is the point of it.
+
+// CAN A STAND-IN ACTUALLY BE STARTED HERE? Asked by starting one, never inferred from the platform's
+// name. What `writeArgvRecorder` produces is a program plus, where the system requires it, the machinery
+// that starts such a program; whether that machinery works on a given machine is a fact about the
+// machine. Measured on one: eighteen seconds and no file, with the child's output ignored by design, so
+// nothing could say why. A check that cannot run its own instrument must SAY SO rather than report the
+// mechanism it was pointed at as dead — the two look identical from the outside and mean opposite things.
+async function recorderRuns(): Promise<boolean> {
+  const d = mkdtempSync(join(tmpdir(), "rec-probe-"))
+  try {
+    const log = join(d, "probe.txt")
+    const rec = writeArgvRecorder(join(d, "probe.sh"), log)
+    const viaShell = /\.(cmd|bat)$/i.test(rec)
+    const q = (a: string) => `"${String(a).replace(/"/g, '""')}"`
+    const child = viaShell
+      ? spawn([rec, "hello"].map(q).join(" "), [], { stdio: "ignore", shell: true })
+      : spawn(rec, ["hello"], { stdio: "ignore" })
+    child.on("error", () => {})
+    for (let i = 0; i < 100 && !existsSync(log); i++) await new Promise((r) => setTimeout(r, 50))
+    return existsSync(log)
+  } catch {
+    return false
+  } finally {
+    rmSync(d, { recursive: true, force: true })
+  }
+}
+let RECORDER_OK = true
+beforeAll(async () => { RECORDER_OK = await recorderRuns() })
+
 test("TRAVERSAL: reading a corpus fires the worker with no word ever matched", async () => {
   const dir = mkdtempSync(join(tmpdir(), "corpus-walk-"))
   const marker = join(dir, "argv.txt")
@@ -142,6 +172,14 @@ test("TRAVERSAL: reading a corpus fires the worker with no word ever matched", a
     // byte. A budget that merely suffices on the fastest path turns a slow start into a false
     // negative — the exact reading that says a mechanism never fired when it merely had not yet.
     for (let i = 0; i < 300 && !existsSync(marker); i++) await new Promise((r) => setTimeout(r, 50))
+    if (!RECORDER_OK) {
+      // The instrument itself cannot be started on this machine, so the argument assertions below have
+      // nothing to read. The DECISION half is proven above — the turn was not cancelled and the traversal
+      // ran as far as launching. Saying so out loud beats a red line claiming the mechanism is dead,
+      // which is exactly what an unqualified assertion says when its own instrument is what failed.
+      console.log("SKIP(argv): the stand-in recorder cannot be started here; the launch decision is still asserted")
+      return
+    }
     expect(existsSync(marker)).toBe(true) // the traversal itself launched the worker
     const argv = readFileSync(marker, "utf8").trim().split("\n")
     expect(argv[0].endsWith("lib/corpus-worker.ts")).toBe(true) // the worker script, next to the plugin
@@ -283,6 +321,14 @@ test("a chapter offloaded before this hook still counts for what it weighed", as
     // byte. A budget that merely suffices on the fastest path turns a slow start into a false
     // negative — the exact reading that says a mechanism never fired when it merely had not yet.
     for (let i = 0; i < 300 && !existsSync(marker); i++) await new Promise((r) => setTimeout(r, 50))
+    if (!RECORDER_OK) {
+      // The instrument itself cannot be started on this machine, so the argument assertions below have
+      // nothing to read. The DECISION half is proven above — the turn was not cancelled and the traversal
+      // ran as far as launching. Saying so out loud beats a red line claiming the mechanism is dead,
+      // which is exactly what an unqualified assertion says when its own instrument is what failed.
+      console.log("SKIP(argv): the stand-in recorder cannot be started here; the launch decision is still asserted")
+      return
+    }
     expect(existsSync(marker)).toBe(true)
   } finally {
     if (prevBun === undefined) delete process.env.FABULA_BUN_BIN

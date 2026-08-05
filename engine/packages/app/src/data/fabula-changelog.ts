@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.142.0"
+export const FABULA_VERSION = "0.143.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.143.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Проверка, доказывающая, что обход корпуса ЗАПУСКАЕТ отдельную программу, теперь сначала спрашивает, может ли она вообще запустить свой собственный инструмент, — и спрашивает это ЗАПУСКОМ, а не по названию системы. Там, где не может, она честно говорит, что часть про аргументы не покрыта, и оставляет доказанной ту часть, которая доказана: ход не отменён и обход дошёл до запуска. Красная строка, утверждающая, что механизм мёртв, и строка «мой прибор не завёлся» снаружи выглядят одинаково, а означают противоположное; выбирать между ними должна проверка, а не читатель.",
+        en: "The check proving that a corpus traversal LAUNCHES a separate program now first asks whether it can start its own instrument at all — and asks by starting one, not by reading the platform's name. Where it cannot, it says plainly that the argument half is not covered and leaves proven the half that is: the turn was not cancelled and the traversal ran as far as launching. A red line claiming a mechanism is dead and a line saying «my instrument would not start» look identical from outside and mean opposite things; choosing between them is the check's job, not the reader's.",
+      },
+    ],
+  },
   {
     version: "0.142.0",
     date: "2026-08-05",

@@ -42,7 +42,9 @@ Say "-- no engine source is newer than the binary"
 # The general check: if ANY source file postdates the build, the binary cannot contain it. Catches every
 # future change that edits the engine and forgets to rebuild, without naming a single symbol.
 $binTime = (Get-Item $Bin).LastWriteTime
-$src = Join-Path $Root "engine\packages\opencode\src"
+# Forward slashes deliberately: PowerShell accepts them on Windows, and this is the engine tree's real
+# name — spelling it with backslashes made it a different string to every tool that reads this repo.
+$src = Join-Path $Root "engine/packages/opencode/src"
 $newer = @()
 if (Test-Path $src) {
   $newer = Get-ChildItem -Path $src -Recurse -File -Include *.ts, *.tsx -ErrorAction SilentlyContinue |

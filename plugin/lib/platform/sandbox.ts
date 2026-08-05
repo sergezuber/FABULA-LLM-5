@@ -90,19 +90,44 @@ export function buildSeatbeltProfile(scope: SandboxScope, env: NodeJS.ProcessEnv
  */
 export function bubblewrapArgs(scope: SandboxScope, env: NodeJS.ProcessEnv = process.env): string[] {
   const args = ["--dev-bind", "/", "/", "--die-with-parent"]
-  // Every hardline target that names a real directory becomes an empty read-only mount: present, so a
-  // program that stats it sees a directory, and unwritable, so nothing can be installed into it.
+  // MEASURED AGAINST THE KERNEL, and the first version denied NOTHING. It used
+  // `--ro-bind-try /var/empty <target>`, and `/var/empty` does not exist on Debian — which is precisely
+  // what `-try` means: a missing SOURCE is silently skipped. Every rule was a no-op, and the unit tests
+  // passed because they read the argv rather than asking the kernel. Exactly the defect the macOS profile
+  // already had once, in a different syntax, for the same reason.
+  //
+  // What the kernel actually honours, isolated one flag at a time inside a container:
+  //   `--ro-bind <t> <t>`  → writing under <t> answers "Read-only file system"      (deny WRITE)
+  //   `--tmpfs <t>`        → the contents are gone: "No such file or directory"     (deny READ)
+  // Binding a tmpfs created in the SAME invocation is refused ("Can't find source path"), so the target
+  // is re-bound over itself instead.
   for (const t of hardlineTargets(env, "linux")) {
     for (const m of t.match) {
-      if (typeof m === "string" && m.startsWith("/")) args.push("--ro-bind-try", "/var/empty", m)
+      // `-try`, deliberately: a target that is absent has nothing to re-bind, and refusing to start the
+      // sandbox because a path is missing would take the whole floor down for the machines that need it
+      // most. The in-process rules still refuse that path — see the STATED LIMIT below.
+      if (typeof m === "string" && m.startsWith("/")) args.push("--ro-bind-try", m, m)
     }
   }
   if (scope.denyCredentialReads) {
-    // Reads are denied by shadowing the directory with an empty one — the credential is not there to read.
+    // An empty filesystem over the directory: the credential is not there to read, whether or not the
+    // directory existed before — `--tmpfs` creates its own mountpoint.
     for (const dir of credentialReadDirs(scope.home)) args.push("--tmpfs", dir)
   }
   return args
 }
+
+/**
+ * STATED LIMIT of the Linux floor, measured rather than assumed.
+ *
+ * A persistence target is protected when it EXISTS: the path is re-bound over itself read-only. A target
+ * whose directory does not exist yet cannot be re-bound, and its parent is deliberately NOT made
+ * read-only — locking `~/.config` would break ordinary work, and a floor that breaks ordinary work is one
+ * that gets switched off. Those paths are covered by the in-process rules only, which is a weaker claim
+ * and is why it is written here instead of being left for someone to discover.
+ */
+export const LINUX_FLOOR_LIMIT =
+  "a persistence target that does not exist yet is covered by the in-process rules only"
 
 // ── The one entry point ────────────────────────────────────────────────────────────────────────────
 

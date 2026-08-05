@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.107.0"
+export const FABULA_VERSION = "0.108.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.108.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Защита нижнего уровня для Linux запрещала НИЧЕГО, и это выяснилось только когда её спросили у ядра, а не у кода. Она закрывала опасные пути, подставляя пустой каталог, которого в системе нет, — а такая подстановка по правилам инструмента молча пропускается. Все правила были пустышками, а проверки при этом были зелёными, потому что читали список аргументов, а не ответ системы. Ровно тот же дефект, что однажды был в защите для этой системы, в другом синтаксисе и по той же причине. Теперь опасный путь закрывается сам собой в режиме только-чтение, а каталоги с ключами подменяются пустой файловой системой; измерено по одному правилу за раз: запись автозапуска и чтение ключа получают отказ ядра, а обычная работа проходит — и оба контроля обязательны, иначе сломанная защита выглядит как работающая. Закреплено проверкой, которая спрашивает ядро и падает, если вернуть прежнюю ошибку.",
+        en: "The lower-level protection for Linux denied NOTHING, and that surfaced only when the kernel was asked rather than the code. It shielded dangerous paths by substituting an empty directory the system does not have — and by that tool's own rules such a substitution is skipped in silence. Every rule was a no-op while the checks stayed green, because they read the argument list rather than the system's answer. Exactly the defect this protection once had on the other system, in a different syntax and for the same reason. A dangerous path is now shielded by itself in read-only mode and key directories are replaced by an empty filesystem; measured one rule at a time: writing an autostart entry and reading a key are refused by the kernel while ordinary work goes through — and both controls are mandatory, or broken protection looks exactly like working protection. Pinned by a check that asks the kernel and fails if the old mistake is restored.",
+      },
+    ],
+  },
   {
     version: "0.107.0",
     date: "2026-08-05",

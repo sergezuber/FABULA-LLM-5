@@ -119,3 +119,42 @@ describe("a dependency is resolved for the platform it will be installed on", ()
     expect(resolveDep(pw, "darwin").install).not.toContain("--with-deps")
   })
 })
+
+// ── THE KERNEL, ASKED DIRECTLY ─────────────────────────────────────────────────────────────────────
+//
+// Everything above reads argv. That is necessary and it is NOT sufficient, and this project has now been
+// bitten by the gap twice in two syntaxes: the macOS profile emitted regex literals escaped with the
+// STRING escaper and four of six write rules matched nothing, and the first Linux profile bound from
+// `/var/empty` — a path Debian does not have — so `--ro-bind-try` skipped every rule silently. Both had
+// green unit tests. Only the kernel can answer whether a profile denies anything, so the kernel is asked.
+//
+// Skipped where bubblewrap is absent (macOS, and any Linux without the package); it RUNS in CI's Ubuntu
+// row, which is the point.
+import { spawnSync } from "node:child_process"
+import { mkdirSync, writeFileSync } from "node:fs"
+import { whichBin } from "./shell"
+
+const HAS_BWRAP = !!whichBin("bwrap")
+
+test.if(HAS_BWRAP)("the Linux kernel DENIES persistence writes and credential reads, and allows ordinary work", () => {
+  const home = process.env.HOME || "/root"
+  mkdirSync(`${home}/.config/systemd/user`, { recursive: true })
+  mkdirSync(`${home}/.ssh`, { recursive: true })
+  writeFileSync(`${home}/.ssh/id_rsa`, "TOPSECRET")
+
+  const plan = sandboxPlan({ home, denyCredentialReads: true }, "linux")
+  expect(plan.available).toBe(true)
+  const run = (code: string) => {
+    const argv = plan.wrap(["node", "-e", code])
+    return spawnSync(argv[0]!, argv.slice(1), { encoding: "utf8" }).status
+  }
+
+  // Denied by the kernel, not by a string match — the path is COMPUTED inside the program.
+  expect(run(`require("fs").writeFileSync(${JSON.stringify(`${home}/.config/systemd/user/evil.service`)},"x")`)).not.toBe(0)
+  expect(run(`process.stdout.write(require("fs").readFileSync(${JSON.stringify(`${home}/.ssh/id_rsa`)},"utf8"))`)).not.toBe(0)
+
+  // THE CONTROLS are what keep this from passing on a profile that simply denies everything — which is
+  // how a broken floor looks identical to a working one.
+  expect(run(`require("fs").writeFileSync("/tmp/fabula-floor-ok.txt","x")`)).toBe(0)
+  expect(run(`require("fs").readdirSync("/usr/bin")`)).toBe(0)
+})

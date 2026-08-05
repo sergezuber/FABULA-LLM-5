@@ -559,3 +559,62 @@ describe("execute_code runs under the kernel profile when Docker is unavailable"
     }
   })
 })
+
+// ── An operator can require confinement, and on one platform that is the only way to have it ────────
+//
+// The container is tried first everywhere. Where the kernel can also confine, the fallback is confined
+// too. Where it cannot — which the plan states plainly rather than pretending otherwise — the fallback
+// runs the model's own code with nothing between it and the machine. That degrade is deliberate and
+// announced, and it was not REFUSABLE: there was no setting that made such a machine safe.
+test("with confinement required and none available, the code is REFUSED rather than run", async () => {
+  const T = (await FabulaTools({} as any)).tool as any
+  const saved = {
+    req: process.env.FABULA_REQUIRE_CONFINEMENT,
+    sbx: process.env.FABULA_CODE_SANDBOX,
+    sea: process.env.FABULA_CODE_SEATBELT,
+  }
+  process.env.FABULA_REQUIRE_CONFINEMENT = "1"
+  process.env.FABULA_CODE_SANDBOX = "0" // no container
+  process.env.FABULA_CODE_SEATBELT = "0" // and no kernel profile either
+  try {
+    const r = await T.execute_code.execute(
+      { language: "python", code: "print('should not run')" },
+      { directory: os.tmpdir(), abort: new AbortController().signal } as any,
+    )
+    const text = typeof r === "string" ? r : r.output
+    expect(text).toContain("refused")
+    expect(text).not.toContain("should not run")
+    // The refusal has to name the way OUT of it, or it is a wall rather than a decision.
+    expect(text).toContain("container runtime")
+  } finally {
+    for (const [k, v] of [
+      ["FABULA_REQUIRE_CONFINEMENT", saved.req],
+      ["FABULA_CODE_SANDBOX", saved.sbx],
+      ["FABULA_CODE_SEATBELT", saved.sea],
+    ] as const) {
+      if (v === undefined) delete process.env[k]
+      else process.env[k] = v
+    }
+  }
+})
+
+test("without that requirement the degrade is unchanged: the code runs, and SAYS it was unconfined", async () => {
+  const T = (await FabulaTools({} as any)).tool as any
+  const saved = { sbx: process.env.FABULA_CODE_SANDBOX, sea: process.env.FABULA_CODE_SEATBELT }
+  process.env.FABULA_CODE_SANDBOX = "0"
+  process.env.FABULA_CODE_SEATBELT = "0"
+  try {
+    const r = await T.execute_code.execute(
+      { language: "python", code: "print('FABULA_UNCONFINED_OK')" },
+      { directory: os.tmpdir(), abort: new AbortController().signal } as any,
+    )
+    const text = typeof r === "string" ? r : r.output
+    expect(text).toContain("FABULA_UNCONFINED_OK")
+    expect(text).toContain("local exec")
+  } finally {
+    for (const [k, v] of [["FABULA_CODE_SANDBOX", saved.sbx], ["FABULA_CODE_SEATBELT", saved.sea]] as const) {
+      if (v === undefined) delete process.env[k]
+      else process.env[k] = v
+    }
+  }
+})

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.150.0"
+export const FABULA_VERSION = "0.151.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.151.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Появился способ сказать «никогда не исполняй код без ограничения». Контейнер пробуется первым везде; там, где ядро тоже умеет ограничивать, запасной путь тоже ограничен. Там, где не умеет, запасной путь исполнял написанный моделью код без чего-либо между ним и машиной — понижение осознанное и объявленное в выводе, но ОТКАЗАТЬСЯ от него было нельзя: у машины, которая ограничивать не умеет, не было настройки, делающей её безопасной. По умолчанию выключено, потому что включение по умолчанию отняло бы возможность у целой системы, не спросив её владельца. Отказ называет выход: контейнер — это и есть та изоляция, которая у этой системы имеется.",
+        en: "There is now a way to say «never run code with nothing confining it». A container is tried first everywhere; where the kernel can also confine, the fallback is confined too. Where it cannot, the fallback ran the model's own code with nothing between it and the machine — a deliberate degrade, announced in the output, and one that could not be REFUSED: a machine unable to confine had no setting that made it safe. Off by default, because turning it on by default would take the capability away from an entire system without its owner asking. The refusal names the way out: a container runtime is the isolation that system does have.",
+      },
+    ],
+  },
   {
     version: "0.150.0",
     date: "2026-08-05",

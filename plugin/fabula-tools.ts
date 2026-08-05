@@ -846,6 +846,23 @@ export const FabulaTools: Plugin = async () => {
           // carries the real reason.
           const plan = sandboxPlan(untrustedScope())
           const confined = plan.available && process.env.FABULA_CODE_SEATBELT !== "0"
+          // AN OPERATOR MAY REQUIRE CONFINEMENT, and on one platform that is the only way to have it.
+          //
+          // The container is tried first everywhere, and where the kernel can also confine, the fallback
+          // is confined too. On a platform where the kernel cannot — measured and stated plainly by the
+          // plan itself — the fallback runs the model's own code with nothing between it and the machine.
+          // That degrade is deliberate and it is announced, but it was not REFUSABLE: there was no way to
+          // say "never unconfined", so a machine that cannot confine had no setting that made it safe.
+          // Off by default, because turning it on by default would remove the capability from that
+          // platform without its owner asking; named here so the choice exists at all.
+          if (!confined && process.env.FABULA_REQUIRE_CONFINEMENT === "1") {
+            return (
+              "execute_code refused: confinement is required here (FABULA_REQUIRE_CONFINEMENT=1) and " +
+              `nothing on this machine can provide it — ${plan.note} Start a container runtime serving ` +
+              "Linux images, which is the isolation this platform has, or unset the requirement to run " +
+              "the code unconfined."
+            )
+          }
           const argv = confined ? plan.wrap([bin, flag, args.code]) : [bin, flag, args.code]
           const note = confined
             ? `\n[local exec under the ${plan.mechanism} kernel profile — Docker sandbox unavailable; env scrubbed, ${plan.note}]`

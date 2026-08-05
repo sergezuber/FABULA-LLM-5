@@ -267,6 +267,21 @@ describe("tool.bash permissions", () => {
     )
   }
 
+  // WHICH OF THE TWO IS EMPTY — asked once, plainly, instead of inferred from a permission that never
+  // arrives. A scan finds nothing either because the argument did not resolve to a path, or because the
+  // path resolved and then read as living inside the project. Those are opposite faults with opposite
+  // fixes, and an unasked permission looks identical for both.
+  each("an external path reads as external, which is what makes a permission necessary", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const outside = process.platform === "win32" ? String(process.env.WINDIR) : "/etc"
+        expect({ path: outside, contained: Instance.containsPath(outside) })
+          .toEqual({ path: outside, contained: false })
+      },
+    })
+  })
+
   each("asks for external_directory permission for wildcard external paths", async () => {
     await Instance.provide({
       directory: projectRoot,

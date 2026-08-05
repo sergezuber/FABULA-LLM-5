@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.168.0"
+export const FABULA_VERSION = "0.169.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.169.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Проверки прав оболочки спрашивают прямо: читается ли путь ВНЕ проекта как внешний. Набор не находит ничего либо потому, что довод не разрешился в путь, либо потому, что путь разрешился и был сочтён лежащим внутри проекта, — это противоположные неисправности с противоположными исправлениями, а незапрошенное разрешение выглядит для обеих одинаково. Раньше приходилось гадать, какая из двух; теперь это отдельное утверждение, и оно же остаётся постоянным свойством: путь снаружи обязан читаться снаружи, иначе разрешение спрашивать не о чем.",
+        en: "The shell-permission checks now ask outright whether a path OUTSIDE the project reads as external. A scan finds nothing either because the argument did not resolve to a path, or because it resolved and then read as living inside the project — opposite faults with opposite fixes, and an unasked permission looks identical for both. Which of the two had to be guessed at; it is now its own assertion, and a standing property besides: a path outside must read as outside, or there is nothing for a permission to be about.",
+      },
+    ],
+  },
   {
     version: "0.168.0",
     date: "2026-08-06",

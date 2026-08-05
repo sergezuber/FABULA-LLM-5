@@ -172,6 +172,14 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      # FIXTURE MATERIAL, not a dependency of the guard. The synthetic tree below needs one real
+      # executable that also carries a version string, and this supplies it. The guard itself runs under
+      # PowerShell alone — which is the whole claim being made here — and nothing in it calls bun.
+      # It is installed explicitly because it is NOT already present: assuming it was made the fixture
+      # fail to build and reported that as the guard being broken.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
       # The PowerShell guard exists because on Windows the POSIX shell is a dependency the USER installs,
       # so the check deciding whether a deploy is real must not depend on it. Exercised against a synthetic
       # tree in both directions: all three artifacts correct must be FRESH and exit 0, and one artifact
@@ -185,7 +193,7 @@ jobs:
           # A REAL executable that also CARRIES the version. The first attempt wrote a batch file named
           # .exe: Windows will not run that, so the guard's first check ("the binary runs") failed and the
           # whole verdict was STALE while all three version checks passed — a fixture defect reported as a
-          # product defect. bun.exe is already on this runner, is a genuine PE, and answers --version;
+          # product defect. bun.exe is installed above, is a genuine PE, and answers --version;
           # appending our number leaves it valid (trailing bytes are ignored) and satisfies both checks.
           $bun = (Get-Command bun).Source
           Copy-Item $bun "$s/bin/fabula.exe"

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.133.0"
+export const FABULA_VERSION = "0.134.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.134.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "На третьей системе диагностический журнал адаптера не ограничивался ничем. Две другие вручают процессу уже открытый файл и позволяют спросить у ядра, какой именно, — там ротация работает сама. Здесь такого вопроса задать нельзя, и адаптер честно отвечает «не знаю», потому что обрезать не тот файл хуже, чем не обрезать вовсе. Но тогда обязана назвать файл сама служба — иначе ничем не ограничен ровно тот журнал, который правила велят читать ПЕРВЫМ при любом зависании. Теперь задание перенаправляет свой вывод в названный файл и это имя адаптеру сообщает.",
+        en: "On the third system the adapter's diagnostic log was bounded by nothing. The other two hand the process an already-open file and let it ask the kernel which file that is, so rotation looks after itself. Here that question cannot be asked, and the adapter honestly answers «I do not know», because truncating the wrong file is worse than not truncating at all. But then the service itself must name the file — otherwise the one log the rules say to read FIRST whenever anything hangs is the one thing nothing bounds. The task now redirects its output to a named file and tells the adapter that name.",
+      },
+      {
+        ru: "И проверка перестала требовать от каждой системы того, что умеет только часть из них: теперь каждой задаётся вопрос, на который она может ответить, а отдельная проверка следит, что названный явно журнал уважается везде — ведь именно это и держит границу там, где спросить нельзя.",
+        en: "And the check stopped demanding of every system what only some of them can do: each is now asked the question it can answer, while a separate check watches that an explicitly named log is honoured everywhere — since that is precisely what holds the bound where the question cannot be asked.",
+      },
+    ],
+  },
   {
     version: "0.133.0",
     date: "2026-08-05",

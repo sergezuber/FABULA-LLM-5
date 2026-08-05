@@ -109,13 +109,21 @@ WantedBy=default.target
 
   // Windows: registered for LOGON rather than boot. The adapter talks to a serving runtime the user
   // starts in their own session, so a task running before anyone logs in would only ever fail.
+  //
+  // THE LOG IS NAMED HERE, and it has to be. The other two platforms hand the process an already-open
+  // file and the adapter asks the kernel which file that is, so it can keep it bounded. Windows has no
+  // fd-to-path call a service can rely on: the adapter answers "I do not know" — correctly, since
+  // truncating the wrong file is worse than not rotating — and then nothing would bound the one log this
+  // project's own rule says to read FIRST when anything hangs. So the task redirects its own output to a
+  // named file and TELLS the adapter that name, which is the honest channel the resolver documents.
   return {
     filePath: null,
     fileBody: null,
     unregisterArgv: ["schtasks", "/Delete", "/TN", ADAPTER_LABEL, "/F"],
     registerArgv: [
       "schtasks", "/Create", "/TN", ADAPTER_LABEL, "/SC", "ONLOGON", "/F",
-      "/TR", `"${spec.python}" "${spec.script}"`,
+      "/TR",
+      `cmd /c set FABULA_ADAPTER_LOG=${spec.logPath}&& "${spec.python}" "${spec.script}" >> "${spec.logPath}" 2>&1`,
     ],
     statusArgv: ["schtasks", "/Query", "/TN", ADAPTER_LABEL],
     hint: `start LM Studio, then: schtasks /Run /TN ${ADAPTER_LABEL}`,

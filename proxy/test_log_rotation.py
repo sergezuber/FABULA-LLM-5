@@ -29,21 +29,60 @@ def _load():
     return m
 
 
-def test_stderr_path_resolves_the_file_launchd_opened():
-    log = tempfile.mktemp(suffix=".log")
+def _resolve_in_child(log, env=None):
+    """Run the resolver in a process whose fd 2 really is `log`, the way a service opens it."""
     code = (
         "import importlib.util,sys;"
         f"spec=importlib.util.spec_from_file_location('a', {ADAPTER!r});"
         "a=importlib.util.module_from_spec(spec);spec.loader.exec_module(a);"
         "sys.stdout.write(str(a._stderr_path()))"
     )
+    e = dict(os.environ)
+    e.pop("FABULA_ADAPTER_LOG", None)
+    if env:
+        e.update(env)
+    with open(log, "ab") as f:
+        return subprocess.run(
+            [sys.executable, "-c", code], stderr=f, stdout=subprocess.PIPE, env=e
+        ).stdout.decode()
+
+
+def test_stderr_path_resolves_the_file_the_service_opened():
+    """Each platform is asked the question it can answer, and answers it honestly.
+
+    macOS and Linux hand the process an already-open file and publish which file that is, so the
+    rotator can bound it without anyone naming a path. Windows has no fd-to-path call a service can
+    rely on: the honest answer there is "I do not know", because truncating the wrong file is worse
+    than not rotating. Asserting the POSIX answer everywhere would demand a capability the platform
+    does not have and would read as the resolver being broken.
+    """
+    log = tempfile.mktemp(suffix=".log")
     try:
-        with open(log, "ab") as f:  # exactly how launchd opens StandardErrorPath
-            out = subprocess.run([sys.executable, "-c", code], stderr=f, stdout=subprocess.PIPE).stdout.decode()
-        assert os.path.realpath(out) == os.path.realpath(log), f"resolved {out!r}, expected {log!r}"
+        out = _resolve_in_child(log)
+        if sys.platform == "win32":
+            assert out == "None", f"expected an honest refusal on this platform, got {out!r}"
+        else:
+            assert os.path.realpath(out) == os.path.realpath(log), f"resolved {out!r}, expected {log!r}"
     finally:
         if os.path.exists(log):
             os.unlink(log)
+
+
+def test_the_named_log_is_honoured_everywhere_it_is_set():
+    """The channel that carries the answer where the kernel cannot.
+
+    This is what keeps the log bounded on the platform that cannot be asked — the service definition
+    sets it — so it has to hold on every platform, not only there.
+    """
+    log = tempfile.mktemp(suffix=".log")
+    named = tempfile.mktemp(suffix=".named.log")
+    try:
+        out = _resolve_in_child(log, {"FABULA_ADAPTER_LOG": named})
+        assert out == named, f"resolved {out!r}, expected the named {named!r}"
+    finally:
+        for f in (log, named):
+            if os.path.exists(f):
+                os.unlink(f)
 
 
 def test_an_oversized_log_is_rotated_and_the_previous_generation_is_kept():

@@ -50,10 +50,15 @@ class Fake(BaseHTTPRequestHandler):
         self.send_header("Connection", "close")
         self.end_headers()
         try:
-            for offset in range(0, len(payload), 4096):
-                self.wfile.write(payload[offset:offset + 4096])
+            # CHUNK AND PACE chosen so the case finishes well inside the wait on any timer granularity.
+            # It used to be 256 chunks paced at 10ms — about 2.5s where a sleep is accurate, and past the
+            # 3s budget on a platform whose sleep rounds up to ~15ms, so the check could fail for the
+            # fixture being slow rather than for the adapter missing a departed client. The property is
+            # that the upstream is abandoned mid-body, which needs several chunks, not hundreds.
+            for offset in range(0, len(payload), 32768):
+                self.wfile.write(payload[offset:offset + 32768])
                 self.wfile.flush()
-                time.sleep(0.01)
+                time.sleep(0.02)
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
             STATE["nonstream_closed"].set()
 
@@ -113,10 +118,12 @@ def main():
         time.sleep(0.8)
         STATE["stream_closed"].clear()
         received = stream_disconnect()
-        stream_closed = STATE["stream_closed"].wait(3)
+        # Generous, and deliberately so: this waits for a FAILURE to be observed, so a budget
+        # that is merely adequate turns a slow machine into a false negative.
+        stream_closed = STATE["stream_closed"].wait(15)
         STATE["nonstream_closed"].clear()
         nonstream_disconnect()
-        nonstream_closed = STATE["nonstream_closed"].wait(3)
+        nonstream_closed = STATE["nonstream_closed"].wait(15)
     finally:
         stop(process)
     logs = process.stderr.read().decode(errors="replace")

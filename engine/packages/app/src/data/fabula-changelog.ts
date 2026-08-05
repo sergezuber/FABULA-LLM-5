@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.117.0"
+export const FABULA_VERSION = "0.118.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.118.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Изолированный запуск кода в контейнере не работал на второй системе — и это было невидимо на той, где он писался. Временная папка создаётся с правами «только владельцу», а контейнер запускается от другого пользователя: на этой системе прослойка подменяет владельцев и всё выглядит рабочим, а на второй интерпретатор отвечает «нет доступа» ровно к тому файлу, который его попросили выполнить. Теперь права выставляются явно и минимально: чужой может ВОЙТИ в папку и прочитать названный файл, но не увидеть, что там ещё лежит. Папка живёт секунды, содержит один временный файл и подключается только для чтения. Найдено сборочной машиной второй системы — то есть ровно тем, ради чего проверки на нескольких системах и заводят.",
+        en: "Running code isolated in a container did not work on the second system — and that was invisible on the one it was written on. The temporary folder is created owner-only, and the container runs as a different user: on this system the intermediate layer substitutes owners and everything looks fine, while on the second the interpreter answers \"permission denied\" about the very file it was asked to run. Permissions are now set explicitly and minimally: another user may ENTER the folder and read the named file, but not see what else is in it. The folder lives for seconds, holds one temporary file, and is attached read-only. Found by the second system's build machine — which is exactly what checks on several systems are kept for.",
+      },
+    ],
+  },
   {
     version: "0.117.0",
     date: "2026-08-05",

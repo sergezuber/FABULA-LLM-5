@@ -762,6 +762,19 @@ export const FabulaTools: Plugin = async () => {
             const dir = await fs.mkdtemp(path.join(os.homedir(), ".fabula-sbx-"))
             const file = lang === "node" ? "c.js" : "c.py"
             await fs.writeFile(path.join(dir, file), args.code, "utf8")
+            // THE CONTAINER HAS TO BE ABLE TO READ WHAT WE JUST WROTE, and on one platform it could not.
+            //
+            // `mkdtemp` creates the directory 0700 — owner only. Docker Desktop maps UIDs through its own
+            // VM, so this never showed on macOS; on native Linux the container process is a different user
+            // and answered `[Errno 13] Permission denied` on the very file it was asked to run. Found by a
+            // Linux CI runner, invisible on the machine it was written on.
+            //
+            // 0711 and 0644 are the minimum that works: others may TRAVERSE into the directory and read
+            // the named file, but not list what else is in it. It holds one throwaway file — the code the
+            // model just wrote — for the seconds the container runs, is mounted read-only, and is removed
+            // afterwards.
+            await fs.chmod(dir, 0o711)
+            await fs.chmod(path.join(dir, file), 0o644)
             const name = `fabula-sbx-${process.pid}-${Date.now()}`
             const dargs = buildDockerRun({ image: SANDBOX_IMAGES[lang], hostDir: dir, inner: interpreterCmd(lang, file) })
             dargs.splice(1, 0, "--name", name) // inject after "run"

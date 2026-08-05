@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.161.0"
+export const FABULA_VERSION = "0.162.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.162.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "«Лежит ли каталог внутри рабочего» спрашивается без предположения о разделителе. Написанное с одним, это не совпадало ни с чем там, где пути пишутся другим: рабочий каталог не попадал в кандидаты вовсе, и побеждала та подпапка, в которую ход случайно забрёл, — ровно та ошибка, ради предотвращения которой кандидат и заведён. Одна опечатка возвращала поведение, из-за которого папка со снимками экрана однажды подменила собой книгу.",
+        en: "«Is this directory inside the working one» is now asked without assuming a separator. Written with one, it matched nothing where paths are spelled with the other: the working directory never became a candidate at all, and whichever subfolder the turn had wandered into won by default — the very mistake that candidate exists to prevent. A single character restored the behaviour that once let a folder of screenshots stand in for a book.",
+      },
+    ],
+  },
   {
     version: "0.161.0",
     date: "2026-08-06",

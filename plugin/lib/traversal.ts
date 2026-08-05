@@ -111,6 +111,11 @@ export interface VerdictOpts {
  * Unknown window, unknown directory size, no reads: silent. An unmeasured quantity never fires a
  * mechanism — guessing here would mean intercepting somebody's ordinary work on a hunch.
  */
+/** Is `dir` inside `root` — asked without assuming which separator this filesystem writes. */
+function isUnder(dir: string, root: string): boolean {
+  return dir.startsWith(root + "/") || dir.startsWith(root + "\\")
+}
+
 export function traversalVerdict(st: TraversalState, o: VerdictOpts): Verdict {
   const window = Number(o?.windowTokens) || 0
   if (!(window > 0)) return { offload: false, reason: "window not measured; nothing decided" }
@@ -147,7 +152,11 @@ export function traversalVerdict(st: TraversalState, o: VerdictOpts): Verdict {
   const root = o.taskRoot
   if (root) {
     let readUnder = 0
-    for (const [dir, t] of st.byDir) if (dir === root || dir.startsWith(root + "/")) readUnder += t.paths.size
+      // "Beneath the root" accepts EITHER separator. Written with one, it matched nothing on a filesystem
+      // that spells paths with the other, so the working directory never became a candidate and whichever
+      // subfolder the turn happened to walk into won by default — the very mistake the comment above
+      // describes, reintroduced by one character.
+      for (const [dir, t] of st.byDir) if (dir === root || isUnder(dir, root)) readUnder += t.paths.size
     const totalUnder = o.filesInDir?.(root) ?? 0
     if (readUnder > 0 && totalUnder > 0) candidates.push({ dir: root, read: readUnder, total: totalUnder })
   }

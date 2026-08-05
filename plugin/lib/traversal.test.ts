@@ -173,3 +173,26 @@ describe("traversalVerdict — a subfolder walked into is part of the same job",
     expect(v.dir).toBe("/elsewhere")
   })
 })
+
+// ── "beneath the root" is asked without assuming a separator ───────────────────────────────────────
+//
+// The working directory is offered as a candidate standing for everything read beneath it. Deciding
+// "beneath" with one separator matched nothing where paths are written with the other, so the working
+// directory never became a candidate and whichever subfolder the turn had walked into won by default —
+// which is the exact failure the candidate exists to prevent.
+test("the working directory wins over a subfolder it contains, in either spelling", () => {
+  for (const sep of ["/", "\\"] as const) {
+    const root = sep === "/" ? "/task" : "C:\\task"
+    const sub = root + sep + "chapters"
+    const st = initTraversal()
+    for (let i = 0; i < 6; i++) observeRead(st, { dir: sub, path: `${sub}${sep}ch${i}.md`, chars: 40_000 })
+    const v = traversalVerdict(st, {
+      windowTokens: 8000,
+      taskRoot: root,
+      // The root holds fifty-two; the subfolder holds ten. The root must win on the work left in it.
+      filesInDir: (d: string) => (d === root ? 52 : 10),
+    })
+    expect(v.offload).toBe(true)
+    expect(v.dir).toBe(root)
+  }
+})

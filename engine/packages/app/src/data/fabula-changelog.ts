@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.136.0"
+export const FABULA_VERSION = "0.137.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.137.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Разбор корпуса запускает названный оператором интерпретатор так, как этот файл вообще можно запустить. На третьей системе совершенно обычный ответ на вопрос «чем запускать мой скрипт» — командный файл: именно так там поставляется точка входа у большинства инструментов. Прямым запуском такой файл не стартует — система отвечает «не найдено» про файл, который очевидно есть. Теперь ровно такие передаются оболочке, а всё остальное запускается напрямую, как и раньше: иначе между обвязкой и её собственными аргументами встала бы вторая грамматика. Разница между «уважить выбор оператора» и «молча его проигнорировать».",
+        en: "The corpus pass starts the interpreter the operator named in the way that file can actually be started. On the third system a perfectly ordinary answer to «what runs my script» is a command file — that is how most tooling ships its entry point there — and such a file does not start by direct spawn: the system answers «not found» about a file that plainly exists. Exactly those are now handed to a shell, while everything else is spawned directly as before, since routing a real executable through a shell would put a second grammar between the harness and its own arguments. The difference between honouring the operator's choice and silently ignoring it.",
+      },
+      {
+        ru: "И проверка рабочего каталога перестала сравнивать НАПИСАНИЕ. Оболочка печатает путь в той форме, какая ей удобна: macOS отдаёт временный каталог через ссылку, POSIX-оболочка на третьей системе печатает свою дисковую форму, а сама система может вернуть укороченное имя вместо длинного — и всё это ОДИН каталог. Сравнение текста спрашивало лишь о том, какую форму выбрала оболочка. Теперь проверка пишет файл и смотрит, лёг ли он туда, куда инструменту указали.",
+        en: "And the working-directory check stopped comparing SPELLING. A shell prints a path in whatever form suits it: macOS serves the temp directory through a link, a POSIX shell on the third system prints its own drive form, and that system may return a shortened name instead of a long one — and every one of those is ONE directory. Comparing text only asked which form the shell chose. The check now writes a file and looks for it where the tool was pointed.",
+      },
+    ],
+  },
   {
     version: "0.136.0",
     date: "2026-08-05",

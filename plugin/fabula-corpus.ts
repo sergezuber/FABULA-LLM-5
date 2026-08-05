@@ -113,10 +113,21 @@ function spawnWorker(pluginInput: any, sessionID: string, taskText: string): voi
   const dir = pluginInput?.directory || process.cwd()
   const serverUrl = String(pluginInput?.serverUrl || "http://127.0.0.1:4096")
   const taskB64 = Buffer.from(taskText, "utf8").toString("base64")
-  const child = spawn(bunBin(), [WORKER, dir, sessionID, taskB64, serverUrl, REPORT_TAG], {
+  // `shell` is decided by what the named program IS, not by which platform this is.
+  //
+  // The interpreter is whatever the operator named. On Windows a perfectly ordinary answer to "which
+  // program runs my script" is a `.cmd` or `.bat` — that is how most tooling ships its entry point there
+  // — and those are not executables the operating system can start directly: a plain spawn fails with
+  // "not found" for a file that plainly exists. Handing exactly those to a shell is the difference
+  // between honouring the operator's choice and silently ignoring it. Everything else is spawned
+  // directly, as before, because routing a real executable through a shell would put a second grammar
+  // between the harness and its own arguments.
+  const bin = bunBin()
+  const child = spawn(bin, [WORKER, dir, sessionID, taskB64, serverUrl, REPORT_TAG], {
     detached: true,
     stdio: "ignore",
     env: { ...process.env },
+    ...(/\.(cmd|bat)$/i.test(bin) ? { shell: true } : {}),
   })
   child.on("error", () => {}) // never let a spawn failure crash the turn (fail-open)
   // REGISTER IT. Detaching is what lets the work outlive the turn; it is also what puts the child beyond

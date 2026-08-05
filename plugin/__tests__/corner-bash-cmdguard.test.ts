@@ -469,16 +469,15 @@ describe("bash_tool.execute() — real shell", () => {
   test("runs in ctx.directory (cwd is honored)", async () => {
     const d = mkTmp()
     try {
-      const r = await bash_tool.execute({ command: "pwd", description: "t" }, { ...ctx, directory: d })
-      const out = outOf(r).trim()
-      // ONE directory, several spellings, and the shell chooses which it prints. macOS serves /tmp as a
-      // symlink into /private, so both forms name the same place; and a POSIX shell on Windows prints its
-      // own drive form — `/c/Users/x` for `C:\Users\x` — which is that path, not another one. Comparing
-      // against a single spelling asserted which spelling the shell happens to use, and the property being
-      // checked is where the command ran.
-      const drive = d.replace(/^([A-Za-z]):/, (_m, c) => "/" + String(c).toLowerCase()).replace(/\\/g, "/")
-      const spellings = [d, path.join("/private", d.replace(/^\//, "")), drive]
-      expect(spellings.includes(out)).toBe(true)
+      // The directory is proven by IDENTITY, not by spelling. `pwd` answers in whatever form the shell
+      // prefers: macOS serves /tmp through a /private symlink, a POSIX shell on Windows prints
+      // `/c/Users/x` for `C:\Users\x`, and that machine may hand back a shortened 8.3 name for a long
+      // one. Every one of those IS the directory, so comparing text only ever asked which spelling the
+      // shell chose. Writing a file and finding it where the tool was pointed asks the real question.
+      const stamp = `cwd-proof-${process.pid}.txt`
+      const r = await bash_tool.execute({ command: `printf hi > ${stamp}`, description: "t" }, { ...ctx, directory: d })
+      expect(outOf(r)).not.toContain("[BLOCKED")
+      expect(existsSync(path.join(d, stamp))).toBe(true)
     } finally { rmSync(d, { recursive: true, force: true }) }
   })
 

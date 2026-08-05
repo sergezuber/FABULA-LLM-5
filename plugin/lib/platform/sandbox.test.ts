@@ -8,6 +8,7 @@
 import { test, expect, describe } from "bun:test"
 import { sandboxPlan, sandboxShellArgv, buildSeatbeltProfile, bubblewrapArgs, shellScope, untrustedScope } from "./sandbox"
 import { hardlineKernelRegex } from "./persistence"
+import { shellArgv } from "./shell"
 import { resolveDep, MANIFEST } from "../manifest"
 
 const ENV = { HOME: "/home/u", PATH: "/usr/bin:/bin" }
@@ -85,9 +86,11 @@ describe("both platforms protect the SAME set, from the same list", () => {
 
   test("the confined shell is the SAME program as the unconfined one", () => {
     // If the sandbox picked a different shell, cmdguard and shelltargets would be parsing one grammar
-    // while the kernel confined another.
+    // while the kernel confined another. So the assertion is SAMENESS, stated against the unconfined
+    // answer itself — spelling `bash` here asserted a POSIX fact instead, and on a machine where the
+    // seam resolves a real Git-shipped shell the check failed for the two being identical.
     const { argv } = sandboxShellArgv("echo hi", SCOPE, "win32", ENV)
-    expect(argv).toEqual(["bash", "-lc", "echo hi"])
+    expect(argv).toEqual(shellArgv("echo hi", { platform: "win32", env: ENV }))
   })
 })
 

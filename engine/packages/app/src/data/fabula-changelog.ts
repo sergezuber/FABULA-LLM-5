@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.129.0"
+export const FABULA_VERSION = "0.130.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.130.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Создание файла по пути вида «~/заметки.txt» на третьей системе клало файл НЕ туда, куда просили: раскрытие читало только одну переменную окружения, а там домашний каталог хранится в другой. Пустая подстановка превращала путь в относительный, и файл молча уезжал в рабочий каталог сессии. Хуже того, это было ТРЕТЬЕ место со своим ответом на вопрос «где дом», а одно из двух остальных — запрет на запись: путь, о котором они расходятся, проверяется под одним именем, а пишется под другим.",
+        en: "Creating a file at a path like «~/notes.txt» on the third system put the file somewhere other than asked: the expansion read only one environment variable, and there the home directory lives in a different one. The empty substitution turned the path relative and the file quietly went to the session's working directory. Worse, this was the THIRD module with its own answer to «where is home», and one of the other two is the write refusal: a path they disagree about is checked under one name and written under another.",
+      },
+      {
+        ru: "Заодно сведены к одному определению ещё четыре таких места, включая одно, которое собирало каталог данных вручную и потому не замечало ни переноса данных движка, ни настройки размещения — публичный реестр доказательств оставался бы на старом месте.",
+        en: "Four more such places are collected into the one definition, including one that rebuilt the data directory by hand and so noticed neither a move of the engine's data nor the setting that places it — the public proof registry would have been left behind at the old location.",
+      },
+    ],
+  },
   {
     version: "0.129.0",
     date: "2026-08-05",

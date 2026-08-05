@@ -4,6 +4,7 @@ import { mkdtempSync, writeFileSync, mkdirSync, existsSync, realpathSync } from 
 import { tmpdir } from "node:os"
 import * as path from "node:path"
 import { defaultSandboxConfig, buildSeatbeltProfile, sandboxArgv } from "./sandbox"
+import { shellArgv } from "./platform/shell"
 
 test("profile denies reading secret dirs and writing secret files", () => {
   const p = buildSeatbeltProfile(defaultSandboxConfig("/Users/x"))
@@ -19,7 +20,15 @@ test("profile denies reading secret dirs and writing secret files", () => {
 })
 
 test("sandboxArgv shape", () => {
-  expect(sandboxArgv("echo hi", "(version 1)(allow default)")).toEqual(["sandbox-exec", "-p", "(version 1)(allow default)", "bash", "-lc", "echo hi"])
+  // The claim is that the confining runner WRAPS the harness's own shell invocation — not that the
+  // shell is spelled `bash`. Spelling it out asserted a fact about POSIX: elsewhere the same seam
+  // resolves a different program, and the check failed for the composition being right.
+  expect(sandboxArgv("echo hi", "(version 1)(allow default)")).toEqual([
+    "sandbox-exec",
+    "-p",
+    "(version 1)(allow default)",
+    ...shellArgv("echo hi"),
+  ])
 })
 
 // LIVE: the kernel actually blocks a read of a "secret" dir but allows a normal command.

@@ -9,6 +9,7 @@
 // scrubProse() for the guard on FABULA's own generated prose.
 
 import { classifyPath } from "./reprogate"
+import { homeDir } from "./platform/paths"
 
 export type Host = "local" | "cloud" | "unknown"
 
@@ -322,7 +323,7 @@ function byteLen(s: string): number {
 }
 
 function shorten(p: string): string {
-  const home = (() => { try { return process.env.HOME || "" } catch { return "" } })()
+  const home = (() => { try { return homeDir() } catch { return "" } })()
   return home && p.startsWith(home) ? "~" + p.slice(home.length) : p
 }
 

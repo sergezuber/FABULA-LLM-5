@@ -98,9 +98,12 @@ test("under a test runner with no data home, the store NEVER resolves to the use
   // ~/.local/share/fabula/memstore while the tests read a temp dir and reported records missing.
   const resolved = storeDir({ BUN_TEST: "1" })
   expect(resolved.startsWith(os.tmpdir())).toBe(true)
-  expect(resolved.includes(os.homedir() + "/.local")).toBe(false)
-  // an explicitly chosen data home is still honoured — the guard must not take the override away
-  expect(storeDir({ XDG_DATA_HOME: "/tmp/xyz", BUN_TEST: "1" })).toBe("/tmp/xyz/fabula/memstore")
+  expect(resolved.includes(path.join(os.homedir(), ".local"))).toBe(false)
+  // an explicitly chosen data home is still honoured — the guard must not take the override away.
+  // Joined rather than spelled: the store opens a real directory here, so it answers in this
+  // machine's shape, and a `/`-spelled expectation asserted the shape of a different one.
+  const chosen = path.join(os.tmpdir(), "xyz")
+  expect(storeDir({ XDG_DATA_HOME: chosen, BUN_TEST: "1" })).toBe(path.join(chosen, "fabula", "memstore"))
 })
 
 test("a torn or unparseable line never takes the store down", () => {

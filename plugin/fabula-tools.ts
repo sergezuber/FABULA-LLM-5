@@ -41,7 +41,7 @@ const BASH_BACKEND = resolveBackend(process.env, SANDBOX_PROFILE)
  *  it depends only on $HOME. Empty when the platform has no Seatbelt or the operator opted out. */
 const shellKernelFloor: string =
   process.env.FABULA_SHELL_GUARD !== "0" && sandboxPlan(shellScope()).available
-    ? buildSeatbeltProfile(hardlineSandboxConfig(os.homedir()))
+    ? buildSeatbeltProfile(hardlineSandboxConfig(homeDir()))
     : ""
 import { detectVerifyCommand, verifyReport } from "./lib/verifycmd"
 import { resolveProviders, chatBody, extractText, synthesisPrompt, pickAggregator, Candidate } from "./lib/moa"
@@ -59,6 +59,7 @@ import { aggregateCost, formatCostReport, UsageRow } from "./lib/costledger"
 import { dataPath } from "./lib/platform/paths"
 import { spawnShell, whichFirst } from "./lib/platform/shell"
 import { pythonCandidates } from "./lib/platform/service"
+import { homeDir } from "./lib/platform/paths"
 import { sandboxPlan, shellScope, untrustedScope } from "./lib/platform/sandbox"
 
 /**
@@ -121,8 +122,15 @@ const UA = "FABULA-LLM-5/1.0 (local research agent; +https://localhost)"
 
 function resolvePath(p: string, directory: string): string {
   if (!p) return p
-  // expand ~ and make absolute relative to the session directory
-  if (p.startsWith("~/")) p = path.join(process.env.HOME || "", p.slice(2))
+  // Expand ~ and make absolute relative to the session directory.
+  //
+  // `homeDir()` rather than `process.env.HOME`: on Windows that variable is usually not set at all —
+  // the home is `USERPROFILE` — so this fell back to the empty string and quietly turned `~/notes.txt`
+  // into a RELATIVE path resolved against the session directory. The file was written; it was just
+  // written somewhere else than the one place the caller named. This is also the third module to have
+  // its own answer to "where is home", and the write guard is one of the other two: a path they
+  // disagree about is a path the guard is checking under a different name than the tool writes to.
+  if (p.startsWith("~/")) p = path.join(homeDir(), p.slice(2))
   return path.isAbsolute(p) ? p : path.resolve(directory, p)
 }
 
@@ -773,7 +781,7 @@ export const FabulaTools: Plugin = async () => {
           }
 
           if (useDocker) {
-            const dir = await fs.mkdtemp(path.join(os.homedir(), ".fabula-sbx-"))
+            const dir = await fs.mkdtemp(path.join(homeDir(), ".fabula-sbx-"))
             const file = lang === "node" ? "c.js" : "c.py"
             await fs.writeFile(path.join(dir, file), args.code, "utf8")
             // THE CONTAINER HAS TO BE ABLE TO READ WHAT WE JUST WROTE, and on one platform it could not.

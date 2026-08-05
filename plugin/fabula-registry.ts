@@ -1,4 +1,5 @@
 import { recheckIdentity, renderIdentity, recheckEnabled } from "./lib/recheck"
+import { dataPath } from "./lib/platform/paths"
 // FABULA Proof Registry (§ disrupt #1). Turns a LOCAL Proof-of-Done receipt into something the rest
 // of the world can find and re-verify: a content-addressed store keyed by SHA256(patch + verify cmd).
 //
@@ -37,7 +38,9 @@ import {
 const z = tool.schema
 
 function registryDir(): string {
-  return process.env.FABULA_REGISTRY_DIR || path.join(os.homedir(), ".local", "share", "fabula", "registry")
+  // One resolver, not a twenty-seventh hand-rebuild of the data root: this one ignored
+  // MIMOCODE_HOME and XDG_DATA_HOME alike, so moving the engine's data left the registry behind.
+  return process.env.FABULA_REGISTRY_DIR || dataPath("registry")
 }
 
 function git(dir: string, args: string[]): string {

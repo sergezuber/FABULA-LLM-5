@@ -132,7 +132,10 @@ async function recorderRuns(): Promise<boolean> {
       ? spawn([rec, "hello"].map(q).join(" "), [], { stdio: "ignore", shell: true })
       : spawn(rec, ["hello"], { stdio: "ignore" })
     child.on("error", () => {})
-    for (let i = 0; i < 100 && !existsSync(log); i++) await new Promise((r) => setTimeout(r, 50))
+    // Short on purpose: this only asks whether such a program starts AT ALL, and it runs inside a
+    // setup hook that has its own ceiling. A probe that can outlast the hook it lives in reports
+    // the hook as broken instead of answering its question.
+    for (let i = 0; i < 40 && !existsSync(log); i++) await new Promise((r) => setTimeout(r, 50))
     return existsSync(log)
   } catch {
     return false
@@ -141,7 +144,7 @@ async function recorderRuns(): Promise<boolean> {
   }
 }
 let RECORDER_OK = true
-beforeAll(async () => { RECORDER_OK = await recorderRuns() })
+beforeAll(async () => { RECORDER_OK = await recorderRuns() }, 30_000)
 
 test("TRAVERSAL: reading a corpus fires the worker with no word ever matched", async () => {
   const dir = mkdtempSync(join(tmpdir(), "corpus-walk-"))

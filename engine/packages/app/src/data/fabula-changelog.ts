@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.144.0"
+export const FABULA_VERSION = "0.145.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.145.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Проба, спрашивающая «заводится ли здесь мой инструмент», укорочена и получила собственный бюджет: она живёт в подготовительном хуке, у которого есть свой потолок, и проба, способная его пересидеть, докладывает о поломке хука вместо ответа на свой вопрос.",
+        en: "The probe asking «does my instrument start here» was shortened and given a budget of its own: it lives inside a setup hook with its own ceiling, and a probe able to outlast that hook reports the hook as broken instead of answering its question.",
+      },
+    ],
+  },
   {
     version: "0.144.0",
     date: "2026-08-05",

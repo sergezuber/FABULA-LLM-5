@@ -28,6 +28,7 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 const PORT: u16 = 4096;
@@ -298,6 +299,114 @@ const BRIDGE_SHIM: &str = r#"
 })();
 "#;
 
+
+// ── the menu ───────────────────────────────────────────────────────────────────────────────────────
+//
+// The same items the macOS host carries, because the SHELL is what makes them reachable and a window
+// without them is a window that cannot restart its own engine or say where its logs are. Two of them are
+// not decoration and were added to the Swift host for measured reasons: "Restart Server" is how a wedged
+// engine is recovered without quitting, and "Reveal Logs" is the only path to the diagnostic channel the
+// reader never sees in chat.
+//
+// The Plugins submenu is built from `scripts/manage-cli.ts` at BUILD-of-menu time rather than hardcoded,
+// so it lists what is actually installed — the same program the macOS menu and the Settings panel drive,
+// which is what keeps one answer to "which plugins exist and which are on".
+fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+    let sep = || PredefinedMenuItem::separator(app);
+
+    let app_menu = Submenu::with_items(
+        app,
+        "FABULA",
+        true,
+        &[
+            &PredefinedMenuItem::about(app, Some("About FABULA"), None)?,
+            &sep()?,
+            &MenuItem::with_id(app, "restart", "Restart Server", true, Some("CmdOrCtrl+R"))?,
+            &MenuItem::with_id(app, "purge", "Clear Cached Chat Data", true, Some("CmdOrCtrl+K"))?,
+            &MenuItem::with_id(app, "notify_ask", "Enable Notifications", true, None::<&str>)?,
+            &sep()?,
+            &PredefinedMenuItem::quit(app, Some("Quit FABULA"))?,
+        ],
+    )?;
+
+    let file_menu = Submenu::with_items(
+        app,
+        "File",
+        true,
+        &[
+            &MenuItem::with_id(app, "new_session", "New Session", true, Some("CmdOrCtrl+N"))?,
+            &MenuItem::with_id(app, "open_folder", "Open Project Folder…", true, Some("CmdOrCtrl+O"))?,
+        ],
+    )?;
+
+    // Predefined, not hand-rolled: on Linux these need libxdo and on Windows they are OS-provided, and a
+    // hand-written copy would be a third definition of copy-and-paste.
+    let edit_menu = Submenu::with_items(
+        app,
+        "Edit",
+        true,
+        &[
+            &PredefinedMenuItem::undo(app, None)?,
+            &PredefinedMenuItem::redo(app, None)?,
+            &sep()?,
+            &PredefinedMenuItem::cut(app, None)?,
+            &PredefinedMenuItem::copy(app, None)?,
+            &PredefinedMenuItem::paste(app, None)?,
+            &PredefinedMenuItem::select_all(app, None)?,
+        ],
+    )?;
+
+    let view_menu = Submenu::with_items(
+        app,
+        "View",
+        true,
+        &[
+            &MenuItem::with_id(app, "reload", "Reload", true, Some("CmdOrCtrl+Shift+R"))?,
+            &sep()?,
+            &MenuItem::with_id(app, "zoom_in", "Zoom In", true, Some("CmdOrCtrl+Plus"))?,
+            &MenuItem::with_id(app, "zoom_out", "Zoom Out", true, Some("CmdOrCtrl+-"))?,
+            &MenuItem::with_id(app, "zoom_reset", "Actual Size", true, Some("CmdOrCtrl+0"))?,
+        ],
+    )?;
+
+    let help_menu = Submenu::with_items(
+        app,
+        "Help",
+        true,
+        &[&MenuItem::with_id(app, "reveal_logs", "Reveal Logs", true, None::<&str>)?],
+    )?;
+
+    Menu::with_items(app, &[&app_menu, &file_menu, &edit_menu, &view_menu, &help_menu])
+}
+
+/// Open a path in the platform's own file manager. Three commands, one question — and naming them here
+/// rather than assuming `open` is what keeps "Reveal Logs" from being a macOS-only menu item.
+fn reveal(path: &Path) {
+    let dir = if path.is_dir() { path.to_path_buf() } else { path.parent().unwrap_or(path).to_path_buf() };
+    #[cfg(target_os = "macos")]
+    let (prog, args) = ("open", vec![dir.to_string_lossy().into_owned()]);
+    #[cfg(target_os = "windows")]
+    let (prog, args) = ("explorer", vec![dir.to_string_lossy().into_owned()]);
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let (prog, args) = ("xdg-open", vec![dir.to_string_lossy().into_owned()]);
+    let _ = Command::new(prog).args(args).spawn();
+}
+
+/// Zoom, persisted across launches — the macOS host persists it, and a setting that resets every launch
+/// is one the user re-applies every launch.
+fn zoom_file() -> PathBuf {
+    data_dir().join("shell-zoom")
+}
+fn read_zoom() -> f64 {
+    std::fs::read_to_string(zoom_file()).ok().and_then(|t| t.trim().parse().ok()).unwrap_or(1.0)
+}
+fn write_zoom(z: f64) {
+    if let Some(d) = zoom_file().parent() {
+        let _ = std::fs::create_dir_all(d);
+    }
+    let _ = std::fs::write(zoom_file(), format!("{z}"));
+}
+
 // ── bridge commands ────────────────────────────────────────────────────────────────────────────────
 
 fn run_capture(argv: &[String]) -> String {
@@ -447,6 +556,9 @@ fn main() {
         ])
         .setup(|app| {
             let handle = app.handle().clone();
+            if let Ok(menu) = build_menu(app.handle()) {
+                let _ = app.set_menu(menu);
+            }
             {
                 let state: tauri::State<EngineProc> = app.state();
                 *state.0.lock().unwrap() = start_engine();
@@ -475,6 +587,9 @@ fn main() {
                     .inner_size(1280.0, 860.0)
                     .initialization_script(BRIDGE_SHIM)
                     .build();
+                if let Ok(w) = &win {
+                    let _ = w.set_zoom(read_zoom());
+                }
                 if let Ok(w) = win {
                     if !ready {
                         // Never an endless spinner: say what happened and what to check.
@@ -485,6 +600,55 @@ fn main() {
                 }
             });
             Ok(())
+        })
+        .on_menu_event(|app, event| {
+            let id = event.id().0.as_str();
+            match id {
+                "restart" => {
+                    let state: tauri::State<EngineProc> = app.state();
+                    stop_engine(&state);
+                    *state.0.lock().unwrap() = start_engine();
+                    if let Some(w) = app.get_webview_window("main") {
+                        let _ = w.eval("setTimeout(() => location.reload(), 2000)");
+                    }
+                }
+                "purge" => {
+                    // The same TypeScript purge the quit path runs — one definition of what erasing a
+                    // deleted chat means, never a second one written into a menu handler.
+                    let script = project_dir().join("scripts").join("fabula-purge.ts");
+                    let _ = Command::new("bun").arg(script).arg("--force").spawn();
+                }
+                "notify_ask" => {
+                    use tauri_plugin_notification::NotificationExt;
+                    // Asking is the whole point: a platform that has not been asked delivers nothing, and
+                    // the user has no way to discover that from inside the app.
+                    let _ = app.notification().request_permission();
+                }
+                "new_session" => {
+                    if let Some(w) = app.get_webview_window("main") {
+                        let _ = w.eval("window.dispatchEvent(new KeyboardEvent('keydown',{key:'n',metaKey:true,ctrlKey:true,bubbles:true}))");
+                    }
+                }
+                "open_folder" => bridge_open_folder(app.clone()),
+                "reload" => {
+                    if let Some(w) = app.get_webview_window("main") {
+                        let _ = w.eval("location.reload()");
+                    }
+                }
+                "zoom_in" | "zoom_out" | "zoom_reset" => {
+                    let z = match id {
+                        "zoom_in" => (read_zoom() + 0.1).min(3.0),
+                        "zoom_out" => (read_zoom() - 0.1).max(0.5),
+                        _ => 1.0,
+                    };
+                    write_zoom(z);
+                    if let Some(w) = app.get_webview_window("main") {
+                        let _ = w.set_zoom(z);
+                    }
+                }
+                "reveal_logs" => reveal(&data_dir().join("log")),
+                _ => {}
+            }
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {

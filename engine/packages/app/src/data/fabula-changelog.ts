@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.106.0"
+export const FABULA_VERSION = "0.107.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.107.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "У нового окна появилось меню — те же пункты, ради которых оно и существует: перезапустить движок, не выходя из приложения, стереть следы удалённых чатов, включить уведомления, открыть каталог с записями решений, изменить масштаб. Масштаб теперь запоминается между запусками: настройка, которая сбрасывается при каждом старте, — это настройка, которую заново применяют при каждом старте. Открытие каталога в файловом менеджере названо для каждой системы отдельно, иначе этот пункт работал бы ровно на одной. Уведомления умеют спросить разрешение: система, которую не спросили, не показывает ничего, и узнать об этом изнутри приложения было невозможно. Сторож сборки получил двойника для системы, где оболочка командной строки — устанавливаемая зависимость: проверка, которая не может запуститься на той системе, которую проверяет, — не проверка.",
+        en: "The new window gained its menu — the items it exists for: restart the engine without leaving the application, erase the traces of deleted chats, enable notifications, open the folder holding the record of decisions, change the zoom. Zoom is now remembered between launches: a setting that resets on every start is a setting the user re-applies on every start. Opening a folder in the file manager is named separately for each system, or that item would work on exactly one. Notifications can ask for permission: a system that was never asked shows nothing, and there was no way to discover that from inside the application. The build guard gained a twin for the system where the command shell is an installed dependency: a check that cannot run on the system it guards is not a check.",
+      },
+    ],
+  },
   {
     version: "0.106.0",
     date: "2026-08-05",

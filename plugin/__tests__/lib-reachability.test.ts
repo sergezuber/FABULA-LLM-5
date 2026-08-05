@@ -19,7 +19,7 @@
 
 import { test, expect } from "bun:test"
 import { readdirSync, readFileSync } from "node:fs"
-import { join } from "node:path"
+import { sep, join } from "node:path"
 
 const PLUGIN_DIR = join(import.meta.dir, "..")
 const LIB_DIR = join(PLUGIN_DIR, "lib")
@@ -161,7 +161,11 @@ test("every exported helper in lib/ is reachable from production, or declared un
   const orphans: string[] = []
 
   for (const file of [...listFiles(LIB_DIR, isProdTs), ...listFiles(join(LIB_DIR, "attest"), isProdTs)]) {
-    const base = file.slice(LIB_DIR.length + 1)
+    // The key IDENTIFIES a module; it is not a path on this filesystem. Slicing a real path gave it
+    // whichever separator the host uses, so on Windows `attest\quarantine.ts` matched none of the
+    // declared exemptions — which are written with `/`, as they should be, since people read them
+    // and they travel between machines. One spelling for the identifier, always.
+    const base = file.slice(LIB_DIR.length + 1).split(sep).join("/")
     if (DECLARED_UNREACHABLE[base]) continue // the whole module is declared, with its reason
     const text = readFileSync(file, "utf8")
     for (const name of exportsOf(text)) {
@@ -187,7 +191,7 @@ test("no module is an ISLAND — internally cohesive, externally dead", () => {
   const islands: string[] = []
 
   for (const file of [...listFiles(LIB_DIR, isProdTs), ...listFiles(join(LIB_DIR, "attest"), isProdTs)]) {
-    const base = file.slice(LIB_DIR.length + 1)
+    const base = file.slice(LIB_DIR.length + 1).split(sep).join("/")
     if (DECLARED_UNREACHABLE[base]) continue
     const text = readFileSync(file, "utf8")
     const names = exportsOf(text)

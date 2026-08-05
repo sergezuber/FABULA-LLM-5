@@ -3,6 +3,7 @@
 // `/bin/bash -c` on the unbalanced paren. Rule: `install` is EITHER a runnable command OR, when
 // `manual: true`, guidance the installer only prints. This test asserts both halves.
 import { test, expect } from "bun:test"
+import { shellBinAbsolute } from "./platform/shell"
 import { execFileSync } from "node:child_process"
 import { allDeps } from "./manifest"
 import { installDep } from "./manage"
@@ -14,11 +15,16 @@ test("manifest actually exercises this invariant (has both manual and runnable i
   expect(deps.some((d) => !d.manual && d.install)).toBe(true)
 })
 
-test("every NON-manual install string is valid bash (would not crash /bin/bash -c)", () => {
+test("every NON-manual install string is valid bash (would not crash the shell that runs it)", () => {
+  // The shell is RESOLVED, not spelled `/bin/bash`. The installer runs these through the seam's shell,
+  // and on a platform where that is the Git-shipped POSIX shell somewhere else entirely, naming the
+  // POSIX location asserted a fact about a different machine — the strings were fine and the check
+  // could not start the parser. Asking the same program the installer will ask keeps the claim honest.
+  const shell = shellBinAbsolute()
   for (const d of deps) {
     if (!d.install || d.manual) continue
-    // `bash -n` parses without executing — exits non-zero on a syntax error (throws here).
-    expect(() => execFileSync("/bin/bash", ["-nc", d.install!], { stdio: "pipe" })).not.toThrow()
+    // `-n` parses without executing — a non-zero exit means a syntax error, which throws here.
+    expect(() => execFileSync(shell, ["-nc", d.install!], { stdio: "pipe" })).not.toThrow()
   }
 })
 

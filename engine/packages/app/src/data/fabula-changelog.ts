@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.130.0"
+export const FABULA_VERSION = "0.131.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.131.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Сторож, который следит, чтобы у каждой заявленной вспомогательной функции был живой вызывающий, собирал имя модуля из настоящего пути — и на третьей системе переставал узнавать собственные исключения, записанные через прямую косую. Имя модуля — это опознавательный знак, его читают люди и он ездит между машинами, поэтому у него ровно одна форма, независимо от машины.",
+        en: "The watchdog that requires every declared helper to have a live caller assembled the module name from a real path — and on the third system stopped recognising its own exemptions, which are written with a forward slash. A module name is an identifier: people read it and it travels between machines, so it has exactly one shape regardless of the machine.",
+      },
+      {
+        ru: "А проверка, что каждая команда установки — синтаксически верная команда оболочки, называла оболочку по её расположению на одной системе. Строки были в порядке; проверка просто не могла запустить разбор. Теперь она спрашивает ту же программу, которую спросит установщик.",
+        en: "And the check that every install command is syntactically valid shell named the shell by its location on one system. The strings were fine; the check simply could not start the parser. It now asks the same program the installer will ask.",
+      },
+    ],
+  },
   {
     version: "0.130.0",
     date: "2026-08-05",

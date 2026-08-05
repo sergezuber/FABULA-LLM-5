@@ -7,7 +7,7 @@
 Frontier models sell confidence. FABULA ships proof.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS%20Apple%20Silicon-black)](#try-it)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-black)](#try-it)
 [![Release](https://img.shields.io/github/v/release/sergezuber/FABULA-LLM-5)](https://github.com/sergezuber/FABULA-LLM-5/releases)
 
 [Docs](#docs) · [Receipt spec](docs/spec/verified-autonomy-receipt-v0.2.md) · [Plugins](docs/PLUGINS.md) · [Evals](docs/EVALS.md) · [Contributing](CONTRIBUTING.md)
@@ -98,7 +98,9 @@ An optional **proof economy** builds on the receipt — publish to a content-add
 
 ## Try it
 
-You need a **Mac with Apple Silicon** and the Xcode Command Line Tools (the engine build compiles a few native modules). The engine itself is portable Bun/TypeScript; Linux is on the roadmap.
+### macOS — the desktop app
+
+Apple Silicon plus the Xcode Command Line Tools (the engine build compiles a few native modules).
 
 ```bash
 xcode-select --install   # once per machine; skip if you already build C/C++
@@ -109,6 +111,36 @@ git clone https://github.com/sergezuber/FABULA-LLM-5 && cd FABULA-LLM-5
 ./setup.sh
 open FABULA-LLM-5.app
 ```
+
+### Linux
+
+The engine and every plugin run here, and the desktop window builds and packages as a `.deb`. `setup.sh`
+handles both; where the native window is not built it tells you the one command to serve the interface in
+a browser instead — which is the whole product minus its own frame.
+
+```bash
+git clone https://github.com/sergezuber/FABULA-LLM-5 && cd FABULA-LLM-5
+./setup.sh
+```
+
+### Windows
+
+`setup.ps1` is the same six steps done the Windows way. It needs **Git for Windows** and checks for it
+before anything else needs it: the harness runs every command through one POSIX shell on every platform,
+because the rules that decide what a command writes to and dials out to are written to parse that grammar,
+and a second grammar would mean a second copy of every safety rule.
+
+```powershell
+git clone https://github.com/sergezuber/FABULA-LLM-5; cd FABULA-LLM-5
+.\setup.ps1
+```
+
+**Said plainly, because a README that overstates is worse than one that says less.** Linux is verified by
+running: the engine serves, the suites pass, the kernel floor is enforced by the kernel, the package
+installs. Windows artifacts are built and checked — the application is a real PE carrying its version, the
+installer is produced, the deploy guard runs — but the assembled product has not yet been opened on a
+Windows desktop. `bun scripts/acceptance.ts` is the ten-criterion acceptance as a program: run it there and
+it will tell you, without anyone having to interpret prose.
 
 `./setup.sh` is idempotent — re-run it any time; it never overwrites your `.env` / `fabula.config.json`.
 

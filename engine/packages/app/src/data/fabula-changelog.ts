@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.139.0"
+export const FABULA_VERSION = "0.140.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.140.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Опрос активности в запросе на слияние перестал спрашивать «а ты вообще установлен?» без ограничения времени. Это единственный вызов, который не может быть долгим по уважительной причине, поэтому бесконечное ожидание на нём — всегда затык (приглашение войти, подвисший сетевой диск в пути поиска), держащий ход открытым и не показывающий ничего.",
+        en: "The pull-request activity poll stopped asking «are you installed at all?» without a time limit. That is the one call here which cannot be slow for a good reason, so an unbounded wait on it is always a wedge — a sign-in prompt, a stalled network drive on the search path — holding a turn open with nothing to show.",
+      },
+      {
+        ru: "И проверки, ожидающие ПОЯВЛЕНИЯ чего-либо, получили щедрый бюджет вместо едва достаточного. Подставная программа запускается тем механизмом, какого требует система, а холодный старт там стоит секунд. Бюджет, которого хватает лишь на самом быстром пути, превращает медленный старт в ложное отрицание — ровно то прочтение, которое говорит «механизм не сработал», когда он просто ещё не успел.",
+        en: "And checks that wait for something to APPEAR were given a generous budget instead of a barely sufficient one. A stand-in program is started through whatever machinery the system requires, and a cold start there costs seconds. A budget that suffices only on the fastest path turns a slow start into a false negative — precisely the reading that says a mechanism never fired when it merely had not yet.",
+      },
+    ],
+  },
   {
     version: "0.139.0",
     date: "2026-08-05",

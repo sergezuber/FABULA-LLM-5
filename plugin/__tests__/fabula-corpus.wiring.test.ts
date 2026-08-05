@@ -137,7 +137,11 @@ test("TRAVERSAL: reading a corpus fires the worker with no word ever matched", a
         { args: { file_path: join(dir, "chapters", `ch${i}.md`) }, output: body },
       )
     }
-    for (let i = 0; i < 40 && !existsSync(marker); i++) await new Promise((r) => setTimeout(r, 50))
+    // Generous, because this waits for something to APPEAR: the stand-in is started through whatever
+    // machinery the platform needs, and a cold interpreter there costs seconds before it writes a
+    // byte. A budget that merely suffices on the fastest path turns a slow start into a false
+    // negative — the exact reading that says a mechanism never fired when it merely had not yet.
+    for (let i = 0; i < 300 && !existsSync(marker); i++) await new Promise((r) => setTimeout(r, 50))
     expect(existsSync(marker)).toBe(true) // the traversal itself launched the worker
     const argv = readFileSync(marker, "utf8").trim().split("\n")
     expect(argv[0].endsWith("lib/corpus-worker.ts")).toBe(true) // the worker script, next to the plugin
@@ -274,7 +278,11 @@ test("a chapter offloaded before this hook still counts for what it weighed", as
           metadata: { fabulaHandle: { id: "h-abc123", chars: 40_000 } }, // what it actually weighed
         },
       )
-    for (let i = 0; i < 40 && !existsSync(marker); i++) await new Promise((r) => setTimeout(r, 50))
+    // Generous, because this waits for something to APPEAR: the stand-in is started through whatever
+    // machinery the platform needs, and a cold interpreter there costs seconds before it writes a
+    // byte. A budget that merely suffices on the fastest path turns a slow start into a false
+    // negative — the exact reading that says a mechanism never fired when it merely had not yet.
+    for (let i = 0; i < 300 && !existsSync(marker); i++) await new Promise((r) => setTimeout(r, 50))
     expect(existsSync(marker)).toBe(true)
   } finally {
     if (prevBun === undefined) delete process.env.FABULA_BUN_BIN

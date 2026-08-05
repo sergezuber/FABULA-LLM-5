@@ -33,7 +33,10 @@ function gh(args: string[], timeoutMs = 20000): string {
 
 function pollPr(repo: string, pr: number): { events: PrEvent[] } | { error: string } {
   try {
-    execFileSync("gh", ["--version"], { stdio: "ignore" })
+    // BOUNDED, like every other call to it. Asking a program its version is the one call here that
+    // cannot be slow for a good reason, so an unbounded wait on it can only ever be a wedge — an
+    // authentication prompt, a stalled network drive on PATH — holding a turn open with nothing to show.
+    execFileSync("gh", ["--version"], { stdio: "ignore", timeout: 5000 })
   } catch {
     return { error: "the `gh` CLI is not installed — install GitHub CLI and `gh auth login` to poll PR activity" }
   }

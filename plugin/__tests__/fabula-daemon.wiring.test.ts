@@ -71,10 +71,14 @@ test("focused terminal changes the posture", async () => {
   expect(out.system[0]).toContain("ASK before large")
 })
 
+// Given a machine that HAS the GitHub CLI, this exercises the real failure path — an unreachable
+// repository — which means a real network attempt and its timeouts. That is the path worth testing;
+// it just cannot be held to a budget sized for the case where the CLI is absent and the answer is
+// immediate.
 test("check_pr_activity validates its args and fails cleanly without a reachable gh/PR", async () => {
   const h = await daemon()
   expect(String(await h.tool.check_pr_activity.execute({ repo: "bad", pr_number: 1 }, {} as any))).toContain("owner/repo")
   // a well-formed but non-resolvable request must yield a clear message, never throw
   const out = String(await h.tool.check_pr_activity.execute({ repo: "sergezuber/does-not-exist-xyz", pr_number: 999999 }, {} as any))
   expect(out).toContain("check_pr_activity:")
-})
+}, 60_000)

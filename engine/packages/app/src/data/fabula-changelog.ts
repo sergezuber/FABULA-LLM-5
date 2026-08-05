@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.110.0"
+export const FABULA_VERSION = "0.111.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.111.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Проверка «жив ли ещё собеседник» перестала зависеть от того, как система назвала ошибку. Она решала по типу исключения: одно значило «жив, просто пока нечего читать», любое другое — «ушёл». На второй системе коды сокетов из другого семейства, и если бы они не совпали с этим типом, каждый живой собеседник объявлялся бы ушедшим при первой же паузе — а по этому решению обрывается ответ, которого человек ждёт. Цена двух ошибок несимметрична: пропустить настоящий обрыв — потерять секунды работы, выдумать его — уничтожить сделанное. Теперь решение принимается по номеру ошибки, и обе системы отвечают одинаково. И отдельно установлено фактом, а не предположением: библиотека терминала несёт настоящую поддержку псевдоконсоли второй системы — запасной путь не нужен.",
+        en: "The check for whether the other side is still there stopped depending on what the system called the error. It decided by exception type: one meant \"alive, just nothing to read yet\", anything else meant \"gone\". On the second system socket codes come from a different family, and had they not matched that type, every live peer would have been declared gone at its first pause — and that decision aborts the answer a person is waiting for. The cost of the two mistakes is not symmetric: missing a real disconnect loses seconds of work, inventing one destroys what was done. The decision is now made by the error's number, and both systems answer identically. Separately established as fact rather than assumption: the terminal library carries genuine pseudo-console support for the second system, so no fallback is needed.",
+      },
+    ],
+  },
   {
     version: "0.110.0",
     date: "2026-08-05",

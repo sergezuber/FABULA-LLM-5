@@ -34,6 +34,7 @@ watchdog-guarded); only non-streaming JSON responses are additionally inspected/
 Verified end-to-end: multi-turn agent loops (structured judge calls included) run
 cleanly through this adapter.
 """
+import errno
 import json
 import os
 import select
@@ -947,7 +948,20 @@ class Handler(BaseHTTPRequestHandler):
                 closed = r and not sock.recv(1, socket.MSG_PEEK)
             except (BlockingIOError, InterruptedError):
                 closed = False
-            except (OSError, ValueError):
+            except OSError as e:
+                # DECIDED BY ERRNO, NOT BY EXCEPTION CLASS, and the difference is a live client's turn.
+                #
+                # "would block" means the socket is HEALTHY and merely has nothing to read; "interrupted"
+                # means a signal arrived mid-call. Neither is a disconnect. On POSIX those surface as
+                # BlockingIOError/InterruptedError and are caught above — but Windows sockets report the
+                # WSA family (10035/10004), and whether CPython maps those onto the same exception classes
+                # is a platform detail this code must not depend on. If it does not, every one of them
+                # lands here and a perfectly live client is declared dead: the upstream is closed and the
+                # user's generation dies mid-answer, with nothing in the log saying why.
+                #
+                # Reading the number instead makes the decision identical on both, whatever the mapping.
+                closed = e.errno not in _CLIENT_ALIVE_ERRNOS
+            except ValueError:
                 closed = True
             if closed:
                 _ns_dead["v"] = True
@@ -1063,6 +1077,19 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_DELETE(self):
         self._proxy("DELETE")
+
+
+# Socket errnos that mean "the client is FINE, there is just nothing to read right now" — the POSIX
+# spellings and the Windows WSA ones together, because which of them a platform raises is not this file's
+# business. `getattr` with a literal fallback so the module imports on a platform whose `errno` lacks the
+# WSA names entirely (every POSIX one).
+_CLIENT_ALIVE_ERRNOS = frozenset({
+    errno.EAGAIN,
+    errno.EWOULDBLOCK,
+    errno.EINTR,
+    getattr(errno, "WSAEWOULDBLOCK", 10035),
+    getattr(errno, "WSAEINTR", 10004),
+})
 
 
 def _stderr_path():

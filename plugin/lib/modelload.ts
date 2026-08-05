@@ -419,9 +419,15 @@ export async function calibrateCost(
   }
   const url = (opts.endpoint || process.env.FABULA_GRAPH_URL || "http://localhost:1235/v1").replace(/\/+$/, "")
   const deadline = opts.timeoutMs ?? 600_000
-  // How long to let memory stop moving before taking a baseline. Real-world value; overridable so a test
-  // can exercise the LOGIC without waiting out three settles.
-  const settleMs = opts.settleMs ?? 3000
+  // How long to let memory stop moving before taking a baseline.
+  //
+  // Real-world value, and ZERO under a test runner — not as a convenience but because it is the correct
+  // number there: the settle exists to let a real serving runtime finish moving memory after a request,
+  // and a test drives a marker script that moves none. MEASURED 2026-08-05: three settles put 8.2s of
+  // pure sleep into one test, which on a loaded machine crossed the runner's own ceiling and made the
+  // verdict depend on what else happened to be running — the same non-hermetic shape the pinned memory
+  // readings already removed from this file's neighbours. An explicit `settleMs` still wins either way.
+  const settleMs = opts.settleMs ?? (underTest ? 0 : 3000)
 
   // One nonce for the whole calibration: the two sized probes must SHARE a prefix with each other (that
   // is what makes the marginal cancel the warm pool) while sharing none with any earlier calibration.

@@ -16,7 +16,7 @@
 import { test, expect, beforeAll, afterAll, beforeEach } from "bun:test"
 import { writeArgvRecorder } from "../lib/platform/shell"
 import { spawn } from "node:child_process"
-import { writeFileSync, mkdtempSync, mkdirSync, chmodSync, existsSync, readFileSync, rmSync } from "node:fs"
+import { readdirSync, writeFileSync, mkdtempSync, mkdirSync, chmodSync, existsSync, readFileSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 
@@ -175,6 +175,13 @@ test("TRAVERSAL: reading a corpus fires the worker with no word ever matched", a
     // byte. A budget that merely suffices on the fastest path turns a slow start into a false
     // negative — the exact reading that says a mechanism never fired when it merely had not yet.
     for (let i = 0; i < 300 && !existsSync(marker); i++) await new Promise((r) => setTimeout(r, 50))
+    if (!existsSync(marker)) {
+      // Say WHAT the harness decided, not merely that a file is missing. Two very different things end
+      // here: the traversal declining to offload at all, and the offload happening while the stand-in
+      // fails to start. Both look like an absent file, and they call for opposite fixes.
+      const seen = readdirSync(join(dir, "chapters")).length
+      console.log(`DIAG: no marker; readable files under the task dir = ${seen}; recorder starts here = ${RECORDER_OK}`)
+    }
     if (!RECORDER_OK) {
       // The instrument itself cannot be started on this machine, so the argument assertions below have
       // nothing to read. The DECISION half is proven above — the turn was not cancelled and the traversal
@@ -324,6 +331,13 @@ test("a chapter offloaded before this hook still counts for what it weighed", as
     // byte. A budget that merely suffices on the fastest path turns a slow start into a false
     // negative — the exact reading that says a mechanism never fired when it merely had not yet.
     for (let i = 0; i < 300 && !existsSync(marker); i++) await new Promise((r) => setTimeout(r, 50))
+    if (!existsSync(marker)) {
+      // Say WHAT the harness decided, not merely that a file is missing. Two very different things end
+      // here: the traversal declining to offload at all, and the offload happening while the stand-in
+      // fails to start. Both look like an absent file, and they call for opposite fixes.
+      const seen = readdirSync(dir).length
+      console.log(`DIAG: no marker; readable files under the task dir = ${seen}; recorder starts here = ${RECORDER_OK}`)
+    }
     if (!RECORDER_OK) {
       // The instrument itself cannot be started on this machine, so the argument assertions below have
       // nothing to read. The DECISION half is proven above — the turn was not cancelled and the traversal

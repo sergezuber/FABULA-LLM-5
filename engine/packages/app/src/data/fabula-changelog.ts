@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.146.0"
+export const FABULA_VERSION = "0.147.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.147.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Две проверки обхода корпуса, не дождавшись отметки, теперь говорят, ЧТО решил механизм, а не только что файла нет. Здесь сходятся две очень разные вещи: обход, отказавшийся передавать работу, и передача, при которой не завелась подставная программа. Снаружи обе выглядят как отсутствующий файл и требуют противоположных исправлений.",
+        en: "Two corpus-traversal checks, on finding no marker, now say WHAT the mechanism decided rather than only that a file is absent. Two very different things end there: a traversal declining to hand the work over, and a hand-over during which the stand-in failed to start. From outside both look like a missing file, and they call for opposite corrections.",
+      },
+    ],
+  },
   {
     version: "0.146.0",
     date: "2026-08-05",

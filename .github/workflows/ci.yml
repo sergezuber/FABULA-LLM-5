@@ -210,6 +210,11 @@ jobs:
           if ($LASTEXITCODE -eq 0) { throw "a foreign version must be STALE and exit non-zero" }
           if ($out -notmatch "9\.9\.9") { throw "the report must NAME what the artifact actually carries" }
           Write-Host "both verdicts correct, and the mismatch is named"
+          # The step's verdict is the ASSERTIONS, not the exit code of the last child. One of the two runs
+          # is deliberately red — that is the half being proven — and its code lingers in $LASTEXITCODE,
+          # which this shell returns as the step's own. Without this line the step failed while printing
+          # that everything it checked was correct.
+          exit 0
 
   acceptance-windows:
     name: Acceptance on real Windows (J3)

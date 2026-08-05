@@ -850,8 +850,17 @@ export const FabulaTools: Plugin = async () => {
           const note = confined
             ? `\n[local exec under the ${plan.mechanism} kernel profile — Docker sandbox unavailable; env scrubbed, ${plan.note}]`
             : `\n[local exec — Docker sandbox unavailable; env scrubbed; ${plan.note}]`
+          // The child speaks UTF-8, said out loud rather than left to the machine's locale.
+          //
+          // Python writes its output in the console's code page unless told otherwise, and on a
+          // single-byte code page that is not a formatting nuisance — it is a CRASH: printing a word
+          // with an accent raises UnicodeEncodeError and the program dies having produced nothing. Any
+          // non-English text, any emoji, any of the languages this project's own users write in. UTF-8
+          // mode also fixes how the interpreter reads paths, so a file with a non-ASCII name can be
+          // opened from inside the code as well.
+          const childEnv = { ...scrubEnv(process.env), PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" }
           return await new Promise((resolve) => {
-            const child = spawn(argv[0]!, argv.slice(1), { cwd: ctx.directory, env: scrubEnv(process.env) })
+            const child = spawn(argv[0]!, argv.slice(1), { cwd: ctx.directory, env: childEnv })
             let out = "", err = "", killed = false
             const cap = 100_000
             const timer = setTimeout(() => { killed = true; child.kill("SIGKILL") }, 60_000)

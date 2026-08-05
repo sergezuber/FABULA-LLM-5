@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.135.0"
+export const FABULA_VERSION = "0.136.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.136.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Запуск кода теперь прямо говорит потомку, что разговор идёт в UTF-8. Иначе Python пишет вывод в кодовой странице консоли, и на однобайтовой это не косметика, а ПАДЕНИЕ: попытка напечатать слово с диакритикой обрывает программу, и она не выдаёт ничего. Под это подпадает любой не-английский текст, любые эмодзи и любой из языков, на которых пишут сами пользователи. Режим UTF-8 заодно чинит чтение имён файлов, поэтому файл с не-ASCII именем теперь можно открыть и изнутри кода.",
+        en: "Running code now tells the child outright that the conversation is in UTF-8. Otherwise Python writes its output in the console's code page, and on a single-byte one that is not cosmetic but a CRASH: printing a word with a diacritic ends the program, which then produces nothing at all. That covers any non-English text, any emoji, and any of the languages the users themselves write in. UTF-8 mode also fixes how filenames are read, so a file with a non-ASCII name can now be opened from inside the code as well.",
+      },
+      {
+        ru: "И проверки перестали требовать от файловой системы того, чего она не предлагает: имя файла с двойной кавычкой на одной из систем запрещено, а проверка ждала, что файл создастся. Всё, что оболочка попыталась бы истолковать — пробелы, доллар, обратная кавычка, апостроф, скобки, — в имени осталось; убран ровно один символ, и в содержимом он сохранён.",
+        en: "And the checks stopped asking the filesystem for what it does not offer: a filename containing a double quote is forbidden on one of the systems, while the check expected the file to be created. Everything a shell would try to interpret — spaces, a dollar, a backtick, an apostrophe, parentheses — stays in the name; exactly one character was dropped, and it is kept in the content.",
+      },
+    ],
+  },
   {
     version: "0.135.0",
     date: "2026-08-05",

@@ -8,6 +8,7 @@
 //   2. False-positive on `rm ... /` inside a quoted string argument (usability: legit cmd blocked)
 
 import { test, expect, describe, beforeAll } from "bun:test"
+import { shellPathLiteral } from "../lib/platform/shell"
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -469,9 +470,15 @@ describe("bash_tool.execute() — real shell", () => {
     const d = mkTmp()
     try {
       const r = await bash_tool.execute({ command: "pwd", description: "t" }, { ...ctx, directory: d })
-      // macOS /tmp is a symlink to /private/tmp; accept either
       const out = outOf(r).trim()
-      expect(out === d || out === path.join("/private", d.replace(/^\//, ""))).toBe(true)
+      // ONE directory, several spellings, and the shell chooses which it prints. macOS serves /tmp as a
+      // symlink into /private, so both forms name the same place; and a POSIX shell on Windows prints its
+      // own drive form — `/c/Users/x` for `C:\Users\x` — which is that path, not another one. Comparing
+      // against a single spelling asserted which spelling the shell happens to use, and the property being
+      // checked is where the command ran.
+      const drive = d.replace(/^([A-Za-z]):/, (_m, c) => "/" + String(c).toLowerCase()).replace(/\\/g, "/")
+      const spellings = [d, path.join("/private", d.replace(/^\//, "")), drive]
+      expect(spellings.includes(out)).toBe(true)
     } finally { rmSync(d, { recursive: true, force: true }) }
   })
 
@@ -481,7 +488,9 @@ describe("bash_tool.execute() — real shell", () => {
     mkdirSync(sub)
     writeFileSync(path.join(sub, "a.txt"), "x")
     try {
-      const r = await bash_tool.execute({ command: `rm -rf ${sub}`, description: "t" }, ctx)
+      // Written as the SHELL reads it: a bare Windows path inside a command is a string of escapes, so
+      // the delete silently targeted something else and the check reported the tool refusing to work.
+      const r = await bash_tool.execute({ command: `rm -rf ${shellPathLiteral(sub)}`, description: "t" }, ctx)
       expect(outOf(r)).not.toContain("[BLOCKED")
       expect(existsSync(sub)).toBe(false)   // really removed
     } finally { rmSync(d, { recursive: true, force: true }) }

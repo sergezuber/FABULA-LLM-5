@@ -13,8 +13,15 @@ const ctx = { sessionID: "s", directory: tmpdir(), abort: new AbortController().
 const out = (r: any) => (typeof r === "string" ? r : r.output)
 beforeAll(async () => { T = (await FabulaTools({} as any)).tool })
 
+// The SAME question the tool asks, not a neighbouring one. Asking only whether the daemon replies said
+// "available" on a runner whose Docker runs Windows containers, where every Linux image the sandbox uses
+// refuses to start — so the check ran cases the tool had correctly declined to attempt. A gate that
+// disagrees with the code it gates measures the disagreement.
 const dockerUp = (() => {
-  try { execFileSync("docker", ["version", "--format", "{{.Server.Version}}"], { stdio: ["ignore", "pipe", "ignore"] }); return true } catch { return false }
+  try {
+    const t = execFileSync("docker", ["info", "--format", "{{.OSType}}"], { stdio: ["ignore", "pipe", "ignore"] })
+    return t.toString().trim().toLowerCase() === "linux"
+  } catch { return false }
 })()
 
 test("execute_code runs python", async () => {

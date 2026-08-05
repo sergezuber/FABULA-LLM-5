@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.132.0"
+export const FABULA_VERSION = "0.133.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.133.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Путь этой машины, вставленный внутрь команды оболочки, теперь записывается так, чтобы оболочка прочла его как тот же самый путь. Оболочка у обвязки одна и та же везде — в этом и смысл единой грамматики, — а вот пути приходят с файловой системы, которая на одной из систем пишет их обратной косой. Внутри команды такая косая означает экранирование: подставная программа исправно писала журнал вызовов в файл, которого никто не мог найти, и проверки докладывали, что инструменты не запускались вовсе.",
+        en: "A path from this machine, embedded inside a shell command, is now written so the shell reads it as that same path. The harness's shell is the same everywhere — that is the point of one grammar — but paths come from a filesystem that on one system spells them with a backslash, and inside a command a backslash means escaping. A stand-in program dutifully logged every call into a file nobody could find, and the checks reported that the tools had never run at all.",
+      },
+      {
+        ru: "И проверка, гоняющая песочницу в контейнере, спрашивала «отвечает ли демон», тогда как сам инструмент спрашивает «умеет ли он линуксовые образы». На машине, где демон отвечает, но образы не запускает, проверка гоняла случаи, от которых инструмент СПРАВЕДЛИВО отказался. Условие, расходящееся с кодом, который оно охраняет, меряет только это расхождение.",
+        en: "And the check exercising the container sandbox asked «does the daemon reply» while the tool itself asks «can it run Linux images». On a machine where the daemon replies but cannot start those images, the check ran cases the tool had RIGHTLY declined. A gate that disagrees with the code it gates measures only the disagreement.",
+      },
+    ],
+  },
   {
     version: "0.132.0",
     date: "2026-08-05",

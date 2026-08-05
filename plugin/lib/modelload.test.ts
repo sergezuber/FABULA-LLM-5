@@ -3,6 +3,7 @@
 // does not.
 
 import { describe, expect, test, beforeEach, afterEach } from "bun:test"
+import { shellPathLiteral } from "./platform/shell"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 import { rmSync, writeFileSync, readFileSync } from "node:fs"
@@ -258,7 +259,7 @@ describe("what actually reaches `lms load`", () => {
 
   beforeEach(() => {
     rmSync(ARGV, { force: true })
-    process.env.FABULA_LMS_BIN = writeMarkerScript(MARKER, `[ "$1" = load ] && printf '%s\\n' "$@" >> ${ARGV}\nexit 0\n`)
+    process.env.FABULA_LMS_BIN = writeMarkerScript(MARKER, `[ "$1" = load ] && printf '%s\\n' "$@" >> ${shellPathLiteral(ARGV)}\nexit 0\n`)
   })
   afterEach(() => {
     delete process.env.FABULA_LMS_BIN
@@ -377,9 +378,9 @@ describe("a window above the ceiling is corrected, not respected", () => {
     const STATE = join(tmpdir(), `lms-over-state-${process.pid}`)
     writeFileSync(STATE, "loaded")
     writeFileSync(MARKER, `#!/bin/sh
-[ "$1" = load ] && printf '%s\\n' "$@" >> ${ARGV} && echo loaded > ${STATE}
-[ "$1" = unload ] && rm -f ${STATE}
-[ "$1" = ps ] && [ -f ${STATE} ] && echo "kat  kat  LOADED  22.00 GB  262144  1  Local"
+[ "$1" = load ] && printf '%s\\n' "$@" >> ${shellPathLiteral(ARGV)} && echo loaded > ${shellPathLiteral(STATE)}
+[ "$1" = unload ] && rm -f ${shellPathLiteral(STATE)}
+[ "$1" = ps ] && [ -f ${shellPathLiteral(STATE)} ] && echo "kat  kat  LOADED  22.00 GB  262144  1  Local"
 exit 0
 `)
     require("node:fs").chmodSync(MARKER, 0o755)
@@ -432,7 +433,7 @@ describe("never a second copy", () => {
     rmSync(ARGV, { force: true })
     // An unload that does nothing — the shape of a model too busy to be taken down.
     writeFileSync(MARKER, `#!/bin/sh
-[ "$1" = load ] && printf '%s\\n' "$@" >> ${ARGV}
+[ "$1" = load ] && printf '%s\\n' "$@" >> ${shellPathLiteral(ARGV)}
 [ "$1" = ps ] && echo "kat  kat  LOADED  22.00 GB  262144  1  Local"
 exit 0
 `)
@@ -521,9 +522,9 @@ describe("a load command that succeeded is not a window that changed", () => {
     writeFileSync(MARKER, [
       "#!/bin/sh",
       `case "$1" in`,
-      `  unload) : > ${STATE} ;;`,
-      `  load) rm -f ${STATE} ;;`,
-      `  ps) [ -f ${STATE} ] || echo "kat  kat  LOADED  20.00 GB  183296  1  Local" ;;`,
+      `  unload) : > ${shellPathLiteral(STATE)} ;;`,
+      `  load) rm -f ${shellPathLiteral(STATE)} ;;`,
+      `  ps) [ -f ${shellPathLiteral(STATE)} ] || echo "kat  kat  LOADED  20.00 GB  183296  1  Local" ;;`,
       "esac",
       "exit 0",
     ].join("\n"))

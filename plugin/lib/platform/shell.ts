@@ -68,6 +68,24 @@ export function shellBinAbsolute(env: NodeJS.ProcessEnv = process.env, p: Platfo
     : "/bin/bash"
 }
 
+/**
+ * A path from THIS machine, written so the harness's POSIX shell reads it as that same path.
+ *
+ * The shell is POSIX everywhere — that is the whole point of committing to one grammar — but the paths
+ * handed to it come from a filesystem that may spell them with backslashes. Embedding one directly puts
+ * `C:\Users\x\argv.log` inside a POSIX script, where the backslashes are escape characters: the shell
+ * writes to something else entirely and the caller sees an empty file rather than an error. MEASURED
+ * exactly that way — a stand-in program logged every call it received into a file nobody could find, and
+ * the checks reported the tools never ran.
+ *
+ * The drive-lettered form with forward slashes is what the Git-shipped shell understands, and single
+ * quotes stop the rest of the line from being interpreted. On POSIX this is the path unchanged.
+ */
+export function shellPathLiteral(p: string): string {
+  const posixForm = String(p).replace(/\\/g, "/")
+  return `'${posixForm.replace(/'/g, "'\\''")}'`
+}
+
 export interface ShellOptions {
   /** A LOGIN shell (`-lc`) sources the user's profile — the default, and what every caller used. */
   login?: boolean

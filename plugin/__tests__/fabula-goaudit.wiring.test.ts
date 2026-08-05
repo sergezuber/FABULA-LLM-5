@@ -7,6 +7,7 @@
 // these tests fail if the hook decides to fire and then never invokes a tool, or invokes it with the
 // wrong arguments. That is the mutation the old shape could not catch.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
+import { shellPathLiteral } from "../lib/platform/shell"
 import { promises as fs } from "node:fs"
 import * as os from "node:os"
 import * as path from "node:path"
@@ -26,14 +27,14 @@ const GOSEC_CLEAN = JSON.stringify({ Issues: [] })
 /** Every tool call goes through this script: it logs the argv, then answers as the named tool. */
 function shimSource(payloadFile: string, logFile: string): string {
   return `#!/bin/sh
-printf '%s\\n' "$*" >> ${JSON.stringify(logFile)}
+printf '%s\\n' "$*" >> ${shellPathLiteral(logFile)}
 tool="$1"
 sub="$2"
 case "$sub" in
   -h|-help|-version|--version|version) exit 0 ;;
 esac
 if [ "$tool" = "gosec" ]; then
-  cat ${JSON.stringify(payloadFile)}
+  cat ${shellPathLiteral(payloadFile)}
   exit 1
 fi
 exit 0

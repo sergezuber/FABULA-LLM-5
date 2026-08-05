@@ -142,7 +142,10 @@ test("a receipt WITH a gate verdict carries that verdict into the verify output"
   const ver = String(await t.verify_receipt.execute({ source: fullId }, {} as any))
   expect(ver).toContain("validated")
   expect(ver).toContain("failed on base")
-})
+  // A real replay: a repository is created, a patch applied and a command run. That is seconds of
+  // genuine work, and more of them where process creation is dearer, so the budget is the check's own
+  // rather than the runner's shared default.
+}, 60_000)
 
 test("a receipt with NO gate verdict says so — absence must not read as a pass", async () => {
   mintReceipt() // no gateProof at all

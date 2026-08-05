@@ -123,12 +123,26 @@ function spawnWorker(pluginInput: any, sessionID: string, taskText: string): voi
   // directly, as before, because routing a real executable through a shell would put a second grammar
   // between the harness and its own arguments.
   const bin = bunBin()
-  const child = spawn(bin, [WORKER, dir, sessionID, taskB64, serverUrl, REPORT_TAG], {
-    detached: true,
-    stdio: "ignore",
-    env: { ...process.env },
-    ...(/\.(cmd|bat)$/i.test(bin) ? { shell: true } : {}),
-  })
+  const workerArgs = [WORKER, dir, sessionID, taskB64, serverUrl, REPORT_TAG]
+  // Going through a shell means QUOTING IT OURSELVES. Spawning with `shell` switched on hands the
+  // whole line to that shell verbatim and turns OFF the automatic quoting that a direct spawn does —
+  // so a program living under a path with a space in it (which is where these paths ordinarily live)
+  // is read as a command plus stray words, and nothing starts. Measured: the worker never launched and
+  // the argv file never appeared, for eighteen seconds, with nothing said.
+  const viaShell = /\.(cmd|bat)$/i.test(bin)
+  const q = (a: string) => `"${String(a).replace(/"/g, '""')}"`
+  const child = viaShell
+    ? spawn([bin, ...workerArgs].map(q).join(" "), [], {
+        detached: true,
+        stdio: "ignore",
+        env: { ...process.env },
+        shell: true,
+      })
+    : spawn(bin, workerArgs, {
+        detached: true,
+        stdio: "ignore",
+        env: { ...process.env },
+      })
   child.on("error", () => {}) // never let a spawn failure crash the turn (fail-open)
   // REGISTER IT. Detaching is what lets the work outlive the turn; it is also what puts the child beyond
   // `pkill -P <engine>`, which reaches only DIRECT children. One worker left over from a closed session

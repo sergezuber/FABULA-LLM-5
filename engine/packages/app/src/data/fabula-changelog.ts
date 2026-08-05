@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.141.0"
+export const FABULA_VERSION = "0.142.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.142.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Запуск через оболочку теперь заключает в кавычки то, что запускает. Такой запуск передаёт оболочке строку целиком и ОТКЛЮЧАЕТ автоматическое заключение в кавычки, которое делает обычный запуск, — поэтому программа, живущая по пути с пробелом (а именно там такие пути и живут), читается как команда плюс посторонние слова, и не стартует ничего. Замерено: воркер не запускался восемнадцать секунд, и ни одна строка об этом не сказала.",
+        en: "Starting through a shell now quotes what it starts. That form hands the shell the whole line and TURNS OFF the automatic quoting a direct spawn performs — so a program living under a path with a space in it, which is exactly where such paths live, reads as a command plus stray words and nothing starts at all. Measured: the worker did not launch for eighteen seconds, and not one line said so.",
+      },
+    ],
+  },
   {
     version: "0.141.0",
     date: "2026-08-05",

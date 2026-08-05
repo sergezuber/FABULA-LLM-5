@@ -19,7 +19,7 @@
 
 import * as path from "node:path"
 import * as os from "node:os"
-import { current, exeSuffix, pathListSeparator, type Platform } from "./index"
+import { current, exeSuffix, hostPlatform, pathListSeparator, type Platform } from "./index"
 
 // Rendered in the TARGET platform's dialect, not the host's: `path.join` answers in the shape of the
 // machine running this code, so a Windows host produced backslash paths for the POSIX platforms and
@@ -78,14 +78,21 @@ export function baseDirs(env: NodeJS.ProcessEnv = process.env, p: Platform = cur
   }
 }
 
+// The two below OPEN REAL FILES ON THIS MACHINE, which makes them a different kind of function from
+// everything else here. The rest answer "where would this live on system X" and must therefore answer in
+// X's dialect; these two act, here, now, and so they always speak the dialect of the machine acting. The
+// distinction is not academic: routing them through the target dialect made a simulated platform produce
+// paths this filesystem cannot use, and thirty-five checks failed on stores that had been written under
+// names no one could open. `path.join` is correct here for exactly the reason it was wrong there.
+
 /** `<data>/fabula` — where every plugin store belongs. Extra segments are joined onto it. */
 export function dataPath(...segments: string[]): string {
-  return dialect(current()).join(baseDirs().data, ...segments)
+  return path.join(baseDirs(process.env, hostPlatform()).data, ...segments)
 }
 
 /** `<config>/fabula` — where the supervision stores live (permissions, plugin enable-state). */
 export function configPath(...segments: string[]): string {
-  return dialect(current()).join(baseDirs().config, ...segments)
+  return path.join(baseDirs(process.env, hostPlatform()).config, ...segments)
 }
 
 /**
@@ -104,8 +111,9 @@ export function configPath(...segments: string[]): string {
  */
 export function engineConfigFile(env: NodeJS.ProcessEnv = process.env): string {
   if (env.MIMOCODE_CONFIG) return env.MIMOCODE_CONFIG
-  const d = dialect(current(env))
-  const primary = d.join(baseDirs(env).config, "fabula.config.json")
+  // Acting, not reporting: this path is opened. See the note above dataPath.
+  const d = dialect(hostPlatform())
+  const primary = d.join(baseDirs(env, hostPlatform()).config, "fabula.config.json")
   const xdgRoot = env.XDG_CONFIG_HOME || d.join(homeDir(env), ".config")
   const legacy = d.join(xdgRoot, "mimocode", "fabula.config.json")
   try {

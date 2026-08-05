@@ -43,6 +43,24 @@ export function current(env: NodeJS.ProcessEnv = process.env, runtime: string = 
   return "linux"
 }
 
+/**
+ * The platform this process is REALLY on, with the override deliberately not consulted.
+ *
+ * There are two kinds of question in this seam and they want different answers. "Where would this live
+ * on system X" must answer in X's terms, so it goes through `current()` and honours the override — that
+ * is what lets one machine drive another's branches. "Open this file, here, now" is not a question about
+ * a platform at all; it is an action on this filesystem, and it must keep working while a test is
+ * pretending to be somewhere else. Routing the acting kind through the override made a simulated run
+ * write its stores under names this filesystem could not open, and thirty-five checks failed against
+ * data that had been put somewhere unreachable.
+ *
+ * Use this ONLY for acting. Anything that merely reports should take a platform parameter instead, so a
+ * caller can ask about a system that is not this one.
+ */
+export function hostPlatform(runtime: string = process.platform): Platform {
+  return isPlatform(runtime) ? runtime : "linux"
+}
+
 /** Is this a POSIX host — one shell family, one path separator, one set of persistence targets? */
 export function isPosix(p: Platform = current()): boolean {
   return p !== "win32"

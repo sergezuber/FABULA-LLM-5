@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.122.0"
+export const FABULA_VERSION = "0.123.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.123.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Запрет на запись в системные файлы молчал на третьей системе целиком. Причина не в списке — он там применялся, — а в том, что среда сама переписывает такой путь в свою форму с буквой диска и обратными слэшами ещё до проверки, и правила, написанные прямыми, переставали совпадать. Проверка теперь смотрит и на это переписанное написание, ровно как она уже давно смотрит на второе имя системных каталогов macOS. Буква диска отбрасывается безопасно: правило совпадает по началу пути, поэтому обычный рабочий файл системным от этого не становится — на это есть отдельная проверка. Важно, что это не теория: обвязка на той системе ТРЕБУЕТ POSIX-оболочку, а через неё файлы вроде автозапуска командной строки — настоящие и исполняются при каждом входе.",
+        en: "The refusal to write into system files was silent on the third system entirely. Not because the list was missing there — it was applied — but because the environment itself rewrites such a path into its own drive-lettered, backslashed form before the check runs, and rules written with forward slashes stopped matching. The check now also looks at that rewritten spelling, exactly as it has long looked at the second name macOS gives its system directories. Dropping the drive letter is safe: a rule matches by the start of the path, so an ordinary working file does not become a system one — there is a separate check for that. This is not theoretical: the harness REQUIRES a POSIX shell on that system, and through it files such as the shell's own startup script are real and run at every login.",
+      },
+      {
+        ru: "Разделено то, что раньше смешивалось: одни функции ОТВЕЧАЮТ, где что лежало бы на названной системе, другие ДЕЙСТВУЮТ — открывают файл здесь и сейчас. Первые обязаны отвечать в форме той системы, о которой спросили; вторые — всегда в форме этой машины, иначе прогон, притворяющийся другой системой, пишет свои хранилища туда, откуда их здесь никто не откроет. Различие закреплено проверкой, которая гоняет обе разновидности под подменой платформы.",
+        en: "A distinction that had been blurred is now drawn: some functions REPORT where something would live on a named system, others ACT — they open a file here and now. The first must answer in the shape of the system asked about; the second always in the shape of this machine, or a run pretending to be elsewhere writes its stores where nothing here can open them. The distinction is pinned by a check that drives both kinds under a substituted platform.",
+      },
+    ],
+  },
   {
     version: "0.122.0",
     date: "2026-08-05",

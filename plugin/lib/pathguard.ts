@@ -80,7 +80,13 @@ export function checkWritePath(rawPath: string): PathVerdict {
   // Found by probing the fixed resolver rather than by reading it: the sudoers case went from blocked to
   // allowed as a direct result of resolving symlinks correctly. The engine hit the same twin in
   // instanceDirectoryAllowed and answered it the same way — compare both spellings.
-  for (const cand of new Set([real, stripPrivate(real), p, stripPrivate(p)])) {
+  const spellings = new Set<string>()
+  for (const s of [real, stripPrivate(real), p, stripPrivate(p)]) {
+    spellings.add(s)
+    const posixForm = asPosixSpelling(s)
+    if (posixForm !== s) spellings.add(stripPrivate(posixForm))
+  }
+  for (const cand of spellings) {
     const verdict = matchWriteRules(cand)
     if (verdict.blocked) return verdict
   }
@@ -90,6 +96,26 @@ export function checkWritePath(rawPath: string): PathVerdict {
 /** macOS serves `/etc`, `/var` and `/tmp` as symlinks into `/private`. Both spellings name one file. */
 function stripPrivate(p: string): string {
   return p.replace(/^\/private(\/(?:etc|var|tmp)(?:\/|$))/, "$1")
+}
+
+/**
+ * The POSIX spelling of a path the runtime has rewritten into Windows form.
+ *
+ * This is the same class as the `/private` twin above, and it was found the same way — by running the
+ * guard where the rewrite happens rather than by reading the rules. On Windows, `path.resolve` turns the
+ * POSIX absolute `/etc/sudoers` into the drive-qualified `C:\etc\sudoers`, so every rule written with
+ * forward slashes stopped matching and the whole POSIX half of the deny list went quiet. It is not a
+ * theoretical path there: this harness REQUIRES a POSIX shell on Windows, and through it — and through
+ * WSL, and through a container — `/etc/...` and `~/.bashrc` are real, reachable files that run again
+ * later.
+ *
+ * Dropping the drive letter is deliberate and safe. A rule matches by prefix, so `C:\Users\x\etc\passwd`
+ * becomes `/Users/x/etc/passwd`, which no `/etc/passwd` rule matches; only a path that really was rooted
+ * at the drive gains a leading `/`.
+ */
+function asPosixSpelling(p: string): string {
+  if (!p.includes("\\")) return p
+  return p.replace(/^[A-Za-z]:/, "").replace(/\\/g, "/")
 }
 
 /**

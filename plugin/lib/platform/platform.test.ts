@@ -8,16 +8,15 @@
 // hand-written copy of the rules, that half goes red — which is the only thing that can catch it.
 
 import { test, expect, describe } from "bun:test"
-import { hardlineTargets } from "./persistence"
 import { policyFitsSource, policyMismatchReason, DEFAULT_POLICY_MEASURED_ON } from "../windowplan"
 import * as os from "node:os"
 import * as fs from "node:fs"
 import * as path from "node:path"
 import { current, current as currentPlatform, isPosix, pathListSeparator, exeSuffix, PLATFORMS } from "./index"
-import { baseDirs, homeDir, goBinDirs, systemBinDirs, appendToPath, joinPathList, splitPathList } from "./paths"
+import { baseDirs, dataPath, homeDir, goBinDirs, systemBinDirs, appendToPath, joinPathList, splitPathList } from "./paths"
 import { shellArgv, shellBin, whichBin, whichFirst, writeMarkerScript } from "./shell"
-import { hardlineTargets, hardlineKernelRegex, credentialReadDirs, persistenceCommands, hardlineTargets} from "./persistence"
-import { usedBytes, totalBytes, memoryReading, vramBytes, vramBytes, memoryReading} from "./memory"
+import { hardlineTargets, hardlineKernelRegex, credentialReadDirs, persistenceCommands } from "./persistence"
+import { usedBytes, totalBytes, memoryReading, vramBytes } from "./memory"
 import { checkWritePath } from "../pathguard"
 import { buildSeatbeltProfile, hardlineSandboxConfig, defaultSandboxConfig, sandboxArgv } from "../sandbox"
 import { bashArgv } from "../execbackend"
@@ -488,5 +487,45 @@ describe("a rule written in one dialect must still refuse the other spelling", (
     expect(codeFor(WIN_HOME + String.raw`\proj\src\index.ts`)).toBe("allow")
     expect(codeFor("C:/proj/README.md")).toBe("allow")
     expect(codeFor(WIN_HOME + String.raw`\proj\.env`)).toBe("allow")
+  })
+
+  // The list being right is only half the claim. The guard the tools actually call resolves a path
+  // FIRST, and on Windows that resolution rewrites `/etc/sudoers` into `C:\etc\sudoers` — at which
+  // point every POSIX rule above stops matching and the list's correctness buys nothing. These drive
+  // the real entry point with the rewritten spelling, and they run identically on any host, because
+  // the question is about the string the resolver produces rather than about this machine.
+  test("REAL guard: a POSIX target rewritten into Windows form is still refused", () => {
+    expect(checkWritePath(String.raw`C:\etc\sudoers`).code).toBe("sudoers")
+    expect(checkWritePath(String.raw`C:\etc\sudoers.d\99-evil`).code).toBe("sudoers")
+    expect(checkWritePath(String.raw`C:\etc\passwd`).code).toBe("passwd")
+    expect(checkWritePath(String.raw`D:\etc\crontab`).code).toBe("cron")
+  })
+
+  // Two kinds of function, and mixing them up cost thirty-five checks: one REPORTS where something would
+  // live on a named system, the other ACTS on this filesystem right now. The override drives the first and
+  // must never reach the second, or a simulated run writes its stores where nothing here can open them.
+  test("REPORTING follows the platform asked about; ACTING stays on this machine", () => {
+    const env = { HOME: "/home/u" }
+    expect(baseDirs(env, "linux").data).toBe("/home/u/.local/share/fabula")
+    // Note the whole path converts, separators included: the Windows dialect normalises what it is given
+    // rather than appending its own separator to someone else's. A half-converted path is the mongrel that
+    // matched no rule at all, so producing one here would defeat the purpose of asking by platform.
+    expect(baseDirs(env, "win32").data).toBe(String.raw`\home\u\.local\share\fabula`)
+    // dataPath opens files here, so it is unmoved by the override — asserted by driving it under one.
+    const here = dataPath("store")
+    const prev = process.env.FABULA_PLATFORM
+    process.env.FABULA_PLATFORM = prev === "win32" ? "linux" : "win32"
+    try {
+      expect(dataPath("store")).toBe(here)
+    } finally {
+      if (prev === undefined) delete process.env.FABULA_PLATFORM; else process.env.FABULA_PLATFORM = prev
+    }
+  })
+
+  test("REAL guard: dropping the drive letter does not turn ordinary paths into system ones", () => {
+    // `C:\Users\x\etc\passwd` becomes `/Users/x/etc/passwd` — a rule matching by prefix must not fire.
+    expect(checkWritePath(String.raw`C:\Users\x\etc\passwd`).blocked).toBe(false)
+    expect(checkWritePath(String.raw`C:\proj\etc\sudoers`).blocked).toBe(false)
+    expect(checkWritePath(String.raw`C:\proj\src\index.ts`).blocked).toBe(false)
   })
 })

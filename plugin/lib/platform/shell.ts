@@ -16,7 +16,7 @@
 import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process"
 import { existsSync, statSync } from "node:fs"
 import * as path from "node:path"
-import { current, exeSuffix, type Platform } from "./index"
+import { current, hostPlatform, type Platform } from "./index"
 import { homeDir, splitPathList } from "./paths"
 
 /**
@@ -153,7 +153,7 @@ export function whichBin(
     : [""]
   for (const dir of splitPathList(env.PATH, p)) {
     for (const ext of exts) {
-      const cand = path.join(dir, name + (ext === exeSuffix(p) ? ext : ext))
+      const cand = path.join(dir, name + ext)
       try {
         if (existsSync(cand) && statSync(cand).isFile()) return cand
       } catch { /* unreadable entry on PATH — keep looking */ }
@@ -194,7 +194,12 @@ export function writeMarkerScript(
   scriptPath: string,
   body: string,
   env: NodeJS.ProcessEnv = process.env,
-  p: Platform = current(env),
+  // The HOST, deliberately, not `current()`. This function ACTS: it writes a file that THIS machine will
+  // be asked to execute. A test simulating Windows on a Mac would otherwise get a `.cmd` wrapper that
+  // macOS cannot run, and the check it protects would report the harness broken when the only thing
+  // missing is the ability to start the stand-in. Reporting follows the platform asked about; acting
+  // follows the machine acting — the same line drawn in `paths.ts` for `dataPath`.
+  p: Platform = hostPlatform(),
 ): string {
   const fs = require("node:fs") as typeof import("node:fs")
   fs.writeFileSync(scriptPath, body.startsWith("#!") ? body : `#!/bin/sh\n${body}`)

@@ -7,7 +7,7 @@
 // these tests fail if the hook decides to fire and then never invokes a tool, or invokes it with the
 // wrong arguments. That is the mutation the old shape could not catch.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
-import { shellPathLiteral } from "../lib/platform/shell"
+import { shellPathLiteral, writeMarkerScript } from "../lib/platform/shell"
 import { promises as fs } from "node:fs"
 import * as os from "node:os"
 import * as path from "node:path"
@@ -56,8 +56,11 @@ beforeAll(async () => {
   payloadFile = path.join(base, "gosec.json")
   shim = path.join(base, "shim.sh")
   await fs.writeFile(payloadFile, GOSEC_HIGH)
-  await fs.writeFile(shim, shimSource(payloadFile, argvLog), { mode: 0o755 })
-  await fs.chmod(shim, 0o755)
+  // Through the seam, which also writes the wrapper a platform needs in order to START a script at all.
+  // Written by hand, the stand-in was a file that platform cannot execute: every tool call failed to
+  // launch, the argv log stayed empty, and the checks read that as the floor never running its tools —
+  // the exact mutation they exist to catch, reported for a reason that had nothing to do with the floor.
+  shim = writeMarkerScript(shim, shimSource(payloadFile, argvLog))
 })
 
 afterAll(() => {

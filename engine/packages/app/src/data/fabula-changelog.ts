@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.134.0"
+export const FABULA_VERSION = "0.135.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,24 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.135.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Подставные программы, которыми проверки доказывают, что механизм действительно ЗАПУСКАЕТСЯ, писались вручную — и на третьей системе получались файлами, которые она запустить не может. Ни один вызов не стартовал, журнал вызовов оставался пуст, и проверки читали это как «пол не запустил ни одного инструмента»: ровно та подмена, ради ловли которой они и существуют, но по причине, к самому полу отношения не имеющей. Теперь все они идут через одно определение, которое заодно пишет обёртку, нужную этой системе для старта.",
+        en: "The stand-in programs by which checks prove a mechanism really IS INVOKED were written by hand, and on the third system came out as files it cannot execute. Not one call started, the argv log stayed empty, and the checks read that as «the floor invoked none of its tools» — precisely the substitution they exist to catch, for a reason having nothing to do with the floor. They all go through one definition now, which also writes the wrapper that system needs in order to start anything.",
+      },
+      {
+        ru: "И чтение текстовых файлов в проверках адаптера перестало полагаться на кодировку по умолчанию: на одной из систем она однобайтовая, и чтение собственных исходников проекта обрывалось ошибкой посреди файла — проверка падала из-за нечитаемости файла, а не из-за того, что в нём написано.",
+        en: "And text reads in the adapter's checks stopped relying on the default encoding: on one system it is a single-byte code page, and reading this project's own sources broke partway through a file — the check failed because the file was unreadable, not because of what it says.",
+      },
+      {
+        ru: "Отчёт проверки развёртывания на той же системе печатался мимо потока вывода: на экране он был верным и полным, а перехватить его было нельзя. Отчёт, который программа не может прочитать, — половина отчёта.",
+        en: "The deploy check's report on that same system printed past the output stream: on screen it was correct and complete, and nothing could capture it. A report a program cannot read is half a report.",
+      },
+    ],
+  },
   {
     version: "0.134.0",
     date: "2026-08-05",

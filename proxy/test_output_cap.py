@@ -10,7 +10,7 @@ import os
 
 
 def _cap_fn(window):
-    src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "lmstudio-adapter.py")).read()
+    src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "lmstudio-adapter.py"), encoding="utf-8").read()
     st = src.index("OUTPUT_SHARE_OF_EMPTY_WINDOW")
     en = src.index("# Phase-0 context audit tap")
     ns = {"os": os, "MAX_OUTPUT_TOKENS": 0, "effective_window": lambda m: window}
@@ -56,7 +56,7 @@ def test_no_window_means_no_clamp_exactly_as_before():
 
 
 def test_an_explicit_override_still_wins():
-    src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "lmstudio-adapter.py")).read()
+    src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "lmstudio-adapter.py"), encoding="utf-8").read()
     st = src.index("OUTPUT_SHARE_OF_EMPTY_WINDOW")
     en = src.index("# Phase-0 context audit tap")
     ns = {"os": os, "MAX_OUTPUT_TOKENS": 4242, "effective_window": lambda m: W}
@@ -66,7 +66,7 @@ def test_an_explicit_override_still_wins():
 
 def test_the_adapter_passes_the_input_size_in():
     """The wiring. A ceiling that never learns what the request occupies is the bug, not the fix."""
-    src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "lmstudio-adapter.py")).read()
+    src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "lmstudio-adapter.py"), encoding="utf-8").read()
     i = src.index("_cap = derived_output_cap(")
     call = src[i:i + 120]
     assert "_est_in" in call, "the cap is computed without knowing what the request already occupies"

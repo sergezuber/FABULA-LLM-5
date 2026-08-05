@@ -24,16 +24,23 @@ if (-not $Root) { $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.M
 $Root = (Resolve-Path $Root).Path
 
 $script:fail = 0
-function Say($m) { Write-Host $m }
-function Ok($m)  { Write-Host "   [ok] $m" -ForegroundColor Green }
-function Bad($m) { Write-Host "   [!!] $m" -ForegroundColor Red; $script:fail = 1 }
+# The report goes to the OUTPUT stream, not to the host console.
+#
+# `Write-Host` writes past the pipeline: it shows on screen and a caller capturing the run gets nothing.
+# The POSIX twin prints to stdout, so a wrapper can read the verdict and act on it; here the same script
+# produced a correct, human-readable report that no wrapper could see — the guard checking this one asked
+# whether the report NAMES the offending artifact, and it looked as though it did not, while the screen
+# showed it plainly. A report a program cannot read is half a report.
+function Say($m) { Write-Output $m }
+function Ok($m)  { Write-Output "   [ok] $m" }
+function Bad($m) { Write-Output "   [!!] $m"; $script:fail = 1 }
 
 $Bin = Join-Path $Root "bin\fabula.exe"
 
 Say "-- the binary exists and runs"
 if (-not (Test-Path $Bin)) {
   Bad "no executable at bin\fabula.exe - the app has nothing to run"
-  Write-Host ""; Write-Host "DEPLOY: STALE"; exit 1
+  Say ""; Say "DEPLOY: STALE"; exit 1
 }
 $ver = (& $Bin --version 2>$null) -join ""
 if ($ver) { Ok "bin\fabula.exe runs (version $ver)" } else { Bad "bin\fabula.exe did not answer --version" }
@@ -52,7 +59,7 @@ if (Test-Path $src) {
 }
 if ($newer.Count -gt 0) {
   Bad "engine source is NEWER than the deployed binary - the app is running code you have not built:"
-  $newer | ForEach-Object { Write-Host ("        " + $_.FullName.Substring($Root.Length + 1)) }
+  $newer | ForEach-Object { Say ("        " + $_.FullName.Substring($Root.Length + 1)) }
 } else {
   Ok "every engine source file predates the build"
 }
@@ -103,7 +110,7 @@ if (-not $srcVer) {
   }
 }
 
-Write-Host ""
-if ($script:fail -eq 0) { Write-Host "DEPLOY: FRESH - the app runs this tree's engine" }
-else { Write-Host "DEPLOY: STALE - rebuild before claiming a wave is shipped" }
+Say ""
+if ($script:fail -eq 0) { Say "DEPLOY: FRESH - the app runs this tree's engine" }
+else { Say "DEPLOY: STALE - rebuild before claiming a wave is shipped" }
 exit $script:fail

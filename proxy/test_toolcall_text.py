@@ -85,7 +85,7 @@ def test_the_adapter_actually_calls_this():
     does, since leaving both would show the reader the markup anyway.
     """
     import os
-    src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "lmstudio-adapter.py")).read()
+    src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "lmstudio-adapter.py"), encoding="utf-8").read()
     assert "parse_text_tool_calls(" in src, "the adapter never asks"
     i = src.index("parse_text_tool_calls(msg")
     window = src[i:i + 600]
@@ -98,7 +98,7 @@ def test_the_adapter_actually_calls_this():
 def test_it_only_runs_when_the_runtime_produced_no_calls_of_its_own():
     """A runtime that parsed the dialect itself must never be second-guessed."""
     import os
-    src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "lmstudio-adapter.py")).read()
+    src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "lmstudio-adapter.py"), encoding="utf-8").read()
     i = src.index("parse_text_tool_calls(msg")
     before = src[max(0, i - 200):i]
     assert 'if not msg.get("tool_calls")' in before, "the recovery must stand down when real calls exist"

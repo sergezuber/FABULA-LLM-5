@@ -5,6 +5,10 @@ layer splitting corner cases, per-source tool breakdown, request analysis, dump 
 CLI exit codes. Hermetic where possible; the real-template tests skip cleanly on machines
 without LM Studio models.
 """
+# Text is read as UTF-8 EXPLICITLY, never in the locale's encoding. Python picks the platform default
+# otherwise, which on one of the systems here is a single-byte code page: reading this project's own
+# UTF-8 sources threw a decode error partway through a file, and the check failed for the file being
+# unreadable rather than for what it says.
 import glob
 import json
 import os
@@ -171,7 +175,7 @@ def test_render_template_provides_hf_conveniences():
 def test_real_templates_layout(path):
     if path is None:
         return
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         res = probe_layout(f.read())
     # Every template must at least keep system before user; tool-aware ones must put tools first.
     assert res["ok"] is True, f"{path}: layout {res['order']} violates the Context OS §3 physical model"
@@ -180,7 +184,7 @@ def test_real_templates_layout(path):
 @pytest.mark.skipif(not os.path.exists(PROD_TEMPLATE), reason="production model not installed")
 def test_production_model_is_tools_first():
     """The exact invariant the design doc §3 documents for the ACTIVE production model."""
-    with open(PROD_TEMPLATE) as f:
+    with open(PROD_TEMPLATE, encoding="utf-8") as f:
         res = probe_layout(f.read())
     assert res["tools_supported"] is True
     assert res["order"] == ["tools", "system", "user"]
@@ -271,10 +275,10 @@ def test_analyze_request_no_system_no_tools():
 def test_dump_last_request_atomic_write(tmp_path):
     p = str(tmp_path / "last.json")
     assert dump_last_request({"a": 1}, p) is True
-    assert json.load(open(p)) == {"a": 1}
+    assert json.load(open(p, encoding="utf-8")) == {"a": 1}
     # second write replaces content fully (no append/tear)
     assert dump_last_request({"b": [1, 2]}, p) is True
-    assert json.load(open(p)) == {"b": [1, 2]}
+    assert json.load(open(p, encoding="utf-8")) == {"b": [1, 2]}
     assert not os.path.exists(p + ".tmp")
 
 

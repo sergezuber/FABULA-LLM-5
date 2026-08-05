@@ -37,10 +37,10 @@ const KAT = (state: string, loaded: number, bytes: number) => ({
 // idle and the marker script returned instantly, and flaked the moment the suite ran under load — which
 // reads as "the code is flaky" when the contradiction is in the test. Each now declares budget + 12s.
 const STUB = join(tmpdir(), `lms-stub-${process.pid}.sh`)
-writeFileSync(STUB, "#!/bin/sh\nif [ \"$1\" = ps ]; then echo IDENTIFIER; fi\nexit 0\n", { mode: 0o755 })
+const STUB_BIN = writeMarkerScript(STUB, "#!/bin/sh\nif [ \"$1\" = ps ]; then echo IDENTIFIER; fi\nexit 0\n")
 
 beforeEach(() => {
-  process.env.FABULA_LMS_BIN = STUB
+  process.env.FABULA_LMS_BIN = STUB_BIN
   process.env.FABULA_KVCOST_FILE = STORE
   delete process.env.FABULA_AUTO_WINDOW
   rmSync(STORE, { force: true })
@@ -377,14 +377,13 @@ describe("a window above the ceiling is corrected, not respected", () => {
     // fire on every test — which is the guard being right about a world that does not exist.
     const STATE = join(tmpdir(), `lms-over-state-${process.pid}`)
     writeFileSync(STATE, "loaded")
-    writeFileSync(MARKER, `#!/bin/sh
+    const MARKER_BODY = `#!/bin/sh
 [ "$1" = load ] && printf '%s\\n' "$@" >> ${shellPathLiteral(ARGV)} && echo loaded > ${shellPathLiteral(STATE)}
 [ "$1" = unload ] && rm -f ${shellPathLiteral(STATE)}
 [ "$1" = ps ] && [ -f ${shellPathLiteral(STATE)} ] && echo "kat  kat  LOADED  22.00 GB  262144  1  Local"
 exit 0
-`)
-    require("node:fs").chmodSync(MARKER, 0o755)
-    process.env.FABULA_LMS_BIN = MARKER
+`
+    process.env.FABULA_LMS_BIN = writeMarkerScript(MARKER, MARKER_BODY)
     // Loaded at the passport while the machine can only pay for a fraction of it — the live 2026-07-26 state.
     serve([KAT("loaded", 262144, 22 * GIB)])
     const r = await ensureLoadedAtPlannedWindow("kat", { loadTimeoutMs: 8000 })
@@ -432,13 +431,12 @@ describe("never a second copy", () => {
     const MARKER = join(tmpdir(), `lms-stuck-${process.pid}.sh`)
     rmSync(ARGV, { force: true })
     // An unload that does nothing — the shape of a model too busy to be taken down.
-    writeFileSync(MARKER, `#!/bin/sh
+    const MARKER_BODY = `#!/bin/sh
 [ "$1" = load ] && printf '%s\\n' "$@" >> ${shellPathLiteral(ARGV)}
 [ "$1" = ps ] && echo "kat  kat  LOADED  22.00 GB  262144  1  Local"
 exit 0
-`)
-    require("node:fs").chmodSync(MARKER, 0o755)
-    process.env.FABULA_LMS_BIN = MARKER
+`
+    process.env.FABULA_LMS_BIN = writeMarkerScript(MARKER, MARKER_BODY)
     writeFileSync(STORE, JSON.stringify({ kat: [
       { windowTokens: 32768, totalBytes: 24 * GIB },
       { windowTokens: 131072, totalBytes: 30 * GIB },
@@ -466,9 +464,8 @@ exit 0
     process.env.FABULA_KVSAMPLE_FILE = SAMPLES
     writeFileSync(SAMPLES, JSON.stringify({ katx: [{ contextTokens: 131021, kvBytes: Math.round(12.59 * GIB) }] }))
     const MARKER = join(tmpdir(), `lms-disk-${process.pid}.sh`)
-    writeFileSync(MARKER, `#!/bin/sh\nexit 0\n`) // ps answers nothing — the model is not loaded
-    require("node:fs").chmodSync(MARKER, 0o755)
-    process.env.FABULA_LMS_BIN = MARKER
+    const MARKER_BODY = `#!/bin/sh\nexit 0\n` // ps answers nothing — the model is not loaded
+    process.env.FABULA_LMS_BIN = writeMarkerScript(MARKER, MARKER_BODY)
     serve([{ id: "katx", type: "llm", state: "not-loaded", loaded_context_length: 0, max_context_length: 262144, size_bytes: null }])
     const r = await ensureLoadedAtPlannedWindow("katx", { loadTimeoutMs: 5000 })
     // With disk weights known the plan EXISTS (tiny weights -> full passport fits); without the disk
@@ -519,7 +516,7 @@ describe("a load command that succeeded is not a window that changed", () => {
     // satisfied), and after `load` it is back — at 183296, the window the runtime insisted on.
     const STATE = join(tmpdir(), `lms-state-${process.pid}`)
     rmSync(STATE, { force: true })
-    writeFileSync(MARKER, [
+    const MARKER_BODY = [
       "#!/bin/sh",
       `case "$1" in`,
       `  unload) : > ${shellPathLiteral(STATE)} ;;`,
@@ -527,9 +524,8 @@ describe("a load command that succeeded is not a window that changed", () => {
       `  ps) [ -f ${shellPathLiteral(STATE)} ] || echo "kat  kat  LOADED  20.00 GB  183296  1  Local" ;;`,
       "esac",
       "exit 0",
-    ].join("\n"))
-    require("node:fs").chmodSync(MARKER, 0o755)
-    process.env.FABULA_LMS_BIN = MARKER
+    ].join("\n")
+    process.env.FABULA_LMS_BIN = writeMarkerScript(MARKER, MARKER_BODY)
     // The API keeps answering 183296 both before and AFTER the load — the runtime ignored the flag.
     serve([KAT("loaded", 183_296, 20 * GIB)])
     const r = await ensureLoadedAtPlannedWindow("kat", { loadTimeoutMs: 8000 })

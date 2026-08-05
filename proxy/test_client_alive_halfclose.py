@@ -62,7 +62,7 @@ def test_half_closed_write_side_is_not_a_departure():
 def test_the_adapter_does_not_use_that_check_to_abort_a_generation():
     """The guard that matters: no watcher may close an upstream on this signal alone."""
     import os
-    src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "lmstudio-adapter.py")).read()
+    src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "lmstudio-adapter.py"), encoding="utf-8").read()
     assert "_watch_client" not in src, (
         "a prefill watcher deciding departure by peek was reverted after it silently discarded real "
         "answers; reintroducing it needs a signal that distinguishes a half-close from a hang-up"

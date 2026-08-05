@@ -6,6 +6,10 @@ ceiling. A request as small as translating a paragraph was not slow to compute â
 computed. A plain FIFO serves whoever asked first, which is the wrong question when the asker is
 background work and a person is waiting.
 """
+# Text is read as UTF-8 EXPLICITLY, never in the locale's encoding. Python picks the platform default
+# otherwise, which on one of the systems here is a single-byte code page: reading this project's own
+# UTF-8 sources threw a decode error partway through a file, and the check failed for the file being
+# unreadable rather than for what it says.
 import threading
 import time
 
@@ -111,8 +115,8 @@ def test_the_adapter_reads_the_header_the_engine_sends():
     tests pass while nothing calls it. Asserted on the source, because the alternative is a live run.
     """
     import pathlib, re
-    adapter = pathlib.Path(__file__).with_name("lmstudio-adapter.py").read_text()
-    engine = (pathlib.Path(__file__).parents[1] / "engine/packages/opencode/src/session/llm.ts").read_text()
+    adapter = pathlib.Path(__file__).with_name("lmstudio-adapter.py").read_text(encoding="utf-8")
+    engine = (pathlib.Path(__file__).parents[1] / "engine/packages/opencode/src/session/llm.ts").read_text(encoding="utf-8")
 
     assert "x-fabula-priority" in engine, "the engine must state who is asking"
     assert "x-fabula-priority" in adapter, "the adapter must read it"
@@ -124,6 +128,6 @@ def test_the_adapter_reads_the_header_the_engine_sends():
 def test_a_missing_header_is_a_live_turn():
     """An old engine, a curl by hand, anything at all: absence must mean foreground."""
     import pathlib, re
-    adapter = pathlib.Path(__file__).with_name("lmstudio-adapter.py").read_text()
+    adapter = pathlib.Path(__file__).with_name("lmstudio-adapter.py").read_text(encoding="utf-8")
     m = re.search(r'headers\.get\("x-fabula-priority",\s*"(\d+)"', adapter)
     assert m and m.group(1) == "0", "the default must be the live-turn rank"

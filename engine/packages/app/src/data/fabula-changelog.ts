@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.112.0"
+export const FABULA_VERSION = "0.113.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.113.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Приёмка перестала быть списком на бумаге и стала программой: одна команда проверяет десять условий и выдаёт вердикт, который не нужно толковать. Это важно потому, что принимать продукт на двух других системах будет человек, впервые видящий этот проект, на машине, куда никто отсюда не зайдёт, — а «защита всё ещё держится» не проверяется взглядом. Исходов ровно три, а не два: пройдено, не пройдено, или ПРОПУЩЕНО с названной причиной — и пропуск печатается так же громко, как провал, и в приёмку не засчитывается. Список, молча роняющий строки, которые не смог выполнить, читается точно так же, как список, который их прошёл. Два условия честно помечены как требующие человека: открыть приложение и провести через него настоящую задачу — подменять это чем-то автоматизируемым было бы подлогом. Первый же прогон нашёл настоящее: собранное приложение отстало от исходников после кросс-сборки.",
+        en: "Acceptance stopped being a list on paper and became a program: one command checks ten conditions and returns a verdict nobody has to interpret. That matters because the product will be accepted on the two other systems by someone seeing this project for the first time, on a machine nobody here can log into — and \"the protection still holds\" is not something anyone can eyeball. There are exactly three outcomes, not two: passed, failed, or SKIPPED with the reason named — and a skip is printed as loudly as a failure and is not counted as acceptance. A list that silently drops the rows it could not run reads exactly like a list that passed them. Two conditions are honestly marked as needing a human: opening the application and running a real task through it — substituting something automatable would be a forgery. The very first run found something real: the built application had fallen behind its sources after a cross-build.",
+      },
+    ],
+  },
   {
     version: "0.112.0",
     date: "2026-08-05",

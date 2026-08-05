@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.119.0"
+export const FABULA_VERSION = "0.120.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.120.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Выбор изолированного запуска задавал не тот вопрос. Он спрашивал, отвечает ли служба контейнеров, — а все образы, которыми пользуется этот инструмент, принадлежат одной системе, и на другой служба может быть совершенно здоровой и при этом не уметь запустить ни один из них. Инструмент выбирал способ, которым не мог воспользоваться: на сборочной машине третьей системы десять проверок падали при службе, объявившей себя доступной. Живой человек упёрся бы в ту же стену — явно запрошенная изоляция не отказывала бы честно, а ломалась. Теперь спрашивается ровно то, что определяет пригодность образов, и служба, которая их не потянет, честно считается недоступной: инструмент уходит на защиту ядра или отказывает, и в обоих случаях говорит, что произошло. Заодно убран глушитель ошибок в условии проверок: он проглатывал отсутствующую зависимость и отвечал «контейнеров нет» — двенадцать проверок молча пропускались, а две работали, опираясь на ложную посылку.",
+        en: "The choice of isolated execution asked the wrong question. It asked whether the container service answers — but every image this tool uses belongs to one system, and on another the service can be perfectly healthy while unable to start any of them. The tool was choosing a route it could not take: on the third system's build machine ten checks failed while the service reported itself available. A real person would have hit the same wall — isolation asked for explicitly would not have refused honestly, it would have broken. The question now matches what actually determines whether the images can run, and a service that cannot run them counts honestly as unavailable: the tool falls back to the kernel protection or refuses, and says which in either case. A silent error-swallow was removed from the checks' own condition as well: it absorbed a missing dependency and answered \"no containers\" — twelve checks skipped in silence while two ran on a premise that was false.",
+      },
+    ],
+  },
   {
     version: "0.119.0",
     date: "2026-08-05",

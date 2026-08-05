@@ -60,16 +60,29 @@ import { dataPath } from "./lib/platform/paths"
 import { spawnShell } from "./lib/platform/shell"
 import { sandboxPlan, shellScope, untrustedScope } from "./lib/platform/sandbox"
 
-// Cached Docker availability probe (sandbox for execute_code).
+/**
+ * Can Docker run the sandbox images this tool actually uses?
+ *
+ * NOT "does docker answer". Every sandbox image here is a LINUX image, and a Windows host can have a
+ * perfectly healthy daemon running in WINDOWS-container mode, where none of them can start. Asking only
+ * whether the daemon replies made the tool choose a backend it could not use: MEASURED on a Windows CI
+ * runner, ten sandbox cases failed there with the daemon reporting itself available and every Linux image
+ * refusing to run. A real user would have hit exactly the same wall, with `sandbox: true` erroring instead
+ * of degrading.
+ *
+ * `docker info --format {{.OSType}}` is the question that matches the images, so a daemon that cannot run
+ * them reads as unavailable — and the tool falls back to the kernel profile, or refuses an explicit
+ * `sandbox: true`, both of which SAY what happened.
+ */
 let _dockerOk: boolean | null = null
 function dockerAvailable(): Promise<boolean> {
   if (_dockerOk !== null) return Promise.resolve(_dockerOk)
   return new Promise<boolean>((res) => {
-    const c = spawn("docker", ["version", "--format", "{{.Server.Version}}"])
-    let ok = false
-    const t = setTimeout(() => { try { c.kill() } catch {} ; res((_dockerOk = false)) }, 5000)
-    c.stdout.on("data", (d) => { if (/\d/.test(d.toString())) ok = true })
-    c.on("close", () => { clearTimeout(t); res((_dockerOk = ok)) })
+    const c = spawn("docker", ["info", "--format", "{{.OSType}}"])
+    let out = ""
+    const t = setTimeout(() => { try { c.kill() } catch {} ; res((_dockerOk = false)) }, 8000)
+    c.stdout.on("data", (d) => { out += d.toString() })
+    c.on("close", () => { clearTimeout(t); res((_dockerOk = out.trim().toLowerCase() === "linux")) })
     c.on("error", () => { clearTimeout(t); res((_dockerOk = false)) })
   })
 }

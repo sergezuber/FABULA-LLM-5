@@ -15,7 +15,7 @@
 
 import { test, expect, beforeAll, afterAll, describe } from "bun:test"
 import { existsSync, rmSync } from "node:fs"
-import { execFileSync } from "node:child_process"
+import { execFileSync, spawnSync } from "node:child_process"
 import * as os from "node:os"
 import * as fs from "node:fs/promises"
 import * as path from "node:path"
@@ -44,10 +44,13 @@ afterAll(() => {
 })
 
 const dockerUp = (() => {
-  try {
-    execFileSync("docker", ["version", "--format", "{{.Server.Version}}"], { stdio: ["ignore", "pipe", "ignore"] })
-    return true
-  } catch { return false }
+  // The SAME question the tool asks: can this daemon run a LINUX image? A Windows host in
+  // windows-container mode answers a version happily and cannot start any of the sandbox images.
+  // NOT wrapped in a silent catch. The first version was, and it swallowed a missing import: the probe
+  // threw, the catch answered "no Docker", and twelve container cases skipped while two others ran under
+  // a premise that was false. A probe that cannot run must say so, not answer.
+  const r = spawnSync("docker", ["info", "--format", "{{.OSType}}"], { encoding: "utf8", timeout: 8000 })
+  return String(r.stdout ?? "").trim().toLowerCase() === "linux"
 })()
 
 // unique temp dir helper

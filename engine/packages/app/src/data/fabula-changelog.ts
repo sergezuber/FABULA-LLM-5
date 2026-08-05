@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.109.0"
+export const FABULA_VERSION = "0.110.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.110.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Окно приложения впервые собрано и слинковано для второй системы, а не только написано для неё — и сборка тут же нашла настоящий дефект: путь к содержимому окна был записан так, что работал лишь потому, что каталог случайно назывался нужным словом; копия проекта в любом другом месте не собралась бы. Получен и настоящий установочный пакет, и он несёт тот же номер версии, что объявлен в источнике. Ограничитель размера служебного журнала перестал быть привязан к одной системе: раньше он спрашивал путь способом, который есть только там, и на остальных не делал ничего — а это тот самый журнал, который правила велят читать первым, когда что-то зависает. Теперь путь спрашивается у каждой системы по-своему, и главное: когда служба отдаёт не файл, а канал, ответом честно становится «ничего» — усечь нечего, а усечь не то хуже, чем не усекать вовсе.",
+        en: "The application window was compiled and linked for the second system for the first time rather than merely written for it — and the build immediately found a real defect: the path to the window's content was written so that it worked only because a directory happened to carry the right name; a copy of the project anywhere else would not have built. A real installable package was produced too, and it carries the same version number the source declares. The bound on the service journal stopped being tied to one system: it used to ask for the path in a way only that system offers, and did nothing at all elsewhere — and this is the very journal the rules say to read first when anything hangs. The path is now asked of each system in its own way, and most importantly: when the service hands over a pipe rather than a file, the honest answer becomes nothing — there is nothing to truncate, and truncating the wrong thing is worse than not truncating at all.",
+      },
+    ],
+  },
   {
     version: "0.109.0",
     date: "2026-08-05",

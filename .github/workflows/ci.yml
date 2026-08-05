@@ -102,6 +102,33 @@ jobs:
           file dist/mimocode-windows-x64/bin/mimo.exe | grep -q "PE32+"     || { echo "::error::windows artifact is not PE32+"; exit 1; }
           echo "cross-build verified"
 
+  shell-linux:
+    name: Desktop shell builds and bundles on Linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: WebKitGTK and friends
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev
+      - name: Build
+        working-directory: shell
+        # A REAL compile and link, not a check: the shell's non-macOS branches were cfg-gated code that had
+        # never been built for their own platform, and the first attempt found a frontend path that only
+        # resolved because the crate directory happened to be named `shell`.
+        run: cargo build --release
+      - name: Bundle a .deb, and it must carry the version the source declares
+        working-directory: shell
+        run: |
+          cargo install tauri-cli --version "^2" --locked
+          cargo tauri build --bundles deb
+          deb=$(find target -name '*.deb' | head -1)
+          [ -n "$deb" ] || { echo "::error::no .deb produced"; exit 1; }
+          v=$(sed -n 's/^export const FABULA_VERSION = "\(.*\)"$/\1/p' ../engine/packages/app/src/data/fabula-changelog.ts | head -1)
+          dpkg-deb -I "$deb" | grep -q "Version: $v" || { echo "::error::the package does not carry $v"; exit 1; }
+          echo "bundled $(basename "$deb") carrying $v"
+
   deploy-guard-windows:
     name: Deploy guard runs where bash is optional
     runs-on: windows-latest

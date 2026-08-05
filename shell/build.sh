@@ -18,6 +18,11 @@ echo "stamping $VERSION"
 perl -0pi -e "s/^version = \"[^\"]*\"/version = \"$VERSION\"/m" "$HERE/Cargo.toml"
 perl -0pi -e "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/"  "$HERE/tauri.conf.json"
 
+# `frontendDist` in tauri.conf.json is "ui" — relative to that FILE, never to a guessed repository
+# layout. It once read "../shell/ui", which resolved only because the crate directory happens to be
+# named `shell`; a copy of the crate built anywhere else died with "this path doesn't exist". Found by
+# building it on Linux, where the crate sat somewhere else. (Tauri's schema rejects unknown keys, so the
+# reason lives here rather than as a comment inside the JSON.)
 cd "$HERE"
 cargo build --release
 

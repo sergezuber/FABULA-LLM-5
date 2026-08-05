@@ -1074,17 +1074,39 @@ def _stderr_path():
     named = os.environ.get("FABULA_ADAPTER_LOG")
     if named:
         return named
-    try:
-        import fcntl
-        F_GETPATH = 50  # macOS <sys/fcntl.h>
-        # `fcntl.fcntl` RETURNS the filled buffer; it does not mutate one passed in (a bytearray argument
-        # raises "cannot be interpreted as an integer"). Caught by running the resolver in a process whose
-        # fd 2 really was a file, the way launchd opens it — it answered None, so the rotator would have
-        # done nothing in production while every test of the surrounding logic passed.
-        p = fcntl.fcntl(2, F_GETPATH, b"\0" * 1024).split(b"\0", 1)[0].decode("utf-8", "replace")
-        return p if p.startswith("/") else None
-    except Exception:
-        return None
+
+    # EVERY PLATFORM ANSWERS THIS, IN ITS OWN WAY, and asking only macOS meant the rotator was dead
+    # everywhere else: the log this project's own rule says to read FIRST when anything hangs would have
+    # grown without bound on the two platforms being ported to, while the surrounding tests passed.
+    #
+    # Linux (and any /proc system) publishes the answer as a symlink: /proc/self/fd/2 points at the file.
+    # A service manager that hands over a pipe or a journald socket makes that link point at "pipe:[123]"
+    # or "socket:[456]" — NOT an absolute path — which is exactly the case that must return None, because
+    # there is no file to truncate and truncating the wrong thing is worse than not rotating.
+    if sys.platform.startswith("linux"):
+        try:
+            p = os.readlink("/proc/self/fd/2")
+            return p if p.startswith("/") and not p.startswith("/proc/") else None
+        except Exception:
+            return None
+
+    if sys.platform == "darwin":
+        try:
+            import fcntl
+            F_GETPATH = 50  # macOS <sys/fcntl.h>
+            # `fcntl.fcntl` RETURNS the filled buffer; it does not mutate one passed in (a bytearray
+            # argument raises "cannot be interpreted as an integer"). Caught by running the resolver in a
+            # process whose fd 2 really was a file, the way launchd opens it — it answered None, so the
+            # rotator would have done nothing in production while every test of the surrounding logic
+            # passed.
+            p = fcntl.fcntl(2, F_GETPATH, b"\0" * 1024).split(b"\0", 1)[0].decode("utf-8", "replace")
+            return p if p.startswith("/") else None
+        except Exception:
+            return None
+
+    # Windows has no fd-to-path call a service can rely on, and says so rather than guessing: the task
+    # that starts the adapter redirects its own output, so FABULA_ADAPTER_LOG is the honest channel there.
+    return None
 
 
 def _rotate_log_forever():

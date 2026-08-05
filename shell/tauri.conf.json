@@ -1,9 +1,9 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "FABULA",
-  "version": "0.109.0",
+  "version": "0.110.0",
   "identifier": "com.sistemma.fabula-llm-5",
-  "build": { "frontendDist": "../shell/ui" },
+    "build": { "frontendDist": "ui" },
   "app": {
     "withGlobalTauri": true,
     "windows": [],

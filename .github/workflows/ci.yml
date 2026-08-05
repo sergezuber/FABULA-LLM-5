@@ -60,6 +60,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: What the suite needs, installed rather than assumed
+        shell: bash
+        # `setup-python` gives an interpreter and nothing else. The first run of this job failed on ALL
+        # THREE platforms while the same suite was green locally — which is the shape that says the job is
+        # wrong, not the code. jinja2 is here for the same reason it was discovered on Linux: without it
+        # four context-audit tests report as failures rather than as a missing dependency.
+        run: python -m pip install --quiet pytest jinja2
       - name: Run adapter tests
         working-directory: proxy
         shell: bash
@@ -175,7 +182,14 @@ jobs:
           $v = (Select-String -Path engine/packages/app/src/data/fabula-changelog.ts -Pattern '^export const FABULA_VERSION = "(.*)"$').Matches[0].Groups[1].Value
           $s = "$env:RUNNER_TEMP\synth"
           New-Item -ItemType Directory -Force -Path "$s/bin","$s/engine/packages/app/dist/assets","$s/engine/packages/opencode/src","$s/engine/packages/app/src/data","$s/dist" | Out-Null
-          "@echo off`r`necho `"$v`"" | Set-Content "$s/bin/fabula.exe"
+          # A REAL executable that also CARRIES the version. The first attempt wrote a batch file named
+          # .exe: Windows will not run that, so the guard's first check ("the binary runs") failed and the
+          # whole verdict was STALE while all three version checks passed — a fixture defect reported as a
+          # product defect. bun.exe is already on this runner, is a genuine PE, and answers --version;
+          # appending our number leaves it valid (trailing bytes are ignored) and satisfies both checks.
+          $bun = (Get-Command bun).Source
+          Copy-Item $bun "$s/bin/fabula.exe"
+          Add-Content -Path "$s/bin/fabula.exe" -Value """$v""" -Encoding Ascii
           "const v = `"$v`";" | Set-Content "$s/engine/packages/app/dist/assets/index-S.js"
           "export const FABULA_VERSION = `"$v`"" | Set-Content "$s/engine/packages/app/src/data/fabula-changelog.ts"
           $v | Set-Content "$s/dist/fabula.version"
@@ -203,7 +217,7 @@ jobs:
       - name: Dependencies the acceptance itself checks
         shell: bash
         run: |
-          python -m pip install --quiet pytest
+          python -m pip install --quiet pytest jinja2
           (cd plugin && bun install --frozen-lockfile || bun install)
           (cd engine && bun install)
       - name: Build the engine for THIS machine

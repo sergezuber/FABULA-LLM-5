@@ -158,8 +158,14 @@ const distName = (item: { os: string; arch: string; abi?: string; avx2?: false }
     .filter(Boolean)
     .join("-")
 
+// MATCHED EXACTLY, and the loose version was proven wrong on a real Windows runner: `--only=windows-x64`
+// used `includes`, so it also selected `mimocode-windows-x64-baseline` — and the baseline variants need an
+// extra Bun artifact this very file already warns is "flaky to download". The job failed on that download
+// AFTER the wanted target had built and passed its smoke test, i.e. a green build reported as a failure.
+// A pattern now names one target; someone who wants the baseline asks for it by its full name.
 const targets = onlyPatterns.length
-  ? allTargets.filter((item) => onlyPatterns.some((pat) => distName(item).includes(pat)))
+  ? allTargets.filter((item) => onlyPatterns.some((pat) =>
+      distName(item) === pat || distName(item) === `${BINARY_PREFIX}-${pat}`))
   : singleFlag
   ? allTargets.filter((item) => {
       if (item.os !== process.platform || item.arch !== process.arch) {

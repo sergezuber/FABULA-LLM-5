@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.114.0"
+export const FABULA_VERSION = "0.115.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.115.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Первый прогон на настоящих машинах трёх систем нашёл три вещи, и все три — в проверках, не в продукте. Выбор цели сборки совпадал по части имени, поэтому просьба собрать одну цель тянула ещё и её «базовую» разновидность, про которую в том же файле написано, что она скачивается ненадёжно; нужная цель при этом собралась и прошла дымовой тест, а задача всё равно упала — успех, поданный как провал. Теперь имя совпадает целиком. Проверка сборки на второй системе подсовывала себе командный файл с расширением исполняемого: система такое не запускает, поэтому первый же пункт падал, пока три следующих проходили. Теперь берётся настоящий исполняемый файл, к которому дописан номер версии, — и он и запускается, и несёт номер. И сюите адаптера ставят то, что она требует, вместо предположения, что оно уже есть: раньше она падала на всех трёх системах разом, а это всегда признак того, что неверна проверка, а не проверяемое.",
+        en: "The first run on real machines of all three systems found three things, and all three were in the checks rather than in the product. Build-target selection matched on part of a name, so asking for one target also dragged in its \"baseline\" variant, which that very file warns downloads unreliably; the wanted target built and passed its smoke test, and the job failed anyway — a success presented as a failure. The name is now matched whole. The build check on the second system fed itself a command file with an executable's extension: the system will not run that, so the very first item failed while the next three passed. It now uses a real executable with the version number appended — it both runs and carries the number. And the adapter suite is given what it requires instead of it being assumed present: it had been failing on all three systems at once, which is always a sign that the check is wrong rather than the thing checked.",
+      },
+    ],
+  },
   {
     version: "0.114.0",
     date: "2026-08-05",

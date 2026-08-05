@@ -17,7 +17,7 @@ import { test, expect, beforeAll, afterAll, beforeEach } from "bun:test"
 import { writeArgvRecorder } from "../lib/platform/shell"
 import { spawn } from "node:child_process"
 import { readdirSync, writeFileSync, mkdtempSync, mkdirSync, chmodSync, existsSync, readFileSync, rmSync } from "node:fs"
-import { join } from "node:path"
+import { basename, dirname, join } from "node:path"
 import { tmpdir } from "node:os"
 
 /** The window the traversal measures against. SERVED HERE, not borrowed from the machine.
@@ -247,7 +247,11 @@ test("TRAVERSAL: reading a corpus fires the worker with no word ever matched", a
     }
     expect(existsSync(marker)).toBe(true) // the traversal itself launched the worker
     const argv = readFileSync(marker, "utf8").trim().split("\n")
-    expect(argv[0].endsWith("lib/corpus-worker.ts")).toBe(true) // the worker script, next to the plugin
+    // The tail is compared as a PATH, not as a string with one separator baked into it. Spelled with a
+    // slash it was a claim about one filesystem, false for every real path on another — and it was the
+    // last of this class in this file: the marker had begun appearing and this line kept the check red.
+    expect(basename(argv[0])).toBe("corpus-worker.ts")
+    expect(basename(dirname(argv[0]))).toBe("lib")
     expect(existsSync(argv[0])).toBe(true) // …and it exists on disk (a wrong path would spawn nothing)
     expect(argv[1]).toBe(dir) // the working directory, not dir/chapters
     expect(argv[2]).toBe("s_walk")

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.166.0"
+export const FABULA_VERSION = "0.167.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.167.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Хвост пути сверяется КАК ПУТЬ, а не как строка с одним вшитым разделителем. Записанный через прямую косую, он был утверждением об одной файловой системе и ложью для каждого настоящего пути на другой. Это оказалось последним звеном того же класса в этом наборе: отметка уже появлялась, а проверка оставалась красной из-за одной строки сравнения.",
+        en: "The tail of a path is compared AS A PATH, not as a string with one separator baked into it. Written with a slash it was a claim about one filesystem and false for every real path on another. It turned out to be the last link of that same class here: the mark had begun appearing while the check stayed red over a single line of comparison.",
+      },
+    ],
+  },
   {
     version: "0.166.0",
     date: "2026-08-06",

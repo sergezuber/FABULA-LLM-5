@@ -68,6 +68,25 @@ function trackedFiles(): string[] {
   return execSync("git ls-files", { cwd: REPO, encoding: "utf8" }).split("\n").filter(Boolean)
 }
 
+/**
+ * A tracked path containing a backslash makes the repository impossible to check out on Windows.
+ *
+ * Not "awkward" — impossible, and for the WHOLE tree: `git checkout` answers
+ * `error: invalid path '…'` and exits 128, so nothing lands and every job on that machine dies before
+ * it starts. MEASURED here: eighty-seven such files reached the repository from a run that simulated
+ * one platform on another, and the Windows side of the matrix went red at checkout, which reads as the
+ * tests failing rather than as the tree being unfetchable.
+ *
+ * The rule needs no exceptions. A backslash is a legal character in a POSIX filename and is used by
+ * nothing in this project on purpose, so the honest rule is the absolute one — which also means the
+ * gate cannot be argued with later, one convenient path at a time.
+ */
+test("no tracked path contains a backslash — Windows cannot check out such a tree at all", () => {
+  const offenders = trackedFiles().filter((p) => p.includes("\\"))
+  expect(offenders.slice(0, 10)).toEqual([])
+  expect(offenders.length).toBe(0)
+})
+
 test("naming policy: no Claude/Anthropic/mimo/OpenCode leaks in FABULA-authored tracked files", () => {
   const violations: string[] = []
   for (const rel of trackedFiles()) {

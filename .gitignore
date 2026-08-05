@@ -72,5 +72,10 @@ private-bench/
 shell/target/
 shell/gen/
 
-# A platform simulation that also moves HOME makes tools write to a literal `C:\...` name here.
+# A platform simulation that also moves HOME makes tools write real files under names built with the
+# OTHER system's separator. On a POSIX filesystem those are not directories but single files whose
+# names contain backslashes, and such a path makes the repository impossible to check out on Windows
+# at all — git refuses the whole tree. The gate in plugin/__tests__ is the guarantee; this only keeps
+# the working copy quiet.
 plugin/C:*
+*\\*

@@ -1,2 +1,0 @@
-{"text":"verify GREEN after editing /tmp/fab-sim-LeiM/tmp/memwire-ws-QNodL9/src/lexer.ts — suite green","kind":"episode","anchor":{"path":"src/lexer.ts","sha":"4683eb538e4a0bea3e38460418f79164a910dbf4","kind":"file","writtenAt":1785937884799},"origin":{"kind":"verify","ref":"e1","at":1785937884799},"id":"m1","serial":1,"ts":1785937884799}
-{"text":"verify GREEN — second green","kind":"episode","claimsCode":false,"origin":{"kind":"verify","ref":"e1","at":1785937884799},"id":"m2","serial":2,"ts":1785937884799}

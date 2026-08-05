@@ -28,7 +28,7 @@
 import * as fs from "node:fs"
 import * as path from "node:path"
 import * as os from "node:os"
-import { baseDirs } from "./platform/paths"
+import { dataDir } from "./platform/paths"
 
 export interface MemRecord {
   id: string
@@ -87,7 +87,7 @@ export function storeDir(env: Record<string, string | undefined> = process.env a
   if (!named && (env.NODE_ENV === "test" || env.BUN_TEST || env.FABULA_TEST)) {
     return path.join(os.tmpdir(), "fabula-memstore-test")
   }
-  return path.join(baseDirs(env as NodeJS.ProcessEnv).data, "memstore")
+  return path.join(dataDir(env as NodeJS.ProcessEnv), "memstore")
 }
 
 const RAW = "raw.jsonl"

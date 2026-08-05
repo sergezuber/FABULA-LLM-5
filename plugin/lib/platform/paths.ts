@@ -85,9 +85,23 @@ export function baseDirs(env: NodeJS.ProcessEnv = process.env, p: Platform = cur
 // paths this filesystem cannot use, and thirty-five checks failed on stores that had been written under
 // names no one could open. `path.join` is correct here for exactly the reason it was wrong there.
 
+/**
+ * The data directory for a GIVEN environment, resolved for THIS machine.
+ *
+ * Four stores — the memory store, the corpus accumulator, the handle store, the ask ledger — each called
+ * `baseDirs(env)` and so each inherited the platform default, which follows the override. Under a
+ * simulated platform they wrote real files under names built with the other system's separator; on a
+ * POSIX filesystem those are not directories at all but single files whose names contain backslashes, and
+ * eighty-seven of them reached the repository, where they made a Windows checkout of the tree impossible.
+ * One definition, so a store cannot forget which question it is asking.
+ */
+export function dataDir(env: NodeJS.ProcessEnv = process.env): string {
+  return baseDirs(env, hostPlatform()).data
+}
+
 /** `<data>/fabula` — where every plugin store belongs. Extra segments are joined onto it. */
 export function dataPath(...segments: string[]): string {
-  return path.join(baseDirs(process.env, hostPlatform()).data, ...segments)
+  return path.join(dataDir(), ...segments)
 }
 
 /** `<config>/fabula` — where the supervision stores live (permissions, plugin enable-state). */

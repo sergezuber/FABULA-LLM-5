@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.124.0"
+export const FABULA_VERSION = "0.125.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.125.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "В репозиторий попали файлы, чьи имена целиком состояли из чужих разделителей, и на третьей системе это ломало не тесты, а саму выкачку дерева: git отказывает всему дереву целиком и выходит с ошибкой ещё до старта любой проверки — а выглядит это как «тесты упали». Файлы убраны, причина закрыта, и поставлены ворота: трекнутый путь с обратной косой чертой теперь запрещён без исключений. Исключений нет намеренно — такой символ в этом проекте не нужен ничему, поэтому честное правило абсолютное, и его нельзя будет обойти потом по одному удобному пути за раз.",
+        en: "Files whose names consisted entirely of another system's separators reached the repository, and on the third system that broke not the tests but the checkout itself: git refuses the whole tree and exits before any check starts — while reading like «the tests failed». The files are gone, the cause is closed, and a gate is in place: a tracked path containing a backslash is now refused, without exceptions. The absence of exceptions is deliberate — nothing in this project needs that character, so the honest rule is the absolute one, and it cannot later be argued away one convenient path at a time.",
+      },
+      {
+        ru: "Причина же была в том, что четыре хранилища — память, накопитель разбора корпуса, хранилище выгруженных кусков и журнал обращений за помощью — спрашивали, где им лежать, не уточняя, что спрашивают про ЭТУ машину. Под прогоном, который притворяется другой системой, они писали настоящие файлы под чужими именами. Теперь у них одно общее определение, и забыть в нём нечего.",
+        en: "The cause was that four stores — memory, the corpus accumulator, the offloaded-chunk store and the ask ledger — asked where they should live without saying they were asking about THIS machine. Under a run pretending to be another system they wrote real files under the other system's names. They now share one definition, which leaves nothing to forget.",
+      },
+    ],
+  },
   {
     version: "0.124.0",
     date: "2026-08-05",

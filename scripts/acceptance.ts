@@ -23,7 +23,7 @@ import { existsSync, mkdtempSync, rmSync, readFileSync, readdirSync } from "node
 import { tmpdir } from "node:os"
 import * as path from "node:path"
 import { current, exeSuffix } from "../plugin/lib/platform/index"
-import { baseDirs } from "../plugin/lib/platform/paths"
+import { dataDir } from "../plugin/lib/platform/paths"
 import { shellArgv } from "../plugin/lib/platform/shell"
 import { sandboxPlan, shellScope } from "../plugin/lib/platform/sandbox"
 import { planInstall, parseKnownJobs } from "../plugin/lib/platform/scheduler"
@@ -80,7 +80,7 @@ function criterion2() {
 // ── 3 — every plugin loads, and the log says nothing about it ──────────────────────────────────────
 
 function criterion3() {
-  const log = path.join(baseDirs().data, "log", "plugins.log")
+  const log = path.join(dataDir(), "log", "plugins.log")
   if (!existsSync(log)) {
     record(3, "every plugin loads, zero ERROR lines", "SKIP",
       `no diagnostic log at ${log} — start the application once, then re-run`)
@@ -192,7 +192,7 @@ function criterion8() {
 // ── 9 — nothing is left running ───────────────────────────────────────────────────────────────────
 
 function criterion9() {
-  const reg = path.join(baseDirs().data, "children.json")
+  const reg = path.join(dataDir(), "children.json")
   let leftovers = 0
   try {
     const recs = JSON.parse(readFileSync(reg, "utf8")) as Array<{ pid: number }>

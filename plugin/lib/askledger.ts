@@ -1,4 +1,4 @@
-import { baseDirs } from "./platform/paths"
+import { dataDir } from "./platform/paths"
 // W6 — the escalation decision ledger, and the metric that judges it.
 //
 // arXiv:2604.09408 (HiL-Bench) names the thing this harness could not do at all: nothing recorded WHEN
@@ -203,5 +203,5 @@ export function askLedgerPath(env: Record<string, string | undefined> = process.
   if (!named && (env.NODE_ENV === "test" || env.BUN_TEST || env.FABULA_TEST)) {
     return nodePath.join(nodeOs.tmpdir(), "fabula-ask-ledger-test.json")
   }
-  return nodePath.join(baseDirs(env as NodeJS.ProcessEnv).data, "ask-ledger.json")
+  return nodePath.join(dataDir(env as NodeJS.ProcessEnv), "ask-ledger.json")
 }

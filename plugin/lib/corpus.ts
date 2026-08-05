@@ -21,7 +21,7 @@ import { join, basename, isAbsolute, dirname } from "node:path"
 import { languageSteer } from "./langsteer"
 import { tmpdir } from "node:os"
 import { sliceBudgetChars } from "./handle"
-import { baseDirs } from "./platform/paths"
+import { dataDir } from "./platform/paths"
 
 // ── corpus discovery ────────────────────────────────────────────────────────
 
@@ -318,7 +318,7 @@ export function cleanAnswer(text: string): string {
  *  default ~/.local/share/fabula/corpus. */
 export function accumulatorDir(): string {
   if (process.env.FABULA_CORPUS_DIR) return process.env.FABULA_CORPUS_DIR
-  return join(baseDirs().data, "corpus")
+  return join(dataDir(), "corpus")
 }
 
 export interface AccBatch { path: string; name: string; done: boolean; summary: string }

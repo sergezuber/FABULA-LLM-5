@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.113.0"
+export const FABULA_VERSION = "0.114.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.114.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Приёмка перестала зависеть от того, какая оболочка установлена. Она считала плагины конвейером из мира одной системы и звала интерпретатор именем, которого на второй системе нет, — и получила бы «собрано ноль тестов», то есть выдала бы НЕ ЗАПУСКАВШУЮСЯ проверку за пустую. Теперь файлы считает тот же код, что их и читает, а интерпретатор спрашивается тем именем, которое на этой системе есть. И добавлена сборочная задача, которая гоняет всю приёмку на настоящей второй системе: восемь условий из десяти там проверяются машиной, а три из них не имеют права быть пропущенными — если пропущены, задача падает и называет номер. Пропуск не есть прохождение.",
+        en: "Acceptance stopped depending on which shell happens to be installed. It counted plugins with a pipeline from one system's world and called the interpreter by a name the second system does not have — and would have reported \"zero tests collected\", presenting a check that NEVER RAN as an empty one. Files are now counted by the same code that reads them, and the interpreter is asked for by the name this system actually uses. A build job was added that runs the whole acceptance on the real second system: eight of the ten conditions are checked there by machine, and three of them have no right to be skipped — if they are, the job fails and names the number. A skip is not a pass.",
+      },
+    ],
+  },
   {
     version: "0.113.0",
     date: "2026-08-05",

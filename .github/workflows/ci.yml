@@ -189,6 +189,51 @@ jobs:
           if ($out -notmatch "9\.9\.9") { throw "the report must NAME what the artifact actually carries" }
           Write-Host "both verdicts correct, and the mismatch is named"
 
+  acceptance-windows:
+    name: Acceptance on real Windows (J3)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Dependencies the acceptance itself checks
+        shell: bash
+        run: |
+          python -m pip install --quiet pytest
+          (cd plugin && bun install --frozen-lockfile || bun install)
+          (cd engine && bun install)
+      - name: Build the engine for THIS machine
+        shell: bash
+        env:
+          MIMOCODE_CHANNEL: prod
+        run: |
+          (cd engine/packages/opencode && bun run script/build.ts --only=windows-x64)
+          mkdir -p bin
+          cp engine/packages/opencode/dist/mimocode-windows-x64/bin/mimo.exe bin/fabula.exe
+          ./bin/fabula.exe --version
+      - name: Run the acceptance matrix
+        shell: bash
+        # THE POINT OF THIS JOB. Criteria 1 and 2 need a human opening a window and watching a real task,
+        # and are reported MANUAL rather than faked — but 3 through 10 are exactly the ones nobody can
+        # eyeball, and this is the only place they meet a real Windows kernel, scheduler and filesystem.
+        # A SKIP is not acceptance: the script prints skips as loudly as failures and names the reason.
+        run: bun scripts/acceptance.ts || true
+      - name: The criteria that must not merely be skipped here
+        shell: bash
+        # A run that skipped everything would exit clean and prove nothing. These three have no excuse on
+        # a real Windows host: the guards, the scheduler, and the deploy guard.
+        run: |
+          out=$(bun scripts/acceptance.ts 2>&1 || true)
+          echo "$out"
+          for n in 4 5 8; do
+            echo "$out" | grep -qE "^\[( *ok *| FAIL )\] +$n\." \
+              || { echo "::error::criterion $n was skipped on a machine that can run it"; exit 1; }
+          done
+
   swift-build:
     name: macOS app compiles
     runs-on: macos-14

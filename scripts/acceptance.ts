@@ -19,7 +19,7 @@
 // approximated by something easier to automate.
 
 import { spawnSync } from "node:child_process"
-import { existsSync, mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs"
+import { existsSync, mkdtempSync, rmSync, readFileSync, readdirSync } from "node:fs"
 import { tmpdir } from "node:os"
 import * as path from "node:path"
 import { current, exeSuffix } from "../plugin/lib/platform/index"
@@ -88,7 +88,11 @@ function criterion3() {
   }
   const text = readFileSync(log, "utf8")
   const bad = text.split("\n").filter((l) => /ERROR|failed to load/.test(l))
-  const declared = run(shellArgv(`ls "${ROOT}/plugin"/fabula-*.ts | wc -l`)).out.trim()
+  // Counted in JS rather than by a shell pipeline: `ls | wc -l` exists on Windows only inside Git Bash,
+  // and a criterion that silently depends on which shell is installed is a criterion that reports the
+  // environment instead of the product.
+  const declared = readdirSync(path.join(ROOT, "plugin"))
+    .filter((f) => /^fabula-.*\.ts$/.test(f)).length
   record(3, "every plugin loads, zero ERROR lines", bad.length === 0 ? "PASS" : "FAIL",
     bad.length === 0 ? `${declared} plugins declared, no load errors in the log`
                      : `${bad.length} error line(s):\n      ${bad.slice(0, 3).join("\n      ")}`)
@@ -133,8 +137,15 @@ function criterion5() {
 
 async function criterion6() {
   const alive = await answers(`http://localhost:1235/v1/models`)
-  const py = run(shellArgv("python3 -m pytest -q --collect-only 2>&1 | tail -3"), { cwd: path.join(ROOT, "proxy") })
-  const n = Number(/([0-9]+) tests? collected/.exec(py.out)?.[1] ?? 0)
+  // `python3` is the POSIX spelling and does not exist on Windows, where the interpreter is `python`.
+  // Asking for the wrong one would report "0 tests collected" — a suite that never ran, presented as a
+  // suite that is empty.
+  let n = 0
+  for (const exe of PLATFORM === "win32" ? ["python", "py"] : ["python3", "python"]) {
+    const py = run([exe, "-m", "pytest", "-q", "--collect-only"], { cwd: path.join(ROOT, "proxy"), timeout: 300_000 })
+    n = Number(/([0-9]+) tests? collected/.exec(py.out)?.[1] ?? 0)
+    if (n > 0) break
+  }
   const parts = [`:1235 ${alive ? "answers" : "does NOT answer"}`, `${n} adapter tests collected`]
   record(6, "the adapter answers and its suite is real", alive && n >= 40 ? "PASS" : alive ? "FAIL" : "SKIP",
     alive && n >= 40 ? parts.join(", ")
@@ -197,7 +208,7 @@ function criterion9() {
 const BASELINE = { plugin: 2644, proxy: 40 }
 
 function criterion10() {
-  const t = run(shellArgv("bun test 2>&1 | tail -5"), { cwd: path.join(ROOT, "plugin"), timeout: 900_000 })
+  const t = run(["bun", "test"], { cwd: path.join(ROOT, "plugin"), timeout: 900_000 })
   const pass = Number(/([0-9]+) pass/.exec(t.out)?.[1] ?? 0)
   const fail = Number(/([0-9]+) fail/.exec(t.out)?.[1] ?? -1)
   const ok = fail === 0 && pass >= BASELINE.plugin

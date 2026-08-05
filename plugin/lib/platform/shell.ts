@@ -264,10 +264,29 @@ export function writeArgvRecorder(
     fs.chmodSync(scriptPath, 0o755)
     return scriptPath
   }
-  const ps1 = scriptPath.replace(/\.[^.\\/]*$/, "") + ".ps1"
-  fs.writeFileSync(ps1, `$args | Set-Content -LiteralPath ${JSON.stringify(logPath)}\r\nexit 0\r\n`)
+  // ONE program, started directly by the command interpreter — no second interpreter in the chain.
+  //
+  // The first version handed the arguments to PowerShell. That works when every link works, and when it
+  // does not there is nothing to read: the child's output is ignored by design, so a chain that breaks
+  // in the middle is indistinguishable from one that never started. It broke, silently, and cost several
+  // rounds. Batch can do this itself: `%~1` yields one argument with its quoting removed, and `shift`
+  // walks them, so an argument containing spaces survives — which the obvious `for %%A in (%*)` does not.
   const cmd = scriptPath.replace(/\.[^.\\/]*$/, "") + ".cmd"
-  fs.writeFileSync(cmd, `@echo off\r\npowershell -NoProfile -ExecutionPolicy Bypass -File "${ps1}" %*\r\n`)
+  fs.writeFileSync(
+    cmd,
+    [
+      "@echo off",
+      `break > "${logPath}"`,
+      ":fabula_loop",
+      'if "%~1"=="" goto fabula_end',
+      `>> "${logPath}" echo %~1`,
+      "shift",
+      "goto fabula_loop",
+      ":fabula_end",
+      "exit /b 0",
+      "",
+    ].join("\r\n"),
+  )
   return cmd
 }
 

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.155.0"
+export const FABULA_VERSION = "0.156.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.156.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Подставная программа стала ОДНОЙ программой, которую командный истолкователь запускает напрямую. Прежде она передавала аргументы второму истолкователю: работает, пока работает каждое звено, а когда не работает — читать нечего, потому что вывод потомка отбрасывается по замыслу, и цепочка, оборвавшаяся в середине, неотличима от так и не начавшейся. Она обрывалась молча и стоила нескольких заходов. Аргумент с пробелами при этом сохраняется — очевидный способ перебрать их в командном файле как раз этого не умеет.",
+        en: "The stand-in became ONE program, started directly by the command interpreter. It used to hand its arguments to a second interpreter: fine while every link holds, and when one does not there is nothing to read, because the child's output is discarded by design and a chain broken in the middle is indistinguishable from one that never started. It broke silently and cost several rounds. An argument containing spaces survives, which the obvious way of walking them in a command file does not manage.",
+      },
+    ],
+  },
   {
     version: "0.155.0",
     date: "2026-08-05",

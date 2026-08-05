@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { planWindow, DEFAULT_POLICY, type WindowPlanInput } from "./windowplan"
+import { planWindow, DEFAULT_POLICY, type WindowPlanInput , policyFor, noPolicyReason, DEVICE_HEADROOM_FRACTION } from "./windowplan"
 
 const GIB = 1024 ** 3
 // The owner's real machine, so the cases below are the decision this actually makes today.
@@ -194,5 +194,59 @@ describe("planWindow — concurrent slots", () => {
     const plan = planWindow({ ...base, bytesPerToken: MEASURED_PER_TOKEN, slots: 64 })
     expect(plan.fits).toBe(false)
     expect(plan.tokens).toBe(0)
+  })
+})
+
+// ── A POLICY FOR THIS MACHINE ──────────────────────────────────────────────────────────────────────
+//
+// The defect these close: the four numbers were measured on unified memory and correctly refused
+// everywhere else, which left a user with a discrete graphics card without a window plan at all. A
+// product cannot be right for one machine and absent for the next.
+describe("policyFor: the machine gets a policy, or an honest refusal — never someone else's numbers", () => {
+  const GIB = 1024 ** 3
+
+  test("unified memory keeps the numbers that were measured on it", () => {
+    expect(policyFor({ kind: "unified", totalBytes: 48 * GIB, usedBytes: 20 * GIB })).toEqual(DEFAULT_POLICY)
+    // A CPU-only pool has the same shape — one pool the system can reclaim from — so the same numbers mean
+    // the same thing there.
+    expect(policyFor({ kind: "cpu-only", totalBytes: 32 * GIB, usedBytes: 8 * GIB })).toEqual(DEFAULT_POLICY)
+  })
+
+  test("a discrete card gets a plan, and its reserve is MEASURED rather than judged", () => {
+    const p = policyFor({ kind: "discrete-vram", totalBytes: 24 * GIB, usedBytes: 2 * GIB })!
+    expect(p).not.toBeNull()
+    // What is already held, plus the declared headroom — not the 6 GiB judged for somebody's desktop.
+    expect(p.systemReserveBytes).toBe(Math.round(2 * GIB + 24 * GIB * DEVICE_HEADROOM_FRACTION))
+    expect(p.systemReserveBytes).not.toBe(DEFAULT_POLICY.systemReserveBytes)
+  })
+
+  test("a busier card reserves more, because the reserve is a reading and readings move", () => {
+    const idle = policyFor({ kind: "discrete-vram", totalBytes: 24 * GIB, usedBytes: 1 * GIB })!
+    const busy = policyFor({ kind: "discrete-vram", totalBytes: 24 * GIB, usedBytes: 9 * GIB })!
+    expect(busy.systemReserveBytes).toBeGreaterThan(idle.systemReserveBytes)
+  })
+
+  test("an undescribed machine is still refused — absence of a description is not a description", () => {
+    expect(policyFor({ kind: "unknown", totalBytes: 0, usedBytes: 0 })).toBeNull()
+    expect(policyFor({ kind: "discrete-vram", totalBytes: 0, usedBytes: 0 })).toBeNull()
+    expect(noPolicyReason({ kind: "unknown", totalBytes: 0, usedBytes: 0 })).toContain("could not be determined")
+  })
+
+  test("END TO END: a card that used to get nothing now gets a window", () => {
+    // The live shape of the failure: a machine whose cache lives on a 24 GiB card, weights of 8 GiB, and
+    // a per-token cost measured on it. Before, the planner refused before reaching this point.
+    const pool = { kind: "discrete-vram" as const, totalBytes: 24 * GIB, usedBytes: 2 * GIB }
+    const policy = policyFor(pool)!
+    const plan = planWindow({
+      policy,
+      passportTokens: 262144,
+      totalBytes: pool.totalBytes,
+      weightsBytes: 8 * GIB,
+      bytesPerToken: 120_000,
+      residents: [],
+      slots: 1,
+    })
+    expect(plan.tokens).toBeGreaterThan(0)
+    expect(plan.tokens).toBeLessThanOrEqual(262144)
   })
 })

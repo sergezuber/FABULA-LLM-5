@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.148.0"
+export const FABULA_VERSION = "0.149.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,24 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.149.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "🔴 ГЛАВНОЕ: у кого стоит отдельная видеокарта, размер окна модели не планировался ВООБЩЕ. Четыре числа (резерв памяти, доля, пол, квант) были измерены на ОДНОЙ машине с единой памятью, и обвязка честно ОТКАЗЫВАЛАСЬ применять их где-либо ещё — отказ верный, но означал, что продукт верен для одной машины и отсутствует для следующей. Теперь политика ВЫВОДИТСЯ из машины: на единой памяти резерв — это суждение (сколько оставить рабочему столу, который делит тот же пул), а на отдельной карте судить не о чем — оставить нужно то, что УЖЕ занято, и эту цифру сообщает сам драйвер. Одно и то же поле оказывается выбором на одной машине и замером на другой, и оба ответа честны. Отказ остался только там, где род памяти вообще не определён: это не описание машины, а его отсутствие.",
+        en: "🔴 THE HEADLINE: for anyone with a discrete graphics card, the model's window was NOT PLANNED AT ALL. The four numbers — memory reserve, commit share, floor, quantum — were measured on ONE machine with unified memory, and the harness honestly REFUSED to apply them anywhere else. The refusal was correct, and it meant a product right for one machine and absent for the next. The policy is now DERIVED from the machine: on unified memory the reserve is a judgement (how much to leave a desktop sharing the pool), while on a discrete card there is nothing to judge — what must be left is what is ALREADY HELD, and the driver reports that figure. The same field is a choice on one machine and a reading on another, and both are honest. The refusal remains only where the kind of memory could not be established at all: that is not a description of a machine but the absence of one.",
+      },
+      {
+        ru: "Появилась одна сущность «что это за машина»: род и объём памяти, число ядер, ускоритель и его память, возможность изоляции ядром, наличие контейнеров. Читается при вызове, кладётся на диск с ОТПЕЧАТКОМ ЖЕЛЕЗА — прочитанное на другой машине никогда не подаётся за это. Занятая память в отпечаток не входит: иначе каждое чтение обесценивало бы предыдущее.",
+        en: "There is now one entity for «what machine is this»: the kind and size of memory, the core count, the accelerator and its memory, whether the kernel can confine anything, whether containers are available. Read at call time and written to disk with a HARDWARE FINGERPRINT — a reading taken on another machine is never served for this one. Memory in use is deliberately not part of that fingerprint: otherwise every reading would invalidate the last.",
+      },
+      {
+        ru: "И ускоритель спрашивается у КАЖДОГО вендора, а не у одного. Прежде спрашивался один, поэтому любая другая машина отвечала «ускорителя нет» — а «нет» это как раз то, что велит планировщику считать по системной памяти. Машина с картой, которую некому было назвать, планировалась как машина без карты. «Нет» и «не опознан» теперь разные ответы, и оба используются.",
+        en: "And the accelerator is asked of EVERY vendor rather than one. Only one was asked before, so every other machine answered «no accelerator» — and «none» is precisely what tells the planner to size against system memory. A machine holding a card nobody could name was planned for as a machine without one. «None» and «unidentified» are now different answers, and both are used.",
+      },
+    ],
+  },
   {
     version: "0.148.0",
     date: "2026-08-05",

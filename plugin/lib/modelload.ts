@@ -28,7 +28,7 @@ import { homedir } from "node:os"
 // practice is the same as absent.
 import { totalBytes, usedBytes as platformUsedBytes, memoryReading } from "./platform/memory"
 import { bunBinDir, servingBinDir, systemBinDirs, localBinDir, joinPathList, dataPath } from "./platform/paths"
-import { planWindow, DEFAULT_POLICY, policyFitsSource, policyMismatchReason, type Resident, type WindowPlan } from "./windowplan"
+import { planWindow, DEFAULT_POLICY, policyFor, noPolicyReason, type Resident, type WindowPlan } from "./windowplan"
 import { fitCost, fitCostFromSamples, addObservation, safeSecondWindow, marginalCost, MIN_SIGNAL_TOKENS, SAMPLE_DISPERSION_LIMIT, type Observation, type KvSample } from "./kvcost"
 import { resolveModelDir } from "./modeldigest"
 
@@ -792,19 +792,27 @@ export async function ensureLoadedAtPlannedWindow(
       }
     }
 
-    // THE CONSTANTS ARE A JUDGEMENT ABOUT A MACHINE, and they were measured on one kind. On a host whose
-    // cache lives in VRAM the reserve and the commit fraction are about a different pool entirely, so
-    // carrying them across silently is how a window gets sized for hardware that does not exist. Refused
-    // rather than approximated: an invented conservative number is still an invented number, which is the
-    // mistake this file already paid for twice.
-    const source = memoryReading().kind
-    if (!policyFitsSource(source)) {
-      return { acted: false, window: me.loadedWindow, reason: policyMismatchReason(source) }
+    // THE POLICY IS DERIVED FROM THIS MACHINE, never carried across from another. The four numbers were
+    // measured on unified memory, where the reserve is a JUDGEMENT — how much to leave a desktop that
+    // shares the pool. A discrete card has no desktop in its pool and nothing to judge: what must be left
+    // alone is what is ALREADY HELD, and the driver reports that figure. So the same field is a choice on
+    // one machine and a reading on another, and both are honest. Only `unknown` still refuses, because it
+    // is not a description of a machine but the absence of one — and a plan built on it would be a guess
+    // wearing a measurement's clothes. Before this, a user with a graphics card got no plan at all.
+    const reading = memoryReading()
+    const pool = reading.kind === "discrete-vram"
+      ? { kind: reading.kind, totalBytes: reading.total, usedBytes: reading.used }
+      : { kind: reading.kind, totalBytes: totalBytes(), usedBytes: usedBytes() }
+    const policy = policyFor(pool)
+    if (!policy) {
+      return { acted: false, window: me.loadedWindow, reason: noPolicyReason(pool) }
     }
 
     const plan = planWindow({
+      policy,
       passportTokens: me.passport,
-      totalBytes: totalBytes(),
+      // Size against the pool the cache will actually live in — the card's memory where there is one.
+      totalBytes: pool.totalBytes,
       weightsBytes: weights,
       bytesPerToken: cost.bytesPerToken,
       residents: residentsOther(served, modelId),

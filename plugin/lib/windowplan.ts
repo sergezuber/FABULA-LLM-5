@@ -95,6 +95,62 @@ export function policyMismatchReason(kind: MemorySourceKind): string {
     `window for hardware that does not exist. Re-measure them on this machine before trusting a plan.`
 }
 
+
+// ── A POLICY FOR THIS MACHINE, not one machine's policy for everyone ───────────────────────────────
+//
+// `DEFAULT_POLICY` is a judgement about ONE machine and says so, and `policyFitsSource` correctly
+// refuses to apply it elsewhere. Correct — and it left a user with a discrete graphics card without a
+// window plan at all, which is a product that is right for one machine and absent for the next.
+//
+// The distinction that resolves it: on unified memory the reserve is a JUDGEMENT — how much to leave
+// the desktop, unknowable without measuring how that desktop feels. On a discrete card there is no
+// desktop in the pool and nothing to judge: what must be left alone is what is ALREADY HELD, and the
+// driver reports that number. So the same field is a choice on one machine and a reading on another,
+// and the policy is derived rather than tabulated.
+//
+// `unknown` still refuses. It is not a machine description; it is the absence of one, and a plan built
+// on it would be a guess wearing a measurement's clothes.
+
+export interface PolicySource {
+  kind: MemorySourceKind
+  /** Total bytes of the pool being sized. */
+  totalBytes: number
+  /** Bytes of that pool already held by anything at all — the driver's own figure on a device. */
+  usedBytes: number
+}
+
+/** Headroom above what a device already holds, as a share of the pool. Declared, and the only judgement
+ *  in the device branch: a card reporting 23 of 24 GiB free still needs room for the display to grow. */
+export const DEVICE_HEADROOM_FRACTION = 0.1
+
+/**
+ * The policy to size THIS machine with, or null when the machine has not been described.
+ *
+ * Never invents a number for a pool it cannot see. A caller that gets null reports the reason rather
+ * than falling back to somebody else's constants — the failure mode this whole module exists to avoid.
+ */
+export function policyFor(source: PolicySource): WindowPolicy | null {
+  if (source.kind === "unknown") return null
+  if (source.kind === "unified" || source.kind === "cpu-only") return DEFAULT_POLICY
+  // Device memory: the reserve is MEASURED (what is already held) plus declared headroom.
+  if (!Number.isFinite(source.totalBytes) || source.totalBytes <= 0) return null
+  const held = Number.isFinite(source.usedBytes) && source.usedBytes > 0 ? source.usedBytes : 0
+  return {
+    systemReserveBytes: Math.round(held + source.totalBytes * DEVICE_HEADROOM_FRACTION),
+    commitFraction: DEFAULT_POLICY.commitFraction,
+    floorTokens: DEFAULT_POLICY.floorTokens,
+    quantumTokens: DEFAULT_POLICY.quantumTokens,
+  }
+}
+
+/** Why no policy could be derived, in a sentence a human can act on. */
+export function noPolicyReason(source: PolicySource): string {
+  if (source.kind === "unknown") {
+    return "the memory source could not be determined, so nothing here describes a pool to size against"
+  }
+  return `${source.kind} memory was reported with a total of ${source.totalBytes} bytes, which is not a pool that can be sized`
+}
+
 /** Something else already holding memory: another model, an embedding model, anything loaded.
  *
  *  `bytes: 0` means UNKNOWN, not free — see the refusal in planWindow. A resident is by definition

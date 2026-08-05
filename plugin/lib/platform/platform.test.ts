@@ -8,6 +8,7 @@
 // hand-written copy of the rules, that half goes red — which is the only thing that can catch it.
 
 import { test, expect, describe } from "bun:test"
+import { hardlineTargets } from "./persistence"
 import { policyFitsSource, policyMismatchReason, DEFAULT_POLICY_MEASURED_ON } from "../windowplan"
 import * as os from "node:os"
 import * as fs from "node:fs"
@@ -15,7 +16,7 @@ import * as path from "node:path"
 import { current, current as currentPlatform, isPosix, pathListSeparator, exeSuffix, PLATFORMS } from "./index"
 import { baseDirs, homeDir, goBinDirs, systemBinDirs, appendToPath, joinPathList, splitPathList } from "./paths"
 import { shellArgv, shellBin, whichBin, whichFirst, writeMarkerScript } from "./shell"
-import { hardlineTargets, hardlineKernelRegex, credentialReadDirs, persistenceCommands } from "./persistence"
+import { hardlineTargets, hardlineKernelRegex, credentialReadDirs, persistenceCommands, hardlineTargets} from "./persistence"
 import { usedBytes, totalBytes, memoryReading, vramBytes, vramBytes, memoryReading} from "./memory"
 import { checkWritePath } from "../pathguard"
 import { buildSeatbeltProfile, hardlineSandboxConfig, defaultSandboxConfig, sandboxArgv } from "../sandbox"
@@ -436,5 +437,56 @@ describe("a window policy is not portable just because it is a number", () => {
     // two-definitions shape the whole seam exists to remove.
     expect(DEFAULT_POLICY_MEASURED_ON).toBe("unified")
     expect(policyFitsSource("discrete-vram", "discrete-vram")).toBe(true)
+  })
+})
+
+// ── The separator is not a detail: it decided whether an SSH backdoor was refused ───────────────────
+//
+// FOUND by simulating the platform FAITHFULLY — flipping `FABULA_PLATFORM` *and* giving it a Windows
+// home, so the rules are built from the strings that platform really produces. The POSIX targets apply on
+// Windows (it reaches them through the required POSIX shell and through WSL), but they were joined with
+// the POSIX joiner onto a Windows home, producing the mongrel `C:\Users\x/.ssh/authorized_keys` that
+// matches nothing — and the generic rule was written with `/` alone. A write to
+// `C:\Users\x\.ssh\authorized_keys` was ALLOWED: the first thing this list exists to refuse, open on one
+// platform, with every macOS and Linux check green.
+//
+// These cases are pure string logic, so they run on every host and would have caught it from the start.
+describe("a rule written in one dialect must still refuse the other spelling", () => {
+  const WIN_HOME = String.raw`C:\Users\runneradmin`
+  const winEnv = { HOME: WIN_HOME, USERPROFILE: WIN_HOME }
+  const codeFor = (p: string) => {
+    for (const t of hardlineTargets(winEnv as any, "win32")) {
+      for (const m of t.match) {
+        if (typeof m === "string" ? (p === m || p.startsWith(m)) : m.test(p)) return t.code
+      }
+    }
+    return "allow"
+  }
+
+  test("the SSH backdoor is refused in BOTH spellings", () => {
+    expect(codeFor(WIN_HOME + String.raw`\.ssh\authorized_keys`)).toBe("ssh_authorized_keys")
+    expect(codeFor(WIN_HOME + "/.ssh/authorized_keys")).toBe("ssh_authorized_keys")
+    // Someone else's key file matches the generic rule rather than the home-anchored one.
+    expect(codeFor(String.raw`C:\Users\other\.ssh\id_rsa`)).toBe("ssh_key")
+    expect(codeFor("C:/Users/other/.ssh/id_ed25519")).toBe("ssh_key")
+  })
+
+  test("the POSIX system files stay refused there — they are reachable through the shell and WSL", () => {
+    expect(codeFor("/etc/sudoers")).toBe("sudoers")
+    expect(codeFor("/etc/passwd")).toBe("passwd")
+    expect(codeFor("/etc/crontab")).toBe("cron")
+    expect(codeFor(String.raw`\etc\crontab`)).toBe("cron")
+  })
+
+  test("Windows' own persistence is refused, in its own spelling", () => {
+    expect(codeFor(WIN_HOME + String.raw`\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\e.lnk`))
+      .toBe("startup_folder")
+    expect(codeFor(String.raw`C:\Windows\System32\Tasks\evil`)).toBe("scheduled_task")
+  })
+
+  test("and ordinary work is still ordinary — the controls that keep this from refusing everything", () => {
+    expect(codeFor(WIN_HOME + String.raw`\proj\src\index.ts`)).toBe("allow")
+    expect(codeFor("C:/proj/README.md")).toBe("allow")
+    expect(codeFor(WIN_HOME + String.raw`\proj\.env`)).toBe("allow")
   })
 })

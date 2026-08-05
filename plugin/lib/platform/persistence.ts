@@ -47,19 +47,30 @@ export interface HardlineTarget {
   kernel: string[]
 }
 
-/** Targets shared by every POSIX host: SSH, system auth, cron. */
+/**
+ * Targets shared by every POSIX host: SSH, system auth, cron.
+ *
+ * These apply on Windows too (that platform reaches them through the POSIX shell and through WSL), so the
+ * matchers must accept BOTH spellings of a separator. MEASURED with a faithful simulation — the platform
+ * flipped AND the home set to a Windows one: `posix.join` on a Windows home produced the mongrel
+ * `C:\Users\x/.ssh/authorized_keys`, which matches nothing, and the generic rule was written with `/`
+ * only. So a write to `C:\Users\x\.ssh\authorized_keys` — an SSH backdoor, the very first thing this
+ * list exists to refuse — was ALLOWED there. Not a test artefact: a live hole on one platform.
+ */
 function posixTargets(home: string): HardlineTarget[] {
+  const anySep = (p: string) => new RegExp(p.replace(/\//g, "[\\\\/]"))
   return [
     {
       code: "ssh_authorized_keys",
       reason: "writing SSH authorized_keys installs a login backdoor.",
-      match: [posix.join(home, ".ssh", "authorized_keys")],
+      // The home-anchored form in both dialects: whichever spelling the caller used, it is this file.
+      match: [posix.join(home, ".ssh", "authorized_keys"), win.join(home, ".ssh", "authorized_keys")],
       kernel: ["authorized_keys"],
     },
     {
       code: "ssh_key",
       reason: "writing into ~/.ssh keys/authorized_keys is an SSH backdoor vector.",
-      match: [/\/\.ssh\/(authorized_keys|id_[a-z0-9]+)$/],
+      match: [anySep("/\\.ssh/(authorized_keys|id_[a-z0-9]+)$")],
       kernel: ["/\\.ssh/id_"],
     },
     {
@@ -89,7 +100,7 @@ function posixTargets(home: string): HardlineTarget[] {
     {
       code: "cron",
       reason: "writing cron entries installs persistence.",
-      match: [/\/cron(tab|\.d)\b|\/var\/(at|spool\/cron)\//],
+      match: [anySep("/cron(tab|\\.d)\\b|/var/(at|spool/cron)/")],
       kernel: ["/cron(tab|\\.d)", "/var/at/", "/var/spool/cron/"],
     },
   ]

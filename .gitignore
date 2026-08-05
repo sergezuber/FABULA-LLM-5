@@ -71,3 +71,6 @@ private-bench/
 # Rust build artifacts of the cross-platform shell (hundreds of MB, reproducible from source)
 shell/target/
 shell/gen/
+
+# A platform simulation that also moves HOME makes tools write to a literal `C:\...` name here.
+plugin/C:*

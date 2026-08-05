@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.120.0"
+export const FABULA_VERSION = "0.121.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.121.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "На третьей системе путь к файлу SSH-ключей НЕ отказывался к записи — то есть первое, ради чего список запретов и существует, там было открыто, при полностью зелёных проверках на двух других системах. Причина в разделителе: правила писались с одним видом косой черты, а домашний каталог там пишется с другим, и склейка давала гибрид, не совпадающий ни с чем. Теперь каждое такое правило принимает оба написания, а домашняя привязка строится в обоих. Найдено приёмом, которого раньше не пробовали: система подменяется не только по имени, но и вместе с формой домашнего каталога — тогда правила строятся из тех самых строк, которые эта система и производит. Проверки на это — чистая работа со строками, поэтому идут на любой машине и поймали бы дефект с самого начала. Обратная проверка сделана: вернуть одно написание — и проверка краснеет.",
+        en: "On the third system the path to the SSH key file was NOT refused for writing — the first thing the deny list exists for was open there, with the checks on the other two systems entirely green. The cause is the separator: the rules were written with one kind of slash while the home directory there is written with the other, and joining them produced a hybrid matching nothing. Every such rule now accepts both spellings, and the home-anchored one is built in both. Found with a technique not tried before: the system is substituted not only by name but together with the shape of its home directory, so the rules are built from the very strings that system produces. The checks for this are pure string work, so they run on any machine and would have caught it from the start. The reverse check was done: restore a single spelling and a check goes red.",
+      },
+    ],
+  },
   {
     version: "0.120.0",
     date: "2026-08-05",

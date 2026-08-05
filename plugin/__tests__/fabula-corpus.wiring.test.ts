@@ -126,12 +126,21 @@ async function recorderRuns(): Promise<boolean> {
   try {
     const log = join(d, "probe.txt")
     const rec = writeArgvRecorder(join(d, "probe.sh"), log)
+    // THE SAME SPAWN THE PLUGIN USES, argument for argument. A probe that starts the stand-in some other
+    // way answers a different question — and did: it reported the recorder startable while the plugin's
+    // own launch produced nothing, with no error either way, so the check kept reporting the mechanism
+    // dead when what could not run was the instrument under the conditions that matter.
     const viaShell = /\.(cmd|bat)$/i.test(rec)
     const q = (a: string) => `"${String(a).replace(/"/g, '""')}"`
     const child = viaShell
-      ? spawn([rec, "hello"].map(q).join(" "), [], { stdio: "ignore", shell: true })
-      : spawn(rec, ["hello"], { stdio: "ignore" })
+      ? spawn(process.env.COMSPEC || "cmd.exe", ["/d", "/s", "/c", `"${[rec, "hello"].map(q).join(" ")}"`], {
+          stdio: "ignore",
+          env: { ...process.env },
+          windowsVerbatimArguments: true,
+        } as any)
+      : spawn(rec, ["hello"], { detached: true, stdio: "ignore", env: { ...process.env } })
     child.on("error", () => {})
+    try { child.unref() } catch {}
     // Short on purpose: this only asks whether such a program starts AT ALL, and it runs inside a
     // setup hook that has its own ceiling. A probe that can outlast the hook it lives in reports
     // the hook as broken instead of answering its question.

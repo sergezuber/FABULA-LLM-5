@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.156.0"
+export const FABULA_VERSION = "0.157.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.157.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Проба «заводится ли здесь мой прибор» запускает подставную программу ТЕМ ЖЕ способом, каким её запускает сам механизм, — довод за доводом. Проба, пускающая иначе, отвечает на другой вопрос: она сообщала, что заглушка запускается, тогда как боевой запуск не давал ничего, причём без ошибки в обоих случаях. Проверка из-за этого раз за разом докладывала о мёртвом механизме, хотя не мог выполниться прибор — в тех условиях, которые и важны.",
+        en: "The probe asking «does my instrument start here» now starts the stand-in THE SAME WAY the mechanism itself starts it, argument for argument. A probe that starts it some other way answers a different question: it reported the stand-in startable while the real launch produced nothing, and neither raised an error. The check therefore kept reporting a dead mechanism when what could not run was the instrument, under the conditions that actually matter.",
+      },
+    ],
+  },
   {
     version: "0.156.0",
     date: "2026-08-05",

@@ -17,6 +17,15 @@
 
 import * as path from "node:path"
 import { current, type Platform } from "./index"
+
+// A macOS path is a POSIX path no matter which machine computes it, and a Windows path is a Windows path
+// no matter which machine computes it. `path.join` answers in the HOST's shape — so on a Windows runner
+// this module produced `\home\u\.ssh` for the Linux target list and every rule written with `/` stopped
+// matching. Sixty-five checks went red there and none anywhere else. The renderers below therefore name
+// the dialect they are rendering FOR; `path` itself is kept only where the answer really is about the
+// machine this code is running on.
+const posix = path.posix
+const win = path.win32
 import { homeDir } from "./paths"
 
 export interface HardlineTarget {
@@ -44,7 +53,7 @@ function posixTargets(home: string): HardlineTarget[] {
     {
       code: "ssh_authorized_keys",
       reason: "writing SSH authorized_keys installs a login backdoor.",
-      match: [path.join(home, ".ssh", "authorized_keys")],
+      match: [posix.join(home, ".ssh", "authorized_keys")],
       kernel: ["authorized_keys"],
     },
     {
@@ -98,7 +107,7 @@ function darwinTargets(home: string): HardlineTarget[] {
     {
       code: "launchagent",
       reason: "writing LaunchAgents installs persistence.",
-      match: [path.join(home, "Library", "LaunchAgents")],
+      match: [posix.join(home, "Library", "LaunchAgents")],
       kernel: ["/LaunchAgents/"],
     },
   ]
@@ -116,7 +125,7 @@ function linuxTargets(home: string): HardlineTarget[] {
     {
       code: "systemd_user",
       reason: "writing a user systemd unit installs persistence.",
-      match: [path.join(home, ".config", "systemd", "user"), /\/\.config\/systemd\/user\//],
+      match: [posix.join(home, ".config", "systemd", "user"), /\/\.config\/systemd\/user\//],
       kernel: ["/\\.config/systemd/user/"],
     },
     {
@@ -128,7 +137,7 @@ function linuxTargets(home: string): HardlineTarget[] {
     {
       code: "autostart",
       reason: "writing an XDG autostart entry starts a program at every login.",
-      match: [path.join(home, ".config", "autostart"), /\/\.config\/autostart\//],
+      match: [posix.join(home, ".config", "autostart"), /\/\.config\/autostart\//],
       kernel: ["/\\.config/autostart/"],
     },
     {
@@ -179,7 +188,9 @@ function win32Targets(home: string): HardlineTarget[] {
     {
       code: "ssh_authorized_keys",
       reason: "writing SSH authorized_keys installs a login backdoor.",
-      match: [path.join(home, ".ssh", "authorized_keys")],
+      // Both spellings: a Windows machine reaches this file as `C:\\Users\\u\\.ssh\\...` and, through the
+      // POSIX shell this harness requires, as `/c/Users/u/.ssh/...`.
+      match: [win.join(home, ".ssh", "authorized_keys"), posix.join(home, ".ssh", "authorized_keys")],
       kernel: [],
     },
     {
@@ -266,7 +277,7 @@ export function hardlineKernelRegex(
  * like a profile that works.
  */
 export function credentialReadDirs(home: string): string[] {
-  return [".ssh", ".aws", ".gnupg", ".config/gh", ".netrc"].map((p) => path.join(home, p))
+  return [".ssh", ".aws", ".gnupg", ".config/gh", ".netrc"].map((p) => posix.join(home, p))
 }
 
 /** Secret-shaped filenames whose WRITES are denied to untrusted code, as kernel regex fragments. */

@@ -22,6 +22,13 @@ import * as path from "node:path"
 import { FabulaTools } from "../fabula-tools"
 import { scanCode, scrubEnv } from "../lib/codeguard"
 
+import { current as currentPlatform } from "../lib/platform/index"
+// Gated on the SAME source of truth the code follows. These read a HOST fact (is Seatbelt here?)
+// while the code under test reads `current()`, so flipping the platform made the gate say yes and
+// the code say no — a disagreement that is impossible on a real machine and guaranteed under a
+// simulation. Both now ask the same question.
+const IS_DARWIN_HOST = currentPlatform() === "darwin"
+
 let T: any
 const baseCtx = () => ({ sessionID: "corner-exec", directory: os.tmpdir(), abort: new AbortController().signal } as any)
 const out = (r: any) => (typeof r === "string" ? r : r.output)
@@ -506,12 +513,17 @@ describe("execute_code runs under the kernel profile when Docker is unavailable"
   const ctx = { directory: os.tmpdir(), sessionID: "s" }
   const write = (target: string) => `require("fs").writeFileSync(${JSON.stringify(target)}, "x"); console.log("WROTE")`
 
-  test.if(!dockerUp && existsSync("/usr/bin/sandbox-exec"))("a persistence target cannot be written even from inside a program", async () => {
+  test.if(!dockerUp && IS_DARWIN_HOST && existsSync("/usr/bin/sandbox-exec"))("a persistence target cannot be written even from inside a program", async () => {
     const h = await hooks()
     for (const target of [
       path.join(os.homedir(), "Library/LaunchAgents/zz-fabula-probe.plist"),
       path.join(os.homedir(), ".ssh/zz-fabula-probe-authorized_keys"),
     ]) {
+      // CLEARED BEFORE, not only after. The assertion is "this file does not exist", so ONE leftover from
+      // any earlier run — a crash, or a pass when the container backend happened to be up — made every
+      // later run fail on a guard that was working. Cleaning afterwards cannot fix a state that existed
+      // beforehand.
+      rmSync(target, { force: true })
       const r: any = await h.tool.execute_code.execute({ language: "node", code: write(target) }, ctx)
       expect(`${target}:${existsSync(target)}`).toBe(`${target}:false`)
       expect(r?.metadata?.confined).toBe(true)
@@ -520,7 +532,7 @@ describe("execute_code runs under the kernel profile when Docker is unavailable"
   })
 
   // The control is what keeps this from passing on a profile that simply denies everything.
-  test.if(!dockerUp && existsSync("/usr/bin/sandbox-exec"))("ordinary work is untouched", async () => {
+  test.if(!dockerUp && IS_DARWIN_HOST && existsSync("/usr/bin/sandbox-exec"))("ordinary work is untouched", async () => {
     const h = await hooks()
     const target = path.join(os.tmpdir(), `zz-fabula-ok-${process.pid}.txt`)
     try {

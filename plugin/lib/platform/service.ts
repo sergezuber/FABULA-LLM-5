@@ -13,6 +13,13 @@
 // to smuggle environment in, and `.env` stays the single place the documentation can point at.
 
 import * as path from "node:path"
+
+// Rendered in the TARGET platform's dialect, not the host's: `path.join` answers in the shape of the
+// machine running this code, so a Windows host produced backslash paths for the POSIX platforms and
+// every rule written with `/` stopped matching. `path` itself stays only where the question really is
+// about this machine.
+const posix = path.posix
+const win = path.win32
 import { current, type Platform } from "./index"
 import { homeDir } from "./paths"
 
@@ -43,8 +50,8 @@ function xml(s: string): string {
 
 export function serviceFile(p: Platform = current(), env: NodeJS.ProcessEnv = process.env): string | null {
   const home = homeDir(env)
-  if (p === "darwin") return path.join(home, "Library", "LaunchAgents", `${ADAPTER_LABEL}.plist`)
-  if (p === "linux") return path.join(home, ".config", "systemd", "user", "fabula-adapter.service")
+  if (p === "darwin") return posix.join(home, "Library", "LaunchAgents", `${ADAPTER_LABEL}.plist`)
+  if (p === "linux") return posix.join(home, ".config", "systemd", "user", "fabula-adapter.service")
   return null
 }
 

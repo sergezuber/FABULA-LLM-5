@@ -14,6 +14,13 @@ import path from "node:path"
 import { checkCommand, normalizeForMatch, blockedMessage } from "../lib/cmdguard"
 import { FabulaTools } from "../fabula-tools"
 
+import { current as currentPlatform } from "../lib/platform/index"
+// Gated on the SAME source of truth the code follows. These read a HOST fact (is Seatbelt here?)
+// while the code under test reads `current()`, so flipping the platform made the gate say yes and
+// the code say no — a disagreement that is impossible on a real machine and guaranteed under a
+// simulation. Both now ask the same question.
+const IS_DARWIN_HOST = currentPlatform() === "darwin"
+
 // ── helpers ────────────────────────────────────────────────────────────────
 const B = (c: string) => checkCommand(c).blocked
 const CODE = (c: string) => checkCommand(c).code
@@ -517,7 +524,7 @@ describe("the kernel enforces what the shell rules declare", () => {
   const hasSbx = existsSync("/usr/bin/sandbox-exec")
   const target = path.join(os.homedir(), "Library", "LaunchAgents", "zz-fabula-kernel-probe.plist")
 
-  test.if(hasSbx)("no spelling of a guarded write lands on disk", async () => {
+  test.if(hasSbx && IS_DARWIN_HOST)("no spelling of a guarded write lands on disk", async () => {
     const h: any = await (FabulaTools as any)({ directory: os.tmpdir() })
     const ctx = { directory: os.tmpdir(), sessionID: "s" }
     const spellings = [
@@ -535,7 +542,7 @@ describe("the kernel enforces what the shell rules declare", () => {
     }
   })
 
-  test.if(hasSbx)("ordinary work is untouched — including writing a .env in your own project", async () => {
+  test.if(hasSbx && IS_DARWIN_HOST)("ordinary work is untouched — including writing a .env in your own project", async () => {
     const h: any = await (FabulaTools as any)({ directory: os.tmpdir() })
     const d = mkdtempSync(path.join(os.tmpdir(), "kernel-floor-"))
     const ctx = { directory: d, sessionID: "s" }

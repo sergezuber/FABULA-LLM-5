@@ -16,6 +16,13 @@ import { current, type Platform } from "./index"
 import { homeDir } from "./paths"
 import * as path from "node:path"
 
+// Rendered in the TARGET platform's dialect, not the host's: `path.join` answers in the shape of the
+// machine running this code, so a Windows host produced backslash paths for the POSIX platforms and
+// every rule written with `/` stopped matching. `path` itself stays only where the question really is
+// about this machine.
+const posix = path.posix
+const win = path.win32
+
 export const LABEL_PREFIX = "com.fabula.schedule."
 
 /** A daily job, described once, independent of who will run it. */
@@ -50,8 +57,8 @@ export function jobLabel(id: string): string {
 /** Directory holding job definition files, or null for a backend that keeps none. */
 export function jobDir(p: Platform = current(), env: NodeJS.ProcessEnv = process.env): string | null {
   const home = homeDir(env)
-  if (p === "darwin") return path.join(home, "Library", "LaunchAgents")
-  if (p === "linux") return path.join(home, ".config", "systemd", "user")
+  if (p === "darwin") return posix.join(home, "Library", "LaunchAgents")
+  if (p === "linux") return posix.join(home, ".config", "systemd", "user")
   return null // Task Scheduler owns its own store; nothing of ours belongs on disk
 }
 
@@ -60,8 +67,8 @@ export function jobFile(id: string, p: Platform = current(), env: NodeJS.Process
   const dir = jobDir(p, env)
   if (!dir) return null
   return p === "darwin"
-    ? path.join(dir, `${jobLabel(id)}.plist`)
-    : path.join(dir, `${jobLabel(id)}.timer`)
+    ? posix.join(dir, `${jobLabel(id)}.plist`)
+    : posix.join(dir, `${jobLabel(id)}.timer`)
 }
 
 /** Escape for XML text content (launchd plists). */

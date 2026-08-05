@@ -31,6 +31,11 @@ import {
   type GoFinding,
 } from "./gofloor"
 import { current as currentPlatform } from "./platform/index"
+
+import { isPosix, current as currentPlatform } from "./platform/index"
+// These assert the POSIX LAYOUT — /usr/local/go/bin, a `:`-separated PATH. On Windows the same
+// code answers with the Windows layout, which is correct there and simply a different claim.
+const IS_POSIX = isPosix(currentPlatform())
 const IS_MAC = currentPlatform() === "darwin"
 
 const ROOT = "/repo"
@@ -573,7 +578,7 @@ describe("whereOf — a fact with no location is not a broken parser", () => {
   })
 })
 
-describe("goToolPath — an app launched from Finder inherits no shell PATH", () => {
+describe.if(IS_POSIX)("goToolPath — an app launched from Finder inherits no shell PATH", () => {
   // The repo's macOS host prepends ~/.bun/bin, /opt/homebrew/bin, /usr/local/bin and ~/.local/bin —
   // and NEITHER of the two places Go tools live. Without this the floor reports five of six tools
   // missing inside the real application while every terminal test passes.

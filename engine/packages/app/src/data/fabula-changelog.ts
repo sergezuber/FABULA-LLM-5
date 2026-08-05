@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.118.0"
+export const FABULA_VERSION = "0.119.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.119.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Слой, отвечающий за различия систем, строил пути в форме той машины, на которой считал, а не той, для которой считал. Путь одной системы остаётся её путём, кто бы его ни вычислял, — но встроенная функция отвечает в форме хозяина, поэтому на третьей системе список запрещённых для записи мест получался с чужими разделителями, и ни одно правило, написанное в привычной форме, больше не совпадало: шестьдесят пять проверок краснели там и ни одной здесь. Теперь каждый построитель называет, для какой системы он строит. Заодно приведены к одному источнику истины условия самих проверок: они спрашивали свойство ХОЗЯИНА, пока проверяемый код спрашивал выбранную систему, — расхождение, невозможное на настоящей машине и неизбежное при подмене. И проверка, утверждавшая «этого файла нет», убирала его ПОСЛЕ утверждения: один остаток от давнего прогона валил все последующие, хотя защита работала.",
+        en: "The layer that handles differences between systems built paths in the shape of the machine doing the computing rather than the one being computed for. A path belonging to one system stays that system's path no matter who works it out — but the built-in function answers in the host's shape, so on the third system the list of forbidden write locations came out with foreign separators and not one rule written in the usual shape matched any more: sixty-five checks went red there and none here. Each builder now names the system it is building for. The conditions on the checks themselves were brought to one source of truth as well: they asked a property of the HOST while the code under test asked the selected system — a disagreement impossible on a real machine and unavoidable under substitution. And a check asserting \"this file does not exist\" removed it AFTER asserting: one leftover from a long-past run failed every later one, while the protection itself was working.",
+      },
+    ],
+  },
   {
     version: "0.118.0",
     date: "2026-08-05",

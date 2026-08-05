@@ -1,9 +1,14 @@
 import { test, expect } from "bun:test"
 import { whichAny, resolveVision, visionBody, mimeFromPath, extractVision, whisperPythonCandidates } from "./multimodal"
 
+import { isPosix, current as currentPlatform } from "./platform/index"
+// These assert the POSIX LAYOUT — /usr/local/go/bin, a `:`-separated PATH. On Windows the same
+// code answers with the Windows layout, which is correct there and simply a different claim.
+const IS_POSIX = isPosix(currentPlatform())
+
 // 20s budget: the two `which` spawns are instant, but a loaded CI runner can stall process spawn
 // past bun's 5s default (seen live); whichAny's own 3s per-candidate timeout still bounds a hang.
-test("whichAny finds a present binary, null for absent", async () => {
+test.if(IS_POSIX)("whichAny finds a present binary, null for absent", async () => {
   expect(await whichAny(["definitely-not-a-real-bin-xyz", "ls"])).toContain("ls")
   expect(await whichAny(["definitely-not-a-real-bin-xyz"])).toBe(null)
 }, 20000)

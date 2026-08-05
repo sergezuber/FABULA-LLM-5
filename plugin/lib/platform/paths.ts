@@ -21,6 +21,13 @@ import * as path from "node:path"
 import * as os from "node:os"
 import { current, exeSuffix, pathListSeparator, type Platform } from "./index"
 
+// Rendered in the TARGET platform's dialect, not the host's: `path.join` answers in the shape of the
+// machine running this code, so a Windows host produced backslash paths for the POSIX platforms and
+// every rule written with `/` stopped matching. `path` itself stays only where the question really is
+// about this machine.
+const posix = path.posix
+const win = path.win32
+
 const APP = "fabula"
 
 /** The user's home. Env first — Bun caches `os.homedir()` at startup, and tests move HOME. */
@@ -139,7 +146,8 @@ export function goBinDirs(env: NodeJS.ProcessEnv = process.env, p: Platform = cu
   const home = homeDir(env)
   const out: string[] = []
   if (env.GOBIN) out.push(env.GOBIN)
-  out.push(env.GOPATH ? path.join(env.GOPATH, "bin") : path.join(home, "go", "bin"))
+  const j = (p === "win32" ? win : posix).join
+  out.push(env.GOPATH ? j(env.GOPATH, "bin") : j(home, "go", "bin"))
   out.push(p === "win32" ? "C:\\Program Files\\Go\\bin" : "/usr/local/go/bin")
   return out
 }

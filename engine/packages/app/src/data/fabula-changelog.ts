@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.164.0"
+export const FABULA_VERSION = "0.165.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.165.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Продуктовое утверждение проверяется отдельно от прибора, которым его проверяли. Само утверждение простое: чтение файла за файлом из одного каталога, сверх того, что помещается в окно, ЕСТЬ разбор набора, — и вердикт обязан это сказать и назвать тот каталог, который дали задаче, а не папку, в которую ход забрёл. Раньше это можно было увидеть только по следу, оставленному подставной программой, и там, где она не заводилась, живой и верно работающий механизм читался как мёртвый. Теперь решение проверяется из того же чтения, что делает и сам механизм, — везде, на любой машине.",
+        en: "The product claim is now checked separately from the instrument used to check it. The claim is simple: reading file after file out of one directory, past what the window holds, IS a corpus pass — and the verdict must say so and must name the directory the task was given rather than a folder the turn wandered into. Until now that could only be seen through the trace a stand-in program left, so wherever that program would not start, a live and correctly working mechanism read as a dead one. The decision is now checked from the same reading the mechanism makes, on any machine.",
+      },
+    ],
+  },
   {
     version: "0.164.0",
     date: "2026-08-06",

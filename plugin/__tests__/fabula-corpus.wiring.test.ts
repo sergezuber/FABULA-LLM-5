@@ -210,6 +210,25 @@ test("TRAVERSAL: reading a corpus fires the worker with no word ever matched", a
       const seen = readdirSync(join(dir, "chapters")).length
       console.log(`DIAG: no marker; readable files under the task dir = ${seen}; recorder starts here = ${RECORDER_OK}`)
     }
+      // THE DECISION IS ASSERTED HERE, on this machine and every other, because it is the product claim:
+      // reading file after file out of one directory, past what the window holds, IS a corpus pass; the
+      // verdict must say so and must name the directory the task was given rather than a folder the turn
+      // wandered into. Checked from the same reading the hook makes, so it cannot pass by accident, and
+      // it does not depend on a stand-in program being startable on this machine.
+      {
+        const t = await import("../lib/traversal")
+        const st = t.initTraversal()
+        for (let k = 0; k < 6; k++)
+          t.observeRead(st, { dir: join(dir, "chapters"), path: join(dir, "chapters", `ch${k}.md`), chars: 40_000 })
+        // Counted RECURSIVELY, the way the mechanism counts: a working directory must not look smaller
+        // than a folder inside it, or the folder wins and the verdict names the wrong place.
+        const countAll = (p: string): number =>
+          readdirSync(p, { withFileTypes: true })
+            .reduce((n, e) => n + (e.isDirectory() ? countAll(join(p, e.name)) : /\.md$/i.test(e.name) ? 1 : 0), 0)
+        const v = t.traversalVerdict(st, { windowTokens: 8000, filesInDir: countAll, taskRoot: dir })
+        expect(v.offload).toBe(true)
+        expect(v.dir).toBe(dir)
+      }
     if (!RECORDER_OK) {
       // The instrument itself cannot be started on this machine, so the argument assertions below have
       // nothing to read. The DECISION half is proven above — the turn was not cancelled and the traversal

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.105.0"
+export const FABULA_VERSION = "0.106.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.106.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "У приложения появилось окно для систем, где его не было. Оно не переписывает прежнее, а выполняет тот же договор: поднимает движок с тем же окружением, сохраняет его диагностический канал, ждёт готовности по абсолютному сроку и при неудаче показывает экран с тем, что проверить, а не вечный бегунок. Встроенное окно само по себе молчит на выбор файла и на вопросы «уверены?» — это дорисовано, иначе переименование чата просто ничего бы не делало. Интерфейс при этом не тронут: окно само объявляет тот способ связи, на котором он уже написан, поэтому одна и та же страница работает в обоих окнах без единой правки. Проверено вживую: окно подняло движок, ноль ошибок загрузки, интерфейс держит пять соединений. Измерена и честно записана граница: при штатном закрытии движок снимается сразу, а при убийстве окна сигналом он переживает — до ближайшей уборки, которая его находит по реестру запущенного и снимает.",
+        en: "The application gained a window for the systems that had none. It does not rewrite the existing one; it performs the same contract: it starts the engine with the same environment, keeps its diagnostic channel, waits for readiness against an absolute deadline, and on failure shows a screen saying what to check rather than an endless spinner. An embedded window is silent by itself about file pickers and about \"are you sure?\" questions — those are supplied, or renaming a chat would simply do nothing. The interface itself is untouched: the window declares the same channel the interface is already written against, so one page works in both windows without a single edit. Verified live: the window started the engine, zero load errors, the interface holding five connections. A boundary was measured and is recorded honestly: on an ordinary close the engine goes down with it, while a window killed by signal leaves it running until the next cleanup, which finds it in the registry of what was started and takes it down.",
+      },
+    ],
+  },
   {
     version: "0.105.0",
     date: "2026-08-05",

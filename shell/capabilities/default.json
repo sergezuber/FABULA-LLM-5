@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "What the FABULA window is allowed to do. Deliberately narrow: the shell talks to its own engine on loopback and to the local filesystem through named dialogs, and nothing here opens a path to anywhere else.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-set-title",
+    "core:webview:allow-internal-toggle-devtools",
+    "dialog:allow-open",
+    "dialog:allow-message",
+    "notification:default"
+  ]
+}

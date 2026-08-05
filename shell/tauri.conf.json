@@ -1,0 +1,23 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "FABULA",
+  "version": "0.106.0",
+  "identifier": "com.sistemma.fabula-llm-5",
+  "build": { "frontendDist": "../shell/ui" },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [],
+    "security": {
+      "csp": null,
+      "capabilities": ["default"]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["deb", "appimage", "nsis", "msi"],
+    "icon": ["icons/icon.png"],
+    "category": "DeveloperTool",
+    "shortDescription": "FABULA — local-first autonomous coding agent",
+    "longDescription": "FABULA hosts its own engine and serves its interface locally. Any model can be put in the socket; the harness is what makes the work reliable."
+  }
+}

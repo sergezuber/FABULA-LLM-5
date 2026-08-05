@@ -63,18 +63,13 @@ try { bun scripts/install-deps.ts @depArgs }
 catch { Write-Host "  (some optional dependencies were skipped - re-run with -All, or use install_plugin_deps from chat)" }
 
 if (-not $DepsOnly) {
-  Write-Host "> 3/5  Engine..."
-  if (-not (Test-Path "bin\fabula.exe")) {
-    # Build for THIS platform. The engine's own build script knows every target; --only names one.
-    Push-Location engine
-    bun install
-    Push-Location packages\opencode
-    $env:MIMOCODE_CHANNEL = "prod"
-    bun run script/build.ts --only=windows-x64
-    Pop-Location; Pop-Location
-    New-Item -ItemType Directory -Force -Path bin | Out-Null
-    Copy-Item "engine\packages\opencode\dist\mimocode-windows-x64\bin\mimo.exe" "bin\fabula.exe" -Force
-  }
+  Write-Host "> 3/5  Engine + shell..."
+  # ONE build definition for every platform. This script deliberately does not reimplement the build:
+  # build.sh already knows how to produce the engine binary and this platform's shell, and a second copy
+  # here would be a second answer to "how is FABULA built" that drifts from the first. The POSIX shell
+  # checked above is what runs it.
+  & $bash -lc "./build.sh"
+  if ($LASTEXITCODE -ne 0) { Write-Host "  x build failed - see the output above" -ForegroundColor Red; exit 1 }
   Write-Host "  engine: bin\fabula.exe"
 } else {
   Write-Host "> 3/5  Skipped engine build (-DepsOnly)."

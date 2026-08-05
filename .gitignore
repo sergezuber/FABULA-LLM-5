@@ -67,3 +67,7 @@ private-bench/
 
 # ── Private launch / marketing notes (internal only, never published) ──
 /docs/LAUNCH-PLAYBOOK.md
+
+# Rust build artifacts of the cross-platform shell (hundreds of MB, reproducible from source)
+shell/target/
+shell/gen/

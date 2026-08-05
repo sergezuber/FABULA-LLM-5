@@ -18,7 +18,11 @@ bun install
 echo "== [2/3] engine binary (frontend embedded) =="
 bun run --cwd packages/app build
 ( cd packages/opencode && MIMOCODE_CHANNEL=prod bun run script/build.ts --single )
-BIN="$(ls -t "$ROOT"/engine/packages/opencode/dist/*/bin/mimo 2>/dev/null | head -1)"
+# The engine binary this platform produces — `mimo` everywhere, `mimo.exe` on Windows.
+# `|| true` is load-bearing under `set -e`: with two globs, the one that matches nothing makes `ls` exit
+# non-zero, and a command substitution's status is the assignment's status — so the script died silently
+# right after the engine compiled, leaving a half-deployed tree that the deploy guard then called STALE.
+BIN="$(ls -t "$ROOT"/engine/packages/opencode/dist/*/bin/mimo "$ROOT"/engine/packages/opencode/dist/*/bin/mimo.exe 2>/dev/null | head -1 || true)"
 [ -n "$BIN" ] && [ -f "$BIN" ] || { echo "FAIL: engine binary not produced"; exit 1; }
 codesign --force -s - "$BIN" 2>/dev/null || true
 echo "engine binary: $BIN"
@@ -26,12 +30,21 @@ echo "engine binary: $BIN"
 # Install the engine binary at the repo-local runtime path the app resolves as `fabula`
 # (via `command -v fabula`). Keeps the running engine inside this repo — nothing external.
 mkdir -p "$ROOT/bin"
-cp -f "$BIN" "$ROOT/bin/fabula"
-codesign --force -s - "$ROOT/bin/fabula" 2>/dev/null || true
-echo "engine installed in-repo: $ROOT/bin/fabula"
+# The installed name carries this platform's executable suffix, because that is the name the shell and
+# `verify-deploy.sh` both look for.
+case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) INSTALLED="$ROOT/bin/fabula.exe" ;; *) INSTALLED="$ROOT/bin/fabula" ;; esac
+cp -f "$BIN" "$INSTALLED"
+codesign --force -s - "$INSTALLED" 2>/dev/null || true
+echo "engine installed in-repo: $INSTALLED"
 
-echo "== [3/3] native macOS app =="
+echo "== [3/3] desktop shell =="
 cd "$ROOT"
-FABULA_ENGINE="$ROOT/bin/fabula" bash app/build.sh
+# macOS keeps its own Swift/WKWebView host; every other platform gets the Tauri shell, which implements
+# the SAME contract (engine child, diagnostic log, health deadline, five bridges, teardown). Building
+# both on macOS would produce two windows claiming the same port, so each platform builds its own.
+case "$(uname -s 2>/dev/null)" in
+  Darwin) FABULA_ENGINE="$ROOT/bin/fabula" bash app/build.sh ;;
+  *)      bash shell/build.sh ;;
+esac
 
-echo "FABULA build complete. Engine: $ROOT/bin/fabula"
+echo "FABULA build complete. Engine: $INSTALLED"

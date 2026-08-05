@@ -1,13 +1,18 @@
 // Real wiring test: invokes the ACTUAL bash_tool.execute() (real shell).
 // Blocked commands return BEFORE spawn, so testing `rm -rf /` here is safe — nothing runs.
 import { test, expect } from "bun:test"
+import { tmpdir } from "node:os"
 import { FabulaTools } from "../fabula-tools"
 
 async function bashTool() {
   const hooks: any = await FabulaTools({} as any)
   return hooks.tool.bash_tool
 }
-const ctx = { directory: "/tmp", abort: new AbortController().signal } as any
+// `/tmp` is a POSIX fact, not a temp directory: on Windows there is none, and spawning with a
+// working directory that does not exist fails with ENOENT naming the PROGRAM — so the check
+// reported the shell missing on a machine where it was installed. `os.tmpdir()` is the real one,
+// wherever this runs.
+const ctx = { directory: tmpdir(), abort: new AbortController().signal } as any
 
 test("bash_tool BLOCKS rm -rf / before executing (nothing runs)", async () => {
   const bt = await bashTool()

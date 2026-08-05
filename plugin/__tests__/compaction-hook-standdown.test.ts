@@ -10,6 +10,7 @@
 // The engine now marks that build with input.compaction === true; every steer/mutator hook stands down
 // on it, while cleanup transforms (token sanitizing, media conversion) may keep running.
 import { test, expect, describe, beforeEach, afterEach } from "bun:test"
+import { tmpdir } from "node:os"
 import { FabulaCtxGuard } from "../fabula-ctxguard"
 import { FabulaContext } from "../fabula-context"
 import { FabulaInterview } from "../fabula-interview"
@@ -30,7 +31,7 @@ describe("steer hooks stand down on the compaction build", () => {
     ["interview", FabulaInterview],
   ] as const) {
     test(`${name}: compaction build is left byte-identical`, async () => {
-      const plugin: any = await (factory as any)({ directory: "/tmp" })
+      const plugin: any = await (factory as any)({ directory: tmpdir() })
       const h = plugin["experimental.chat.messages.transform"]
       if (!h) return // plugin disabled in this env — nothing to assert
       const messages = trigger()
@@ -40,7 +41,7 @@ describe("steer hooks stand down on the compaction build", () => {
     })
 
     test(`${name}: the SAME messages on a normal build ARE eligible for steering (non-vacuous control)`, async () => {
-      const plugin: any = await (factory as any)({ directory: "/tmp" })
+      const plugin: any = await (factory as any)({ directory: tmpdir() })
       const h = plugin["experimental.chat.messages.transform"]
       if (!h) return
       const messages = trigger()

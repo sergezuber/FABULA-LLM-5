@@ -57,7 +57,8 @@ import { assessSkill, skillBlockedMessage } from "./lib/skillsguard"
 import { buildDockerRun, SANDBOX_IMAGES, interpreterCmd, sandboxNote } from "./lib/dockerbox"
 import { aggregateCost, formatCostReport, UsageRow } from "./lib/costledger"
 import { dataPath } from "./lib/platform/paths"
-import { spawnShell } from "./lib/platform/shell"
+import { spawnShell, whichFirst } from "./lib/platform/shell"
+import { pythonCandidates } from "./lib/platform/service"
 import { sandboxPlan, shellScope, untrustedScope } from "./lib/platform/sandbox"
 
 /**
@@ -821,7 +822,14 @@ export const FabulaTools: Plugin = async () => {
           //
           // Seatbelt is macOS-only and may be absent; when it is, this degrades to the previous
           // unconfined child rather than refusing to run code at all, and SAYS which of the two happened.
-          const bin = lang === "node" ? "node" : "python3"
+          // RESOLVED, not spelled. `python3` is a POSIX naming convention: on Windows the interpreter is
+          // `python.exe` or the `py` launcher, so a hardcoded `python3` fails there with ENOENT — which
+          // reads as "python is not installed" on a machine where it plainly is. The candidate list is
+          // the seam's one definition, already used to install the adapter's own service, so the two
+          // cannot come to disagree about what a Python interpreter is called on this platform.
+          const bin = lang === "node"
+            ? (whichFirst(["node"]) ?? "node")
+            : (whichFirst(pythonCandidates()) ?? pythonCandidates()[0]!)
           const flag = lang === "node" ? "-e" : "-c"
           // WHAT this platform can enforce is the platform's answer, not an assumption that Seatbelt
           // exists. On Linux the same claim is made with namespaces; on Windows nothing can make it,

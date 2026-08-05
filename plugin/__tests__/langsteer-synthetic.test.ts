@@ -6,6 +6,7 @@
 // conversation: «о чем книга?» came back answered in English. The ask is the last user message the
 // USER wrote; synthetic turns are the harness talking to the model.
 import { test, expect, describe } from "bun:test"
+import { tmpdir } from "node:os"
 import { FabulaContext } from "../fabula-context"
 
 const realMsg = (text: string) => ({ info: { role: "user" }, parts: [{ type: "text", text }] })
@@ -13,7 +14,7 @@ const syntheticMsg = (text: string) => ({ info: { role: "user" }, parts: [{ type
 
 describe("language steer vs synthetic turns", () => {
   test("anchors on the reader's Russian ask, not the harness's English note", async () => {
-    const plugin: any = await (FabulaContext as any)({ directory: "/tmp" })
+    const plugin: any = await (FabulaContext as any)({ directory: tmpdir() })
     const h = plugin["experimental.chat.messages.transform"]
     if (!h) return
     const ask = realMsg("о чем книга? прочти полностью и дай развёрнутый ответ по-русски со всеми деталями")
@@ -32,7 +33,7 @@ describe("language steer vs synthetic turns", () => {
   })
 
   test("control: with no synthetic turn the same ask still gets its Russian pin", async () => {
-    const plugin: any = await (FabulaContext as any)({ directory: "/tmp" })
+    const plugin: any = await (FabulaContext as any)({ directory: tmpdir() })
     const h = plugin["experimental.chat.messages.transform"]
     if (!h) return
     const ask = realMsg("о чем книга? прочти полностью и дай развёрнутый ответ по-русски со всеми деталями")
@@ -43,7 +44,7 @@ describe("language steer vs synthetic turns", () => {
   })
 
   test("a conversation of only synthetic turns steers nothing at all", async () => {
-    const plugin: any = await (FabulaContext as any)({ directory: "/tmp" })
+    const plugin: any = await (FabulaContext as any)({ directory: tmpdir() })
     const h = plugin["experimental.chat.messages.transform"]
     if (!h) return
     const note = syntheticMsg("Continue the task if you have next steps.")

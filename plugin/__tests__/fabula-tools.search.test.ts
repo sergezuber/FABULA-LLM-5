@@ -8,7 +8,11 @@ import { FabulaTools } from "../fabula-tools"
 
 const dbPath = path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share"), "fabula", "fabula.db")
 const hasDb = existsSync(dbPath)
-const ctx = { sessionID: "live-test-session", directory: "/tmp", abort: new AbortController().signal } as any
+// `/tmp` is a POSIX fact, not a temp directory: on Windows there is none, and spawning with a
+// working directory that does not exist fails with ENOENT naming the PROGRAM — so the check
+// reported the shell missing on a machine where it was installed. `os.tmpdir()` is the real one,
+// wherever this runs.
+const ctx = { sessionID: "live-test-session", directory: os.tmpdir(), abort: new AbortController().signal } as any
 
 test.if(hasDb)("session_search finds past work for a common term", async () => {
   const T = (await FabulaTools({} as any)).tool

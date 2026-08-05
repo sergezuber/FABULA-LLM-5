@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.126.0"
+export const FABULA_VERSION = "0.127.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.127.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Запуск кода теперь находит интерпретатор, а не называет его по памяти. Имя «python3» — это соглашение одной системы; на другой интерпретатор зовётся иначе, и жёсткое имя давало отказ вида «python не установлен» на машине, где он очевидно стоит. Список кандидатов берётся оттуда же, откуда его берёт установка служебной части, — чтобы две половины продукта не разошлись во мнении, как здесь называется интерпретатор. То же и со средой выполнения JavaScript: имя разрешается в полный путь, потому что по голому имени запуск подставляет расширение не везде.",
+        en: "Running code now finds the interpreter instead of naming it from memory. «python3» is one system's convention; on another the interpreter is called something else, and the hardcoded name produced a «python is not installed» refusal on a machine where it plainly is. The candidate list comes from the same place the service installer takes it, so the two halves of the product cannot come to disagree about what an interpreter is called here. The same for the JavaScript runtime: the name is resolved to a full path, because a bare name is not filled out with an extension everywhere.",
+      },
+      {
+        ru: "И проверки перестали задавать рабочим каталогом «/tmp». Каталога с таким именем на третьей системе нет, а запуск с несуществующим рабочим каталогом сообщает об отсутствии ПРОГРАММЫ — поэтому проверка объявляла оболочку ненайденной там, где она установлена. Берётся настоящий временный каталог этой машины, каким бы он ни был.",
+        en: "And the checks stopped naming «/tmp» as a working directory. No such directory exists on the third system, and spawning with a working directory that does not exist reports the PROGRAM as missing — so a check declared the shell absent on a machine where it is installed. The real temp directory of whatever machine is running is used instead.",
+      },
+    ],
+  },
   {
     version: "0.126.0",
     date: "2026-08-05",

@@ -1,10 +1,15 @@
 // Live execute_code tests: real python3/node child processes + real Docker sandbox.
 import { test, expect, beforeAll } from "bun:test"
+import { tmpdir } from "node:os"
 import { execFileSync } from "node:child_process"
 import { FabulaTools } from "../fabula-tools"
 
 let T: any
-const ctx = { sessionID: "s", directory: "/tmp", abort: new AbortController().signal } as any
+// `/tmp` is a POSIX fact, not a temp directory: on Windows there is none, and spawning with a
+// working directory that does not exist fails with ENOENT naming the PROGRAM — so the check
+// reported the shell missing on a machine where it was installed. `os.tmpdir()` is the real one,
+// wherever this runs.
+const ctx = { sessionID: "s", directory: tmpdir(), abort: new AbortController().signal } as any
 const out = (r: any) => (typeof r === "string" ? r : r.output)
 beforeAll(async () => { T = (await FabulaTools({} as any)).tool })
 

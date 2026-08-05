@@ -77,24 +77,24 @@ describe("platform/index — the question is asked at call time", () => {
 
 describe("platform/paths — resolved the way the ENGINE resolves it", () => {
   test("MIMOCODE_HOME moves all four dirs, exactly as resolveMimocodeHome does", () => {
-    const d = baseDirs({ MIMOCODE_HOME: "/tmp/fab-root", HOME: "/home/u" })
-    expect(d.data).toBe(path.join("/tmp/fab-root", "data"))
-    expect(d.cache).toBe(path.join("/tmp/fab-root", "cache"))
-    expect(d.config).toBe(path.join("/tmp/fab-root", "config"))
-    expect(d.state).toBe(path.join("/tmp/fab-root", "state"))
+    const d = baseDirs({ MIMOCODE_HOME: "/tmp/fab-root", HOME: "/home/u" }, "linux")
+    expect(d.data).toBe("/tmp/fab-root/data")
+    expect(d.cache).toBe("/tmp/fab-root/cache")
+    expect(d.config).toBe("/tmp/fab-root/config")
+    expect(d.state).toBe("/tmp/fab-root/state")
   })
 
   test("a RELATIVE MIMOCODE_HOME is refused, falling back to XDG rather than making a path up", () => {
-    const d = baseDirs({ MIMOCODE_HOME: "relative/root", HOME: "/home/u" })
-    expect(d.data).toBe(path.join("/home/u", ".local", "share", "fabula"))
+    const d = baseDirs({ MIMOCODE_HOME: "relative/root", HOME: "/home/u" }, "linux")
+    expect(d.data).toBe("/home/u/.local/share/fabula")
   })
 
   test("without MIMOCODE_HOME the answer is byte-identical to what 26 hand-written copies produced", () => {
     const d = baseDirs({ HOME: "/home/u" })
     expect(d.data).toBe(path.join("/home/u", ".local", "share", "fabula"))
-    expect(d.config).toBe(path.join("/home/u", ".config", "fabula"))
+    expect(d.config).toBe("/home/u/.config/fabula")
     // XDG still wins over the default, which is what those copies did too.
-    expect(baseDirs({ HOME: "/home/u", XDG_DATA_HOME: "/xdg/data" }).data).toBe(path.join("/xdg/data", "fabula"))
+    expect(baseDirs({ HOME: "/home/u", XDG_DATA_HOME: "/xdg/data" }, "linux").data).toBe("/xdg/data/fabula")
   })
 
   test("home comes from the environment, because HOME moves and os.homedir() is cached at startup", () => {
@@ -110,8 +110,8 @@ describe("platform/paths — resolved the way the ENGINE resolves it", () => {
 
   test("go bin dirs honour GOBIN and GOPATH before the documented default", () => {
     expect(goBinDirs({ HOME: "/h", GOBIN: "/gb" }, "linux")[0]).toBe("/gb")
-    expect(goBinDirs({ HOME: "/h", GOPATH: "/gp" }, "linux")).toContain(path.join("/gp", "bin"))
-    expect(goBinDirs({ HOME: "/h" }, "linux")).toContain(path.join("/h", "go", "bin"))
+    expect(goBinDirs({ HOME: "/h", GOPATH: "/gp" }, "linux")).toContain("/gp/bin")
+    expect(goBinDirs({ HOME: "/h" }, "linux")).toContain("/h/go/bin")
     expect(goBinDirs({ HOME: "/h" }, "win32")).toContain("C:\\Program Files\\Go\\bin")
   })
 
@@ -202,7 +202,7 @@ describe("platform/persistence — ONE list, three platforms", () => {
   test("credential read dirs are built for the home they are GIVEN, never process.env", () => {
     // A profile built for the wrong home denies a path nobody writes to, and reads exactly like one
     // that works.
-    expect(credentialReadDirs("/Users/x")).toContain(path.join("/Users/x", ".ssh"))
+    expect(credentialReadDirs("/Users/x")).toContain("/Users/x/.ssh")
     expect(credentialReadDirs("/Users/x").some((d) => d.includes(homeDir()))).toBe(
       homeDir() === "/Users/x",
     )

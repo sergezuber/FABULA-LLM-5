@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.121.0"
+export const FABULA_VERSION = "0.122.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.122.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Функции, которые спрашивают «где это лежит на такой-то системе», склеивали путь по правилам ТОЙ машины, на которой их спросили. Параметр системы им, по сути, лгал: спроси с одной машины про другую — и в ответ приходил путь наполовину чужой формы. На настоящей машине обе формы совпадают, поэтому в работе это было невидимо и вылезало ровно там, где одну систему спрашивают про другую, — то есть в тех самых проверках, что строят правила запрета. Теперь каждая такая функция отвечает в форме той системы, о которой её спросили; пути на этой машине не сдвинулись ни на символ. Заодно исправлены и ожидания проверок: они тоже были написаны в форме машины-хозяина, из-за чего верный ответ кода читался как ошибка.",
+        en: "Functions that answer «where does this live on such-and-such a system» joined the path by the rules of the machine they were asked on. The system parameter was, in effect, lying to them: ask from one machine about another and the answer came back half in the wrong shape. On a real machine both shapes agree, so this was invisible in ordinary work and surfaced exactly where one system is asked about another — which is where the deny rules are checked. Each such function now answers in the shape of the system it was asked about; paths on this machine did not move by a single character. The checks were corrected too: their expectations were also written in the host machine's shape, which made the code's correct answer read as a failure.",
+      },
+    ],
+  },
   {
     version: "0.121.0",
     date: "2026-08-05",

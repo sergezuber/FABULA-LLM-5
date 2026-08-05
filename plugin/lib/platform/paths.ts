@@ -38,6 +38,19 @@ export function homeDir(env: NodeJS.ProcessEnv = process.env): string {
 export type BaseDirs = { data: string; cache: string; config: string; state: string }
 
 /**
+ * The path dialect of the platform being ASKED about — not of the machine doing the asking.
+ *
+ * Every function here takes a platform, and for a long time they all joined with the host's `path.join`
+ * anyway, which made the parameter a lie: ask a macOS host about Windows and it answered with forward
+ * slashes, ask a Windows host about Linux and it answered with backslashes. On a real machine the two
+ * agree, so the defect was invisible in production and showed up only where one platform is asked about
+ * another — which is precisely where the rules built from these paths are checked.
+ */
+function dialect(p: Platform) {
+  return p === "win32" ? win : posix
+}
+
+/**
  * The four base directories, resolved exactly as the engine resolves them.
  *
  * `MIMOCODE_HOME` (absolute) puts all four under one root; otherwise XDG defaults apply. A relative
@@ -46,32 +59,33 @@ export type BaseDirs = { data: string; cache: string; config: string; state: str
  * throws at startup where the operator sees it. Same decision, different blast radius.
  */
 export function baseDirs(env: NodeJS.ProcessEnv = process.env, p: Platform = current(env)): BaseDirs {
+  const d = dialect(p)
   const root = env.MIMOCODE_HOME
-  if (root && path.isAbsolute(root)) {
+  if (root && d.isAbsolute(root)) {
     return {
-      data: path.join(root, "data"),
-      cache: path.join(root, "cache"),
-      config: path.join(root, "config"),
-      state: path.join(root, "state"),
+      data: d.join(root, "data"),
+      cache: d.join(root, "cache"),
+      config: d.join(root, "config"),
+      state: d.join(root, "state"),
     }
   }
   const home = homeDir(env)
   return {
-    data: path.join(env.XDG_DATA_HOME || path.join(home, ".local", "share"), APP),
-    cache: path.join(env.XDG_CACHE_HOME || path.join(home, ".cache"), APP),
-    config: path.join(env.XDG_CONFIG_HOME || path.join(home, ".config"), APP),
-    state: path.join(env.XDG_STATE_HOME || path.join(home, ".local", "state"), APP),
+    data: d.join(env.XDG_DATA_HOME || d.join(home, ".local", "share"), APP),
+    cache: d.join(env.XDG_CACHE_HOME || d.join(home, ".cache"), APP),
+    config: d.join(env.XDG_CONFIG_HOME || d.join(home, ".config"), APP),
+    state: d.join(env.XDG_STATE_HOME || d.join(home, ".local", "state"), APP),
   }
 }
 
 /** `<data>/fabula` — where every plugin store belongs. Extra segments are joined onto it. */
 export function dataPath(...segments: string[]): string {
-  return path.join(baseDirs().data, ...segments)
+  return dialect(current()).join(baseDirs().data, ...segments)
 }
 
 /** `<config>/fabula` — where the supervision stores live (permissions, plugin enable-state). */
 export function configPath(...segments: string[]): string {
-  return path.join(baseDirs().config, ...segments)
+  return dialect(current()).join(baseDirs().config, ...segments)
 }
 
 /**
@@ -90,9 +104,10 @@ export function configPath(...segments: string[]): string {
  */
 export function engineConfigFile(env: NodeJS.ProcessEnv = process.env): string {
   if (env.MIMOCODE_CONFIG) return env.MIMOCODE_CONFIG
-  const primary = path.join(baseDirs(env).config, "fabula.config.json")
-  const xdgRoot = env.XDG_CONFIG_HOME || path.join(homeDir(env), ".config")
-  const legacy = path.join(xdgRoot, "mimocode", "fabula.config.json")
+  const d = dialect(current(env))
+  const primary = d.join(baseDirs(env).config, "fabula.config.json")
+  const xdgRoot = env.XDG_CONFIG_HOME || d.join(homeDir(env), ".config")
+  const legacy = d.join(xdgRoot, "mimocode", "fabula.config.json")
   try {
     const fs = require("node:fs") as typeof import("node:fs")
     if (!fs.existsSync(primary) && fs.existsSync(legacy)) return legacy
@@ -110,17 +125,17 @@ export function engineConfigFile(env: NodeJS.ProcessEnv = process.env): string {
 
 /** `~/.bun/bin` — where the bun installer puts the runtime. */
 export function bunBinDir(env: NodeJS.ProcessEnv = process.env, p: Platform = current(env)): string {
-  return path.join(homeDir(env), ".bun", "bin")
+  return dialect(p).join(homeDir(env), ".bun", "bin")
 }
 
 /** `~/.local/bin` — the user-level convention on POSIX; kept on Windows for parity with the shim. */
 export function localBinDir(env: NodeJS.ProcessEnv = process.env, p: Platform = current(env)): string {
-  return path.join(homeDir(env), ".local", "bin")
+  return dialect(p).join(homeDir(env), ".local", "bin")
 }
 
 /** `~/.lmstudio/bin` — where LM Studio puts its `lms` CLI, on every platform it ships for. */
 export function servingBinDir(env: NodeJS.ProcessEnv = process.env, p: Platform = current(env)): string {
-  return path.join(homeDir(env), ".lmstudio", "bin")
+  return dialect(p).join(homeDir(env), ".lmstudio", "bin")
 }
 
 /**
@@ -146,7 +161,7 @@ export function goBinDirs(env: NodeJS.ProcessEnv = process.env, p: Platform = cu
   const home = homeDir(env)
   const out: string[] = []
   if (env.GOBIN) out.push(env.GOBIN)
-  const j = (p === "win32" ? win : posix).join
+  const j = dialect(p).join
   out.push(env.GOPATH ? j(env.GOPATH, "bin") : j(home, "go", "bin"))
   out.push(p === "win32" ? "C:\\Program Files\\Go\\bin" : "/usr/local/go/bin")
   return out
@@ -179,7 +194,7 @@ export function findProgram(
 ): string {
   const file = name + exeSuffix(p)
   for (const dir of programSearchDirs(env, p)) {
-    const cand = path.join(dir, file)
+    const cand = dialect(p).join(dir, file)
     try {
       const fs = require("node:fs") as typeof import("node:fs")
       if (fs.statSync(cand).isFile()) return cand

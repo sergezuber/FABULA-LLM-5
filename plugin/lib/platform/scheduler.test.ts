@@ -37,8 +37,8 @@ describe("job identity is the same on every platform", () => {
 
 describe("each platform gets its own store — and Windows has none of ours", () => {
   test("definition files live where that scheduler expects them", () => {
-    expect(jobDir("darwin", ENV)).toBe(path.join("/home/u", "Library", "LaunchAgents"))
-    expect(jobDir("linux", ENV)).toBe(path.join("/home/u", ".config", "systemd", "user"))
+    expect(jobDir("darwin", ENV)).toBe("/home/u/Library/LaunchAgents")
+    expect(jobDir("linux", ENV)).toBe("/home/u/.config/systemd/user")
     expect(jobDir("win32", ENV)).toBeNull()
 
     expect(jobFile("nightly", "darwin", ENV)).toEndWith("com.fabula.schedule.nightly.plist")

@@ -174,3 +174,36 @@ export function whichFirst(
   }
   return null
 }
+
+/**
+ * Write a marker script the harness can be pointed at, and return the path to point at.
+ *
+ * WHY THIS EXISTS. Several suites prove a mechanism is really INVOKED by handing the harness a stand-in
+ * program that records the argv it was asked to run — `FABULA_LMS_BIN`, `FABULA_GO_EXEC_SHIM`,
+ * `FABULA_NVIDIA_SMI`. Without that, a mutation which decides to act and then never acts passes
+ * everything, which is this repository's most-repeated trap. So the stand-in is not a convenience; it is
+ * what makes those suites able to fail.
+ *
+ * It was written as a `#!/bin/sh` file, and Windows does not execute a file by its shebang: fifty-two
+ * checks went red there on a probe that could not start, reporting the harness broken when what was
+ * missing was the ability to run the probe. Rather than silence them — the mechanism they cover is real —
+ * the SCRIPT stays one definition and Windows gets a `.cmd` beside it that hands the same file to the same
+ * POSIX shell the harness already requires everywhere. One script, two ways in.
+ */
+export function writeMarkerScript(
+  scriptPath: string,
+  body: string,
+  env: NodeJS.ProcessEnv = process.env,
+  p: Platform = current(env),
+): string {
+  const fs = require("node:fs") as typeof import("node:fs")
+  fs.writeFileSync(scriptPath, body.startsWith("#!") ? body : `#!/bin/sh\n${body}`)
+  fs.chmodSync(scriptPath, 0o755)
+  if (p !== "win32") return scriptPath
+  // `%~f1`-free on purpose: the wrapper names the script by absolute path, so it does not matter which
+  // directory the harness happens to spawn it from.
+  const cmd = `${scriptPath}.cmd`
+  const shell = shellBin(env, p).replace(/\//g, "\\")
+  fs.writeFileSync(cmd, `@echo off\r\n"${shell}" "${scriptPath}" %*\r\n`)
+  return cmd
+}

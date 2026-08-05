@@ -14,7 +14,7 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import { current, current as currentPlatform, isPosix, pathListSeparator, exeSuffix, PLATFORMS } from "./index"
 import { baseDirs, homeDir, goBinDirs, systemBinDirs, appendToPath, joinPathList, splitPathList } from "./paths"
-import { shellArgv, shellBin, whichBin, whichFirst } from "./shell"
+import { shellArgv, shellBin, whichBin, whichFirst, writeMarkerScript } from "./shell"
 import { hardlineTargets, hardlineKernelRegex, credentialReadDirs, persistenceCommands } from "./persistence"
 import { usedBytes, totalBytes, memoryReading, vramBytes, vramBytes, memoryReading} from "./memory"
 import { checkWritePath } from "../pathguard"
@@ -371,10 +371,8 @@ describe("platform/memory — the source of the number is a decision", () => {
 // would be the "declared but never met reality" claim this project spends its time removing.
 describe("discrete VRAM is read from the driver, summed across devices", () => {
   const shim = (lines: string) => {
-    const p = path.join(os.tmpdir(), `fabula-nvsmi-${process.pid}`)
-    fs.writeFileSync(p, `#!/bin/sh\n${lines.split("\n").map((l) => `echo ${JSON.stringify(l)}`).join("\n")}\n`)
-    fs.chmodSync(p, 0o755)
-    return p
+    const p = path.join(os.tmpdir(), `fabula-nvsmi-${process.pid}.sh`)
+    return writeMarkerScript(p, lines.split("\n").map((l) => `echo ${JSON.stringify(l)}`).join("\n"))
   }
 
   test("two cards are summed, not sampled", () => {

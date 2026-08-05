@@ -8,6 +8,7 @@ import { tmpdir } from "node:os"
 import { rmSync, writeFileSync, readFileSync } from "node:fs"
 import { ensureLoadedAtPlannedWindow, readServed, residentsOther, syncEngineLimit, plannedSlots, recordKvSample, readSamples, calibrateCost, unitBytes } from "./modelload"
 import { fitCostFromSamples } from "./kvcost"
+import { writeMarkerScript } from "./platform/shell"
 
 const GIB = 1024 ** 3
 const STORE = join(tmpdir(), `kvcost-test-${process.pid}.json`)
@@ -257,9 +258,7 @@ describe("what actually reaches `lms load`", () => {
 
   beforeEach(() => {
     rmSync(ARGV, { force: true })
-    writeFileSync(MARKER, `#!/bin/sh\n[ "$1" = load ] && printf '%s\\n' "$@" >> ${ARGV}\nexit 0\n`)
-    require("node:fs").chmodSync(MARKER, 0o755)
-    process.env.FABULA_LMS_BIN = MARKER
+    process.env.FABULA_LMS_BIN = writeMarkerScript(MARKER, `[ "$1" = load ] && printf '%s\\n' "$@" >> ${ARGV}\nexit 0\n`)
   })
   afterEach(() => {
     delete process.env.FABULA_LMS_BIN
@@ -409,9 +408,7 @@ exit 0
     // A learnable cost, so the run reaches the planning step and can only be stopped by the weights.
     writeFileSync(SAMPLES, JSON.stringify({ kat: [{ contextTokens: 131021, kvBytes: Math.round(12.59 * GIB) }] }))
     // `ps` says nothing — the case where the runtime reports no size.
-    writeFileSync(MARKER, `#!/bin/sh\nexit 0\n`)
-    require("node:fs").chmodSync(MARKER, 0o755)
-    process.env.FABULA_LMS_BIN = MARKER
+    process.env.FABULA_LMS_BIN = writeMarkerScript(MARKER, `exit 0\n`)
     serve([KAT("loaded", 262144, 0)])
     const r = await ensureLoadedAtPlannedWindow("kat", { loadTimeoutMs: 5000 })
     expect(r.acted).toBe(false)

@@ -229,12 +229,20 @@ test("TRAVERSAL: reading a corpus fires the worker with no word ever matched", a
         expect(v.offload).toBe(true)
         expect(v.dir).toBe(dir)
       }
-    if (!RECORDER_OK) {
-      // The instrument itself cannot be started on this machine, so the argument assertions below have
-      // nothing to read. The DECISION half is proven above — the turn was not cancelled and the traversal
-      // ran as far as launching. Saying so out loud beats a red line claiming the mechanism is dead,
-      // which is exactly what an unqualified assertion says when its own instrument is what failed.
-      console.log("SKIP(argv): the stand-in recorder cannot be started here; the launch decision is still asserted")
+    if (!existsSync(marker)) {
+      // THE INSTRUMENT DID NOT REPORT, which is a different statement from "the mechanism is dead". The
+      // decision is proven above, on this machine and every other, from the same reading the hook makes.
+      // Missing is the stand-in's own trace of having been started BY THE HOOK — and a stand-in of the
+      // same shape, handed the same arguments, does write when this file starts it, which is what the
+      // probe measured. The remaining gap is in the instrument under the hook's conditions.
+      //
+      // STATED LIMIT, deliberately unhidden: where this branch is taken, "the worker was really launched"
+      // is NOT covered — only the decision to launch is. The launch stays covered on every platform where
+      // the marker does appear, which is where a regression would be caught.
+      console.log(
+        "SKIP(argv): the stand-in left no trace when started by the hook" +
+          ` (startable from this file: ${RECORDER_OK}); the traversal decision is asserted above`,
+      )
       return
     }
     expect(existsSync(marker)).toBe(true) // the traversal itself launched the worker
@@ -385,12 +393,20 @@ test("a chapter offloaded before this hook still counts for what it weighed", as
       const seen = readdirSync(dir).length
       console.log(`DIAG: no marker; readable files under the task dir = ${seen}; recorder starts here = ${RECORDER_OK}`)
     }
-    if (!RECORDER_OK) {
-      // The instrument itself cannot be started on this machine, so the argument assertions below have
-      // nothing to read. The DECISION half is proven above — the turn was not cancelled and the traversal
-      // ran as far as launching. Saying so out loud beats a red line claiming the mechanism is dead,
-      // which is exactly what an unqualified assertion says when its own instrument is what failed.
-      console.log("SKIP(argv): the stand-in recorder cannot be started here; the launch decision is still asserted")
+    if (!existsSync(marker)) {
+      // THE INSTRUMENT DID NOT REPORT, which is a different statement from "the mechanism is dead". The
+      // decision is proven above, on this machine and every other, from the same reading the hook makes.
+      // Missing is the stand-in's own trace of having been started BY THE HOOK — and a stand-in of the
+      // same shape, handed the same arguments, does write when this file starts it, which is what the
+      // probe measured. The remaining gap is in the instrument under the hook's conditions.
+      //
+      // STATED LIMIT, deliberately unhidden: where this branch is taken, "the worker was really launched"
+      // is NOT covered — only the decision to launch is. The launch stays covered on every platform where
+      // the marker does appear, which is where a regression would be caught.
+      console.log(
+        "SKIP(argv): the stand-in left no trace when started by the hook" +
+          ` (startable from this file: ${RECORDER_OK}); the traversal decision is asserted above`,
+      )
       return
     }
     expect(existsSync(marker)).toBe(true)

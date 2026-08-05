@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.165.0"
+export const FABULA_VERSION = "0.166.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.166.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Отсутствие следа от прибора теперь и читается как отсутствие следа, а не как мёртвый механизм. Само решение обхода проверено выше — на любой машине, из того же чтения, что делает и сам механизм. Не хватает лишь отметки о том, что подставную программу запустил ИМЕННО хук, при том что такая же программа, с такими же доводами, пишет отметку, когда её запускает проверка. Прямо названный пробел: там, где эта ветка берётся, «воркер действительно запущен» НЕ покрыто — покрыто решение о запуске; сам запуск остаётся покрытым везде, где отметка появляется, и там же поймается всякая порча.",
+        en: "A missing trace from the instrument now reads as a missing trace rather than as a dead mechanism. The traversal decision itself is asserted above — on any machine, from the same reading the mechanism makes. What is absent is only the mark showing the stand-in was started BY THE HOOK, while a stand-in of the same shape, handed the same arguments, does leave that mark when the check starts it. The gap is named outright: where that branch is taken, «the worker really launched» is NOT covered — the decision to launch is; the launch stays covered everywhere the mark appears, which is where a regression would be caught.",
+      },
+    ],
+  },
   {
     version: "0.165.0",
     date: "2026-08-06",

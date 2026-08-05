@@ -131,9 +131,15 @@ function spawnWorker(pluginInput: any, sessionID: string, taskText: string): voi
   // the argv file never appeared, for eighteen seconds, with nothing said.
   const viaShell = /\.(cmd|bat)$/i.test(bin)
   const q = (a: string) => `"${String(a).replace(/"/g, '""')}"`
+  // `detached` is asked for on the direct path and NOT on the shell path, and the difference is
+  // measured rather than stylistic. Detaching plus a shell plus discarded output starts nothing at all
+  // on the platform that needs the shell: the same stand-in launches from a plain spawn and never
+  // launches from a detached shell one — eighteen seconds, no file, no error, because the output is
+  // discarded by design. `unref` is what actually lets the turn finish without waiting, and it applies
+  // to both; detaching only adds a separate process group, which is a smaller benefit than the work
+  // starting at all.
   const child = viaShell
     ? spawn([bin, ...workerArgs].map(q).join(" "), [], {
-        detached: true,
         stdio: "ignore",
         env: { ...process.env },
         shell: true,

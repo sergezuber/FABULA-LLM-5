@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.143.0"
+export const FABULA_VERSION = "0.144.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.144.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Отсоединение процесса запрашивается на прямом пути запуска и НЕ запрашивается там, где запуск идёт через оболочку. Различие измерено, а не выбрано из вкуса: отсоединение вместе с оболочкой и отброшенным выводом не запускает НИЧЕГО на той системе, которой эта оболочка и нужна — та же программа стартует обычным запуском и не стартует отсоединённым, восемнадцать секунд, без файла и без единого сообщения, потому что вывод отбрасывается по замыслу. Ход завершается без ожидания благодаря другому механизму, и он применяется в обоих случаях; отсоединение добавляло лишь отдельную группу процессов — выгода меньшая, чем то, что работа вообще начинается.",
+        en: "Detaching is asked for on the direct spawn and NOT where the start goes through a shell. The difference is measured rather than a matter of taste: detaching, plus a shell, plus discarded output starts NOTHING on the very system that needs the shell — the same program launches from a plain spawn and never launches from a detached shell one, eighteen seconds, no file and no message, because the output is discarded by design. What actually lets the turn finish without waiting is a different mechanism, and it applies to both; detaching only added a separate process group, a smaller benefit than the work starting at all.",
+      },
+    ],
+  },
   {
     version: "0.143.0",
     date: "2026-08-05",

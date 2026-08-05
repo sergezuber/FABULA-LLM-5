@@ -132,20 +132,31 @@ async function recorderRuns(): Promise<boolean> {
     // dead when what could not run was the instrument under the conditions that matter.
     const viaShell = /\.(cmd|bat)$/i.test(rec)
     const q = (a: string) => `"${String(a).replace(/"/g, '""')}"`
+    // ARGUMENTS SHAPED LIKE THE REAL ONES, not one tidy word. What the mechanism passes is a script path,
+    // a directory, a session id, a base64 blob and a URL — several of them carrying separators, one of
+    // them long. A probe handing over "hello" proves the spawn starts; it proves nothing about whether
+    // THESE arguments survive the trip, which is the half that was failing.
+    const probeArgs = [join(d, "worker.ts"), d, "s_probe", Buffer.from("task text").toString("base64"), "http://127.0.0.1:4096", "[tag]"]
     const child = viaShell
-      ? spawn(process.env.COMSPEC || "cmd.exe", ["/d", "/s", "/c", `"${[rec, "hello"].map(q).join(" ")}"`], {
+      ? spawn(process.env.COMSPEC || "cmd.exe", ["/d", "/s", "/c", `"${[rec, ...probeArgs].map(q).join(" ")}"`], {
           stdio: "ignore",
           env: { ...process.env },
           windowsVerbatimArguments: true,
         } as any)
-      : spawn(rec, ["hello"], { detached: true, stdio: "ignore", env: { ...process.env } })
+      : spawn(rec, probeArgs, { detached: true, stdio: "ignore", env: { ...process.env } })
     child.on("error", () => {})
     try { child.unref() } catch {}
     // Short on purpose: this only asks whether such a program starts AT ALL, and it runs inside a
     // setup hook that has its own ceiling. A probe that can outlast the hook it lives in reports
     // the hook as broken instead of answering its question.
     for (let i = 0; i < 40 && !existsSync(log); i++) await new Promise((r) => setTimeout(r, 50))
-    return existsSync(log)
+    if (!existsSync(log)) return false
+    // And the CONTENT, because a file that appears with the arguments mangled is a different failure
+    // from one that never appears, and both would otherwise read as "the instrument works".
+    const got = readFileSync(log, "utf8").trim().split(/\r?\n/)
+    const ok = got.length === probeArgs.length && got[1] === probeArgs[1] && got[3] === probeArgs[3]
+    if (!ok) console.log(`DIAG(probe): the stand-in recorded ${got.length} of ${probeArgs.length} arguments: ${JSON.stringify(got)}`)
+    return ok
   } catch {
     return false
   } finally {

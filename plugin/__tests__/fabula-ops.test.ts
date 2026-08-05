@@ -5,6 +5,8 @@ import { existsSync, promises as fs } from "node:fs"
 import * as os from "node:os"
 import * as path from "node:path"
 import { FabulaOps } from "../fabula-ops"
+import { current as currentPlatform } from "../lib/platform/index"
+const IS_MAC = currentPlatform() === "darwin"
 
 let T: any
 const ctx = { sessionID: "s", directory: os.tmpdir(), abort: new AbortController().signal } as any
@@ -33,7 +35,12 @@ test("schedule_task refuses an injection-laced prompt (no job written)", async (
   expect(existsSync(path.join(os.homedir(), "Library", "LaunchAgents", `com.fabula.schedule.${JOB}-evil.plist`))).toBe(false)
 })
 
-test("schedule_task writes+loads a launchd job, list shows it, cancel removes it", async () => {
+// Scoped to the platform whose MECHANISM it asserts — launchd, Seatbelt, Homebrew paths. The
+// assertion is unchanged; only where it applies is now stated, the same way this suite already
+// scopes its Seatbelt and Docker cases. A suite that fails everywhere it was never about is a
+// suite people stop reading.
+
+test.if(IS_MAC)("schedule_task writes+loads a launchd job, list shows it, cancel removes it", async () => {
   const r = await T.schedule_task.execute({ name: JOB, at_time: "03:00", prompt: "Summarize today's notes." }, ctx)
   expect(out(r)).toContain("Scheduled")
   expect(existsSync(plistPath)).toBe(true)

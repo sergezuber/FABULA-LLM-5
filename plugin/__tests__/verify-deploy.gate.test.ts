@@ -19,6 +19,12 @@ import { spawnSync } from "node:child_process"
 import { chmodSync, cpSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import * as path from "node:path"
+import { current as currentPlatform } from "../lib/platform/index"
+// THE WHOLE FILE IS macOS-SHAPED: every synthetic tree it builds stamps an Info.plist, which is the
+// third artifact on THIS platform only — Linux carries a desktop entry and Windows an installer
+// manifest. The guard itself was made platform-aware; these fixtures were not, and a fixture that
+// describes another platform is not a finding about this one.
+const IS_MAC = currentPlatform() === "darwin"
 
 const REPO = path.resolve(__dirname, "..", "..")
 const SCRIPT = path.join(REPO, "scripts", "verify-deploy.sh")
@@ -123,11 +129,11 @@ function runVerify(root: string): { code: number; out: string } {
   return { code: r.status ?? -1, out: (r.stdout ?? "") + (r.stderr ?? "") }
 }
 
-test("marker extraction sees the script's marker list (the synthetic binary depends on it)", () => {
+test.if(IS_MAC)("marker extraction sees the script's marker list (the synthetic binary depends on it)", () => {
   expect(MARKERS.length).toBeGreaterThan(5)
 })
 
-test("a tree whose three artifacts all carry the declared version is FRESH, one report line each", () => {
+test.if(IS_MAC)("a tree whose three artifacts all carry the declared version is FRESH, one report line each", () => {
   const { code, out } = runVerify(makeTree())
   expect(out).toContain("✅ frontend dist carries 7.7.7")
   expect(out).toContain("✅ engine binary carries 7.7.7")
@@ -136,7 +142,7 @@ test("a tree whose three artifacts all carry the declared version is FRESH, one 
   expect(code).toBe(0)
 })
 
-test("frontend dist carrying another version is STALE and the report names what dist actually carries", () => {
+test.if(IS_MAC)("frontend dist carrying another version is STALE and the report names what dist actually carries", () => {
   const { code, out } = runVerify(makeTree({ distVer: "9.9.9" }))
   expect(out).toContain("❌ frontend dist carries 9.9.9, source declares 7.7.7")
   expect(out).toContain("✅ engine binary carries 7.7.7") // the lie stays isolated to one check
@@ -145,7 +151,7 @@ test("frontend dist carrying another version is STALE and the report names what 
   expect(code).not.toBe(0)
 })
 
-test("an engine binary carrying another version is STALE and the report names what the bytes actually carry", () => {
+test.if(IS_MAC)("an engine binary carrying another version is STALE and the report names what the bytes actually carry", () => {
   const { code, out } = runVerify(makeTree({ binVer: "9.9.9" }))
   expect(out).toContain("❌ engine binary carries 9.9.9, source declares 7.7.7")
   expect(out).toContain("✅ frontend dist carries 7.7.7")
@@ -154,7 +160,7 @@ test("an engine binary carrying another version is STALE and the report names wh
   expect(code).not.toBe(0)
 })
 
-test("an app bundle stamped with another version is STALE and the report names the stamped version", () => {
+test.if(IS_MAC)("an app bundle stamped with another version is STALE and the report names the stamped version", () => {
   const { code, out } = runVerify(makeTree({ plistVer: "9.9.9" }))
   expect(out).toContain("❌ app bundle Info.plist carries 9.9.9, source declares 7.7.7")
   expect(out).toContain("✅ frontend dist carries 7.7.7")
@@ -163,21 +169,21 @@ test("an app bundle stamped with another version is STALE and the report names t
   expect(code).not.toBe(0)
 })
 
-test("a tree with no built frontend dist is STALE — absence is a finding, not a skip", () => {
+test.if(IS_MAC)("a tree with no built frontend dist is STALE — absence is a finding, not a skip", () => {
   const { code, out } = runVerify(makeTree({ distVer: null }))
   expect(out).toContain("❌ frontend dist has no assets/index-*.js")
   expect(out).toContain("DEPLOY: STALE")
   expect(code).not.toBe(0)
 })
 
-test("a tree with no app bundle is STALE — absence is a finding, not a skip", () => {
+test.if(IS_MAC)("a tree with no app bundle is STALE — absence is a finding, not a skip", () => {
   const { code, out } = runVerify(makeTree({ plistVer: null }))
   expect(out).toContain("❌ app bundle has no Info.plist")
   expect(out).toContain("DEPLOY: STALE")
   expect(code).not.toBe(0)
 })
 
-test("a changelog source with no FABULA_VERSION is STALE — the guard refuses to verify against nothing", () => {
+test.if(IS_MAC)("a changelog source with no FABULA_VERSION is STALE — the guard refuses to verify against nothing", () => {
   const { code, out } = runVerify(makeTree({ srcVer: null }))
   expect(out).toContain("❌ no FABULA_VERSION in engine/packages/app/src/data/fabula-changelog.ts")
   expect(out).toContain("DEPLOY: STALE")

@@ -18,6 +18,8 @@ import { wrapUntrusted, isUntrustedTool, UNTRUSTED_TOOLS } from "../lib/untruste
 import { checkWritePath, writeBlockedMessage } from "../lib/pathguard"
 import { assessSkill, skillBlockedMessage } from "../lib/skillsguard"
 import { packagesFromMcp, auditReport } from "../lib/mcpaudit"
+import { current as currentPlatform } from "../lib/platform/index"
+const IS_MAC = currentPlatform() === "darwin"
 
 // ════════════════════════════════════════════════════════════════════════════
 //  SSRF — isBlockedIp
@@ -608,7 +610,11 @@ describe("pathguard.checkWritePath — blocked backdoor/persistence targets", ()
     expect(checkWritePath("/var/spool/cron/root").code).toBe("cron")
     expect(checkWritePath("/var/at/jobs/x").code).toBe("cron")
   })
-  test("launchd / LaunchAgents persistence", () => {
+  // Scoped to the platform whose MECHANISM it asserts — launchd, Seatbelt, Homebrew paths. The
+// assertion is unchanged; only where it applies is now stated, the same way this suite already
+// scopes its Seatbelt and Docker cases. A suite that fails everywhere it was never about is a
+// suite people stop reading.
+  test.if(IS_MAC)("launchd / LaunchAgents persistence", () => {
     expect(checkWritePath("/Library/LaunchDaemons/x.plist").code).toBe("launchd")
     expect(checkWritePath("/System/Library/LaunchDaemons/x.plist").code).toBe("launchd")
     expect(checkWritePath(path.join(home, "Library", "LaunchAgents", "x.plist")).code).toBe("launchagent")

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.116.0"
+export const FABULA_VERSION = "0.117.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.117.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Проверки на двух других системах стали зелёными — и не тем способом, каким это обычно делают. Ни одно утверждение не ослаблено: те, что говорили о механизме ОДНОЙ системы (её способ автозапуска, её защита ядра, её расположение программ), теперь объявляют свою область, как в этом наборе уже сделано для двух других механизмов; те, что говорили о свойстве, общем для всех, получили цель, запрещённую на всех трёх, и стали проверять больше, чем раньше. Проверка, называвшая условием «когда контейнеров нет», теперь и вправду выполняется только тогда; проверка живого поискового сервера спрашивает не только запись в настройках, но и установлена ли сама программа — иначе отсутствующий пакет читался как сломанная связка. По дороге найден настоящий пробел, который я же и внёс: на третьей системе список запрещённых для записи путей потерял системные файлы учётных записей — а они там достижимы через совместимый слой; правило, которое ни с чем не совпадает, ничего не стоит, а отсутствующее стоит ровно того случая, о котором не подумали. Обратная проверка сделана: если убрать цели из общего списка, шесть проверок краснеют на обеих системах.",
+        en: "The checks on the two other systems went green — and not the usual way. No assertion was weakened: the ones that spoke about ONE system's mechanism (its autostart, its kernel protection, where its programs live) now declare their scope, exactly as this suite already does for two other mechanisms; the ones that spoke about a property common to all were given a target refused on all three, and now check more than they did. The check that named \"when containers are unavailable\" as its condition now really runs only then; the live search-server check asks not only whether the settings name it but whether the program is installed — otherwise a missing package read as a broken integration. Along the way a real gap surfaced that I had introduced myself: on the third system the list of paths forbidden to write had lost the system account files — and those are reachable there through the compatibility layer; a rule that matches nothing costs nothing, while an absent one costs exactly the case nobody thought of. The reverse check was done: remove the targets from the shared list and six checks go red on both systems.",
+      },
+    ],
+  },
   {
     version: "0.116.0",
     date: "2026-08-05",

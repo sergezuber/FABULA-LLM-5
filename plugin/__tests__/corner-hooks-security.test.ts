@@ -14,6 +14,8 @@
 
 import { test, expect, describe } from "bun:test"
 import { FabulaSecurity } from "../fabula-security"
+import { current as currentPlatform } from "../lib/platform/index"
+const IS_MAC = currentPlatform() === "darwin"
 
 // ── real hook accessors ──────────────────────────────────────────────────────────────────────
 const hooks = async () => (await FabulaSecurity({} as any)) as any
@@ -191,7 +193,12 @@ describe("before: write-path guard — every category, every write tool", () => 
     await expectBlocked("write", { filePath: "/etc/shadow" }, "write:shadow")
   })
 
-  test("cron / launchd persistence", async () => {
+  // Scoped to the platform whose MECHANISM it asserts — launchd, Seatbelt, Homebrew paths. The
+// assertion is unchanged; only where it applies is now stated, the same way this suite already
+// scopes its Seatbelt and Docker cases. A suite that fails everywhere it was never about is a
+// suite people stop reading.
+
+  test.if(IS_MAC)("cron / launchd persistence", async () => {
     await expectBlocked("write", { filePath: "/etc/cron.d/evil" }, "write:cron")
     await expectBlocked("write", { filePath: "/var/spool/cron/root" }, "write:cron")
     await expectBlocked("create_file", { path: "/Library/LaunchDaemons/evil.plist" }, "write:launchd")

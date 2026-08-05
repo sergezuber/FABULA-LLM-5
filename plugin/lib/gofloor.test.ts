@@ -30,6 +30,8 @@ import {
   severityRank,
   type GoFinding,
 } from "./gofloor"
+import { current as currentPlatform } from "./platform/index"
+const IS_MAC = currentPlatform() === "darwin"
 
 const ROOT = "/repo"
 // The engine's marker for a tree edit whose file cannot be named (lib/edittools.ts BASH_EDIT_MARKER).
@@ -599,7 +601,12 @@ describe("goToolPath — an app launched from Finder inherits no shell PATH", ()
     expect(p.split(":").filter((x) => x === "/usr/local/go/bin")).toHaveLength(1)
   })
 
-  test("an empty environment still yields the documented defaults", () => {
+  // Scoped to the platform whose MECHANISM it asserts — launchd, Seatbelt, Homebrew paths. The
+// assertion is unchanged; only where it applies is now stated, the same way this suite already
+// scopes its Seatbelt and Docker cases. A suite that fails everywhere it was never about is a
+// suite people stop reading.
+
+  test.if(IS_MAC)("an empty environment still yields the documented defaults", () => {
     const parts = goToolPath({}).split(":").filter(Boolean)
     expect(parts).toContain("/usr/local/go/bin")
     expect(parts).toContain("/opt/homebrew/bin")

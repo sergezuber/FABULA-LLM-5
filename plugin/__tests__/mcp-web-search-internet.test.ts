@@ -39,6 +39,20 @@ const COMMAND: string[] = mcpEntry?.command ?? []
 const SERVER_ENV: Record<string, string> = mcpEntry?.environment ?? {}
 const SEARXNG_URL: string = SERVER_ENV.SEARXNG_URL ?? process.env.SEARXNG_URL ?? "http://localhost:8888"
 
+// The config naming a server is not the same as the server being INSTALLED. These cases spawn the real
+// command, so a machine that has the entry but not the program failed four of them — reporting a missing
+// package as a broken integration. The gate asks both questions now, and says which one is missing.
+const serverInstalled = (() => {
+  const exe = COMMAND[0]
+  if (!exe) return false
+  try {
+    const { whichBin } = require("../lib/platform/shell") as typeof import("../lib/platform/shell")
+    return !!whichBin(exe)
+  } catch { return false }
+})()
+if (configOk && !serverInstalled) console.warn(`[skip] mcp:${MCP_NAME} — the config names \`${COMMAND[0]}\` but it is not installed here`)
+const liveOk = configOk && serverInstalled
+
 // ---- Probe whether SearXNG is actually up (so we can skip live calls gracefully) ----
 let searxngUp = false
 let searxngProbeNote = ""
@@ -135,7 +149,7 @@ function textOf(callResult: any): string {
 // ---------------------------------------------------------------------------------------------
 // 1) The server PROCESS spawns and completes the MCP handshake (does not depend on SearXNG).
 // ---------------------------------------------------------------------------------------------
-test.if(configOk)("server spawns and completes initialize handshake", async () => {
+test.if(liveOk)("server spawns and completes initialize handshake", async () => {
   const c = new McpStdioClient(COMMAND, SERVER_ENV)
   try {
     const init = await c.initialize()
@@ -151,7 +165,7 @@ test.if(configOk)("server spawns and completes initialize handshake", async () =
 // ---------------------------------------------------------------------------------------------
 // 2) tools/list returns the expected SearXNG tools (independent of SearXNG being up).
 // ---------------------------------------------------------------------------------------------
-test.if(configOk)("tools/list exposes searxng_web_search (+ web_url_read)", async () => {
+test.if(liveOk)("tools/list exposes searxng_web_search (+ web_url_read)", async () => {
   const c = new McpStdioClient(COMMAND, SERVER_ENV)
   try {
     await c.initialize()
@@ -174,7 +188,7 @@ test.if(configOk)("tools/list exposes searxng_web_search (+ web_url_read)", asyn
 // ---------------------------------------------------------------------------------------------
 // 3) LIVE search call → real results. Skips (not fails) if SearXNG :8888 is down.
 // ---------------------------------------------------------------------------------------------
-test.if(configOk)("searxng_web_search returns real results for a real query", async () => {
+test.if(liveOk)("searxng_web_search returns real results for a real query", async () => {
   if (!searxngUp) {
     console.warn(`[skip] SearXNG ${SEARXNG_URL} down (${searxngProbeNote}); cannot run live search`)
     return
@@ -205,7 +219,7 @@ test.if(configOk)("searxng_web_search returns real results for a real query", as
 //    running and report an MCP error (or isError content) rather than tearing down the process.
 //    This is independent of SearXNG (arg validation happens before any HTTP call).
 // ---------------------------------------------------------------------------------------------
-test.if(configOk)("missing required arg (no query) is an error, not a crash", async () => {
+test.if(liveOk)("missing required arg (no query) is an error, not a crash", async () => {
   const c = new McpStdioClient(COMMAND, SERVER_ENV)
   try {
     await c.initialize()
@@ -228,7 +242,7 @@ test.if(configOk)("missing required arg (no query) is an error, not a crash", as
 // ---------------------------------------------------------------------------------------------
 // 5) Unknown tool name → graceful error, server survives.
 // ---------------------------------------------------------------------------------------------
-test.if(configOk)("unknown tool name → graceful error, server survives", async () => {
+test.if(liveOk)("unknown tool name → graceful error, server survives", async () => {
   const c = new McpStdioClient(COMMAND, SERVER_ENV)
   try {
     await c.initialize()

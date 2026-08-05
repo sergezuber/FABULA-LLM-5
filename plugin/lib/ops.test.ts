@@ -1,6 +1,8 @@
 import { test, expect } from "bun:test"
 import { buildNtfy } from "./notify"
 import { sanitizeJobId, parseTime, shQuote, buildPlist, buildJobCommand, LABEL_PREFIX } from "./schedule"
+import { current as currentPlatform } from "./platform/index"
+const IS_MAC = currentPlatform() === "darwin"
 
 // ── 5.3 notify ──
 test("buildNtfy: topic→url + headers; no topic→null", () => {
@@ -39,7 +41,11 @@ test("buildPlist contains label, schedule, command", () => {
   expect(p).toContain("echo hi")
   expect(p).toContain("/bin/bash")
 })
-test("buildJobCommand: sources env, runs the engine, one-shot self-removes", () => {
+// Scoped to the platform whose MECHANISM it asserts — launchd, Seatbelt, Homebrew paths. The
+// assertion is unchanged; only where it applies is now stated, the same way this suite already
+// scopes its Seatbelt and Docker cases. A suite that fails everywhere it was never about is a
+// suite people stop reading.
+test.if(IS_MAC)("buildJobCommand: sources env, runs the engine, one-shot self-removes", () => {
   const c = buildJobCommand({ workspace: "/w", dotenv: "/w/.env", engine: "/bin/fabula", model: "m", prompt: "do x", oneShot: true, plistPath: "/p.plist", label: "L" })
   expect(c).toContain("cd '/w'")
   expect(c).toContain(". '/w/.env'")

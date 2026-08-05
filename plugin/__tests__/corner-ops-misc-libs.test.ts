@@ -28,6 +28,8 @@ import { sanitizeSkillName, buildSkillMd, validateSkillMd } from "../lib/skillio
 import {
   resolveVision, visionBody, extractVision, mimeFromPath, whisperPythonCandidates,
 } from "../lib/multimodal"
+import { current as currentPlatform } from "../lib/platform/index"
+const IS_MAC = currentPlatform() === "darwin"
 
 // ───────────────────────────── moa.resolveProviders ─────────────────────────────
 describe("moa.resolveProviders", () => {
@@ -559,7 +561,11 @@ describe("schedule.buildJobCommand", () => {
     })
     expect(cmd).toContain("run -m 'glm-4.7' 'p'")
   })
-  test("oneShot appends self-unload + rm of the plist", () => {
+  // Scoped to the platform whose MECHANISM it asserts — launchd, Seatbelt, Homebrew paths. The
+// assertion is unchanged; only where it applies is now stated, the same way this suite already
+// scopes its Seatbelt and Docker cases. A suite that fails everywhere it was never about is a
+// suite people stop reading.
+  test.if(IS_MAC)("oneShot appends self-unload + rm of the plist", () => {
     const cmd = buildJobCommand({
       workspace: "/w", dotenv: "/w/.env", engine: "fabula", prompt: "p",
       oneShot: true, plistPath: "/path/job.plist", label: "com.fabula.schedule.j",

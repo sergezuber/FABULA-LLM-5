@@ -506,7 +506,7 @@ describe("execute_code runs under the kernel profile when Docker is unavailable"
   const ctx = { directory: os.tmpdir(), sessionID: "s" }
   const write = (target: string) => `require("fs").writeFileSync(${JSON.stringify(target)}, "x"); console.log("WROTE")`
 
-  test.if(existsSync("/usr/bin/sandbox-exec"))("a persistence target cannot be written even from inside a program", async () => {
+  test.if(!dockerUp && existsSync("/usr/bin/sandbox-exec"))("a persistence target cannot be written even from inside a program", async () => {
     const h = await hooks()
     for (const target of [
       path.join(os.homedir(), "Library/LaunchAgents/zz-fabula-probe.plist"),
@@ -520,7 +520,7 @@ describe("execute_code runs under the kernel profile when Docker is unavailable"
   })
 
   // The control is what keeps this from passing on a profile that simply denies everything.
-  test.if(existsSync("/usr/bin/sandbox-exec"))("ordinary work is untouched", async () => {
+  test.if(!dockerUp && existsSync("/usr/bin/sandbox-exec"))("ordinary work is untouched", async () => {
     const h = await hooks()
     const target = path.join(os.tmpdir(), `zz-fabula-ok-${process.pid}.txt`)
     try {

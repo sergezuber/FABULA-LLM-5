@@ -83,6 +83,19 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import * as os from "node:os"
 import * as pathmod from "node:path"
 
+// A persistence target EVERY platform treats as one.
+//
+// These cases used to name `~/Library/LaunchAgents/...`, which is persistence on macOS and an ordinary
+// folder anywhere else — so on Linux the guard correctly allowed it and the test read that as a hole in
+// the guard. The property under test is platform-independent (the shell is the same door as the tool),
+// and `~/.ssh/authorized_keys` is refused on all three, so the assertion now holds everywhere instead of
+// being scoped to one machine.
+// The exact name the rule matches on every platform. NOTHING IS EVER WRITTEN HERE: `before()` invokes
+// the hook alone, never the command, so naming a real path costs nothing and testing a fake one would
+// have tested the fake.
+const PERSIST_TARGET = `${os.homedir()}/.ssh/authorized_keys`
+
+
 test("plan mode blocks a write; bypass mode lets a normally-blocked path through; allow-list persists", async () => {
   const dir = mkdtempSync(pathmod.join(os.tmpdir(), "fab-perm-wire-"))
   const prevFile = process.env.FABULA_PERMISSIONS_FILE
@@ -251,9 +264,9 @@ describe("the shell is a door onto the same rooms", () => {
   test("a write the tool guard refuses is refused through the shell too", async () => {
     const HOME = os.homedir()
     for (const cmd of [
-      `echo '<plist/>' > ${HOME}/Library/LaunchAgents/com.example.hourly.plist`,
+      `echo '<x/>' > ${PERSIST_TARGET}`,
       `cat x | tee ${HOME}/.ssh/authorized_keys`,
-      `cp evil.plist "${HOME}/Library/LaunchAgents/x.plist"`,
+      `cp evil.file "${PERSIST_TARGET}"`,
       `sed -i '' 's/a/b/' /etc/sudoers`,
       `echo x >> ${HOME}/.config/fabula/fabula-permissions.json`,
     ]) {
@@ -293,7 +306,7 @@ describe("the shell is a door onto the same rooms", () => {
 // keeps the switch honest: it is "the shell stops asking", not "the guards are off".
 test("the shell door has a kill-switch, and it does not take the other doors with it", async () => {
   const prev = process.env.FABULA_SHELL_GUARD
-  const cmd = `echo x > ${os.homedir()}/Library/LaunchAgents/zz.plist`
+  const cmd = `echo x > ${PERSIST_TARGET}`
   try {
     delete process.env.FABULA_SHELL_GUARD
     await expectBlocked("bash_tool", { command: cmd }, "[BLOCKED")
@@ -301,7 +314,7 @@ test("the shell door has a kill-switch, and it does not take the other doors wit
     process.env.FABULA_SHELL_GUARD = "0"
     await expectAllowed("bash_tool", { command: cmd })
     // …while the TOOL door is untouched by that switch.
-    await expectBlocked("create_file", { path: `${os.homedir()}/Library/LaunchAgents/zz.plist` }, "[BLOCKED")
+    await expectBlocked("create_file", { path: PERSIST_TARGET }, "[BLOCKED")
   } finally {
     if (prev === undefined) delete process.env.FABULA_SHELL_GUARD
     else process.env.FABULA_SHELL_GUARD = prev

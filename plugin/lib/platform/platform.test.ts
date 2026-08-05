@@ -12,7 +12,7 @@ import { policyFitsSource, policyMismatchReason, DEFAULT_POLICY_MEASURED_ON } fr
 import * as os from "node:os"
 import * as fs from "node:fs"
 import * as path from "node:path"
-import { current, isPosix, pathListSeparator, exeSuffix, PLATFORMS } from "./index"
+import { current, current as currentPlatform, isPosix, pathListSeparator, exeSuffix, PLATFORMS } from "./index"
 import { baseDirs, homeDir, goBinDirs, systemBinDirs, appendToPath, joinPathList, splitPathList } from "./paths"
 import { shellArgv, shellBin, whichBin, whichFirst } from "./shell"
 import { hardlineTargets, hardlineKernelRegex, credentialReadDirs, persistenceCommands } from "./persistence"
@@ -297,10 +297,20 @@ describe("WIRED: lib/sandbox renders the SAME list into the kernel profile", () 
 })
 
 describe("WIRED: the confined shell and the unconfined shell are the same program", () => {
-  test("sandboxArgv and bashArgv both compose platform/shell", () => {
+  // Platform-independent half: whatever runs the command, it is the shell this seam chose. If a backend
+  // could pick a different one, the command guards would parse one grammar while another was executed.
+  test("the plain shell path composes platform/shell, on every platform", () => {
+    withEnv({ FABULA_SHELL_BIN: "/opt/marker-shell" }, () => {
+      expect(bashArgv("echo hi")).toEqual(["/opt/marker-shell", "-lc", "echo hi"])
+    })
+  })
+
+  // macOS half: a Seatbelt PROFILE STRING means something here and nothing elsewhere, and the wrapper is
+  // `sandbox-exec` only on this platform. Scoped rather than deleted — the composition it proves is real,
+  // it is simply about a mechanism the other two do not have.
+  test.if(currentPlatform() === "darwin")("under Seatbelt, both wrappers still compose platform/shell", () => {
     withEnv({ FABULA_SHELL_BIN: "/opt/marker-shell" }, () => {
       expect(sandboxArgv("echo hi", "(p)")).toEqual(["sandbox-exec", "-p", "(p)", "/opt/marker-shell", "-lc", "echo hi"])
-      expect(bashArgv("echo hi")).toEqual(["/opt/marker-shell", "-lc", "echo hi"])
       expect(bashArgv("echo hi", { sandboxProfile: "(p)" }))
         .toEqual(["sandbox-exec", "-p", "(p)", "/opt/marker-shell", "-lc", "echo hi"])
     })

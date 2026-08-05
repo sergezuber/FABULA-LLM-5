@@ -227,7 +227,13 @@ export function hardlineTargets(
   p: Platform = current(env),
 ): HardlineTarget[] {
   const home = homeDir(env)
-  if (p === "win32") return [...win32Targets(home), ...supervisionTargets()]
+  // THE POSIX SET APPLIES ON WINDOWS TOO, and dropping it there was a real hole rather than a tidiness.
+  // A Windows machine has no `/etc/sudoers` of its own — but it reaches one through WSL, and the POSIX
+  // shell this harness requires presents `/etc/...` paths directly. A rule that matches nothing on a
+  // platform costs nothing; a rule that is absent costs exactly the case nobody thought of. Found by
+  // running the guard suite with the platform flipped to win32, where four backdoor paths stopped being
+  // refused.
+  if (p === "win32") return [...posixTargets(home), ...win32Targets(home), ...supervisionTargets()]
   const base = posixTargets(home)
   const os = p === "darwin" ? darwinTargets(home) : linuxTargets(home)
   return [...base, ...os, ...supervisionTargets()]

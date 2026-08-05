@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.152.0"
+export const FABULA_VERSION = "0.153.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.153.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Длительность запроса измеряется часами, которые способны его увидеть. Прежние считали целые миллисекунды, а быстрая точка отвечает быстрее одной — замер округлялся в ноль и отбрасывался как «не замер», то есть самые быстрые машины оказались бы теми, которые себя никогда не измеряют.",
+        en: "A request's duration is timed by a clock able to see it. The previous one counted whole milliseconds, and a fast endpoint answers inside one — the reading rounded to zero and was discarded as not a reading at all, which would have made the fastest machines the ones that never measured themselves.",
+      },
+      {
+        ru: "И проверка этой записи теперь сначала называет вердикт самой калибровки. Без этого прогон, где калибровка вовсе не состоялась, выглядел точно так же, как прогон, где она состоялась и ничего не записала, — а это противоположные неисправности. Прибор ответил сразу: калибровка сравнивает два замера и отказывается, когда они отличаются меньше её порога, потому что ниже него измеряется дрейф, а не кэш. Отказ — это механизм в работе; заглушка была неверна.",
+        en: "And the check for that record now names the calibration's own verdict first. Without it, a run where the calibration never happened looked exactly like one where it happened and recorded nothing — opposite faults. The instrument answered at once: the calibration compares two readings and declines when they differ by less than its floor, because below it drift is measured rather than cache. The refusal is the mechanism working; the stand-in was what was wrong.",
+      },
+    ],
+  },
   {
     version: "0.152.0",
     date: "2026-08-05",

@@ -930,7 +930,7 @@ dependencies = [
 
 [[package]]
 name = "fabula-shell"
-version = "0.152.0"
+version = "0.153.0"
 dependencies = [
  "serde",
  "serde_json",

@@ -553,17 +553,33 @@ test("calibrateCost records a concurrency reading for THIS machine", async () =>
   let srv: any
   try {
     // An endpoint that answers like the serving runtime: a completion carrying the prompt size it saw.
+    // The prompt size ANSWERS THE REQUEST, because the calibration compares two probes and refuses when
+    // they differ by less than its floor — correctly, since below that it would be measuring drift rather
+    // than cache. A stand-in returning one constant makes every probe identical and the calibration
+    // declines, which is what happened and what the verdict assertion above now says out loud.
     srv = Bun.serve({
       port: 0,
-      fetch: () =>
-        new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }], usage: { prompt_tokens: 40_000 } }), {
-          headers: { "Content-Type": "application/json" },
-        }),
+      async fetch(req) {
+        const body = await req.text()
+        return new Response(
+          JSON.stringify({ choices: [{ message: { content: "ok" } }], usage: { prompt_tokens: Math.round(body.length / 4) } }),
+          { headers: { "Content-Type": "application/json" } },
+        )
+      },
     })
     // The endpoint is NAMED, because the calibration refuses to make a live call under a test runner
     // unless one is — the guard that keeps this suite hermetic. Naming a local stand-in is the caller
     // saying it means to exercise the path.
-    await calibrateCost("some-model", { endpoint: `http://127.0.0.1:${srv.port}/v1`, tokens: 40_000, settleMs: 0 })
+    const verdict = await calibrateCost("some-model", { endpoint: `http://127.0.0.1:${srv.port}/v1`, tokens: 40_000, settleMs: 0 })
+    // The calibration's OWN verdict first. Without it, a run where the calibration declined to happen at
+    // all looks identical to one where it happened and recorded nothing — and those are opposite faults.
+    // Measured: this failed on a build machine in under eight milliseconds, far too fast to have made the
+    // request, and the failure text said only that a file was missing.
+    // The calibration itself CANNOT succeed against a stand-in — it compares two probes and requires the
+    // larger one to have allocated memory, which nothing here does, and it says so rather than inventing a
+    // cost. That refusal is the mechanism working. What is under test is the reading taken per PROBE,
+    // which happens before any of that: two real requests were made, and each should have left a record.
+    expect(verdict.reason).toBeTruthy()
     const written = JSON.parse(readFileSync(store, "utf8"))
     expect(written.samples.length).toBeGreaterThan(0)
     const s = written.samples[0]

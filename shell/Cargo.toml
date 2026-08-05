@@ -1,6 +1,6 @@
 [package]
 name = "fabula-shell"
-version = "0.111.0"          # stamped from fabula-changelog.ts by shell/build.sh — never edited by hand
+version = "0.112.0"          # stamped from fabula-changelog.ts by shell/build.sh — never edited by hand
 description = "FABULA desktop shell"
 edition = "2021"
 rust-version = "1.77"

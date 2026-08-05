@@ -26,9 +26,9 @@ import { homedir } from "node:os"
 // pair these call sites used to inline. Imported under their real names: an alias that made
 // `platform/memory.totalBytes` read as `totalmem` would leave the seam correct and unfindable, which in
 // practice is the same as absent.
-import { totalBytes, usedBytes as platformUsedBytes } from "./platform/memory"
+import { totalBytes, usedBytes as platformUsedBytes, memoryReading } from "./platform/memory"
 import { bunBinDir, servingBinDir, systemBinDirs, localBinDir, joinPathList, dataPath } from "./platform/paths"
-import { planWindow, DEFAULT_POLICY, type Resident, type WindowPlan } from "./windowplan"
+import { planWindow, DEFAULT_POLICY, policyFitsSource, policyMismatchReason, type Resident, type WindowPlan } from "./windowplan"
 import { fitCost, fitCostFromSamples, addObservation, safeSecondWindow, marginalCost, MIN_SIGNAL_TOKENS, SAMPLE_DISPERSION_LIMIT, type Observation, type KvSample } from "./kvcost"
 import { resolveModelDir } from "./modeldigest"
 
@@ -790,6 +790,16 @@ export async function ensureLoadedAtPlannedWindow(
         window: me.loadedWindow,
         reason: `cannot size a window for ${modelId} without knowing its weights; the serving runtime reported none`,
       }
+    }
+
+    // THE CONSTANTS ARE A JUDGEMENT ABOUT A MACHINE, and they were measured on one kind. On a host whose
+    // cache lives in VRAM the reserve and the commit fraction are about a different pool entirely, so
+    // carrying them across silently is how a window gets sized for hardware that does not exist. Refused
+    // rather than approximated: an invented conservative number is still an invented number, which is the
+    // mistake this file already paid for twice.
+    const source = memoryReading().kind
+    if (!policyFitsSource(source)) {
+      return { acted: false, window: me.loadedWindow, reason: policyMismatchReason(source) }
     }
 
     const plan = planWindow({

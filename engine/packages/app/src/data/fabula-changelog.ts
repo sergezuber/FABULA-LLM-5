@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.111.0"
+export const FABULA_VERSION = "0.112.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.112.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Установщик для второй системы теперь собирается — и собирается на машине, где той системы нет. Значит и само окно для неё не просто написано, а компилируется и линкуется: получен настоящий исполняемый файл, и объявленный номер версии лежит внутри него, в системном ресурсе. По дороге не хватало иконы нужного формата — её не было вовсе, и без неё сборка не доходила до конца. Отдельно закрыт тихий риск: числа, которыми считается размер окна модели, — это суждение о конкретной машине, измеренное там, где память общая. На машине с отдельной видеопамятью те же числа означают совсем другое, и раньше они молча применились бы к ней. Теперь источник памяти сверяется, и при несовпадении планировщик ОТКАЗЫВАЕТСЯ и говорит, что константы под это железо не измерены — вместо того чтобы выдать правдоподобное число для несуществующей машины.",
+        en: "The installer for the second system now builds — and builds on a machine that does not have that system. Which means the window for it is not merely written but compiles and links: a real executable is produced, and the declared version number sits inside it, in the system resource. An icon in the required format was missing entirely along the way, and without it the build never finished. Separately closed a silent risk: the numbers that size a model's window are a judgement about one particular machine, measured where memory is shared. On a machine with separate video memory those same numbers mean something else entirely, and until now they would have been applied to it in silence. The memory source is now compared, and on a mismatch the planner REFUSES and says the constants have not been measured for this hardware — rather than producing a plausible number for a machine that does not exist.",
+      },
+    ],
+  },
   {
     version: "0.111.0",
     date: "2026-08-05",

@@ -50,6 +50,51 @@ export const DEFAULT_POLICY: WindowPolicy = {
   quantumTokens: 4096,
 }
 
+/**
+ * WHICH MACHINE THESE NUMBERS WERE MEASURED ON.
+ *
+ * `DEFAULT_POLICY` is POLICY, not fact — a judgement about how much of a machine FABULA may commit, and
+ * it was measured on a 48 GB Apple Silicon Mac where model weights, the KV cache and the desktop all draw
+ * on ONE pool. On a machine with a discrete GPU the cache lives in VRAM and the arithmetic is about a
+ * different pool entirely: a 6 GB "system reserve" is meaningless there, and 90% of VRAM is a far more
+ * aggressive commitment than 90% of unified memory, because nothing else on the machine can give any of
+ * it back.
+ *
+ * Carrying the number silently onto that machine is how a planner sizes a window for hardware that does
+ * not exist. So the source it was measured against is DECLARED, and `policyFitsSource` is what a caller
+ * asks before trusting it.
+ */
+export const DEFAULT_POLICY_MEASURED_ON: MemorySourceKind = "unified"
+
+/** The memory sources a policy can be about. Mirrors `platform/memory.ts` without importing it — this
+ *  module is pure arithmetic and takes its inputs as parameters, which is why it has no platform code. */
+export type MemorySourceKind = "unified" | "discrete-vram" | "cpu-only" | "unknown"
+
+/**
+ * Is this policy safe to apply to a machine whose memory works like `kind`?
+ *
+ * Deliberately NOT a silent fallback to something conservative: a caller that gets `false` should REFUSE
+ * and say the constants have not been measured for this hardware, the same way `planWindow` refuses an
+ * unknown cost rather than guessing one. An invented conservative number is still an invented number, and
+ * this project has paid for exactly that twice — once for a cost model fitted on the wrong quantity, once
+ * for a window computed from a figure somebody typed.
+ */
+export function policyFitsSource(kind: MemorySourceKind, measuredOn: MemorySourceKind = DEFAULT_POLICY_MEASURED_ON): boolean {
+  // `cpu-only` shares the shape unified memory has — one pool, the system can reclaim from it — so the
+  // reserve and the fraction mean the same thing there. VRAM does not, and `unknown` is not a claim.
+  if (kind === "unknown") return false
+  if (measuredOn === "unified") return kind === "unified" || kind === "cpu-only"
+  return kind === measuredOn
+}
+
+/** Why a caller must not use these constants here, in the words it should show. */
+export function policyMismatchReason(kind: MemorySourceKind): string {
+  if (kind === "unknown") return "the memory source could not be determined, so no policy applies to it"
+  return `the window policy was measured on ${DEFAULT_POLICY_MEASURED_ON} memory and this machine is ${kind}: ` +
+    `the reserve and the commit fraction are about a different pool, and applying them here would size a ` +
+    `window for hardware that does not exist. Re-measure them on this machine before trusting a plan.`
+}
+
 /** Something else already holding memory: another model, an embedding model, anything loaded.
  *
  *  `bytes: 0` means UNKNOWN, not free — see the refusal in planWindow. A resident is by definition

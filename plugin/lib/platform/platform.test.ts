@@ -8,6 +8,7 @@
 // hand-written copy of the rules, that half goes red — which is the only thing that can catch it.
 
 import { test, expect, describe } from "bun:test"
+import { policyFitsSource, policyMismatchReason, DEFAULT_POLICY_MEASURED_ON } from "../windowplan"
 import * as os from "node:os"
 import * as fs from "node:fs"
 import * as path from "node:path"
@@ -391,5 +392,41 @@ describe("discrete VRAM is read from the driver, summed across devices", () => {
   test("macOS never asks the driver at all", () => {
     // Apple Silicon has no discrete VRAM to find, and asking would add a spawn to every plan.
     expect(vramBytes("darwin", { HOME: "/h", FABULA_NVIDIA_SMI: shim("1, 1") } as any)).toBeNull()
+  })
+})
+
+// ── Policy constants belong to the machine they were measured on ───────────────────────────────────
+//
+// DEFAULT_POLICY is a JUDGEMENT — how much of a machine FABULA may commit — measured on 48 GB of unified
+// memory, where weights, KV cache and the desktop draw on one pool the system can reclaim from. On a host
+// whose cache lives in VRAM none of that holds: a 6 GB "system reserve" is meaningless there, and 90% of
+// VRAM is a far more aggressive commitment because nothing can give any of it back. Carrying the number
+// across silently is how a window gets sized for hardware that does not exist.
+describe("a window policy is not portable just because it is a number", () => {
+  test("unified and cpu-only share the shape the constants were measured against", () => {
+    expect(policyFitsSource("unified")).toBe(true)
+    expect(policyFitsSource("cpu-only")).toBe(true)
+  })
+
+  test("a VRAM machine is REFUSED, not approximated", () => {
+    // Refusal rather than a conservative guess: an invented conservative number is still invented, and
+    // this project has paid for exactly that twice — a cost model fitted on the wrong quantity, and a
+    // window computed from a figure somebody typed.
+    expect(policyFitsSource("discrete-vram")).toBe(false)
+    const why = policyMismatchReason("discrete-vram")
+    expect(why).toContain("discrete-vram")
+    expect(why).toContain("Re-measure")
+  })
+
+  test("an unknown source is not a claim, so nothing is applied to it", () => {
+    expect(policyFitsSource("unknown")).toBe(false)
+    expect(policyMismatchReason("unknown")).toContain("could not be determined")
+  })
+
+  test("the policy DECLARES its provenance, so the check has something to compare against", () => {
+    // Without this the mismatch test could only be written by hardcoding "unified" a second time — the
+    // two-definitions shape the whole seam exists to remove.
+    expect(DEFAULT_POLICY_MEASURED_ON).toBe("unified")
+    expect(policyFitsSource("discrete-vram", "discrete-vram")).toBe(true)
   })
 })

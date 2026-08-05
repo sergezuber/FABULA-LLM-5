@@ -129,6 +129,37 @@ jobs:
           dpkg-deb -I "$deb" | grep -q "Version: $v" || { echo "::error::the package does not carry $v"; exit 1; }
           echo "bundled $(basename "$deb") carrying $v"
 
+  windows-installer-from-linux:
+    name: Windows installer cross-built from Linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - name: NSIS and the cross toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nsis lld llvm clang
+          cargo install cargo-xwin --locked
+          cargo install tauri-cli --version "^2" --locked
+      - name: Build the installer, and prove the artifacts are Windows PE carrying the declared version
+        working-directory: shell
+        # A real installer, not a check: this is what proves the shell's Windows branches COMPILE AND LINK
+        # on a machine that has no Windows. The version is asserted inside the PE resource, which stores
+        # it as UTF-16 — an ASCII `strings` finds nothing there and would report a correct artifact as
+        # broken, which is exactly what happened the first time this was measured by hand.
+        run: |
+          cargo tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc --bundles nsis
+          exe=$(find target -name 'fabula-shell.exe' | head -1)
+          inst=$(find target -name '*-setup.exe' | head -1)
+          [ -n "$exe" ] && [ -n "$inst" ] || { echo "::error::no Windows artifacts produced"; exit 1; }
+          file "$exe"   | grep -q 'PE32+ executable' || { echo "::error::the app is not a Windows PE"; exit 1; }
+          file "$inst"  | grep -q 'PE32'             || { echo "::error::the installer is not a Windows PE"; exit 1; }
+          v=$(sed -n 's/^export const FABULA_VERSION = "\(.*\)"$/\1/p' ../engine/packages/app/src/data/fabula-changelog.ts | head -1)
+          strings -a -el "$exe" | grep -qF "$v" || { echo "::error::the PE version resource does not carry $v"; exit 1; }
+          echo "built $(basename "$inst") carrying $v"
+
   deploy-guard-windows:
     name: Deploy guard runs where bash is optional
     runs-on: windows-latest

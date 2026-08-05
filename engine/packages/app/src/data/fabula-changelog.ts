@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.125.0"
+export const FABULA_VERSION = "0.126.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.126.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Правило, привязанное к домашнему каталогу, теперь строится ровно одним способом — и сразу в обоих написаниях. Обвязка не выбирает форму этого каталога: он приходит из окружения, и на одной из систем приходит с обратными косыми. Склейка одной формы с другой давала путь, не принадлежащий ни одной системе и не совпадающий ни с чем — так запрет на автозапуск и на ключи доступа оказывался немым при полностью зелёных проверках. Ошибка была сделана трижды в трёх списках одинаково, поэтому вместо трёх исправлений сделано одно определение: другого способа привязаться к дому больше нет.",
+        en: "A rule anchored at the user's home is now built exactly one way — and in both spellings at once. The harness does not choose that directory's shape: it arrives from the environment, and on one system it arrives with backslashes. Joining one shape with the other produced a path belonging to no system and matching nothing, which is how the refusals covering autostart and key files came to be silent while their checks were entirely green. The same mistake had been made three times in three lists, so instead of three corrections there is one definition: there is no other way to anchor at a home now.",
+      },
+      {
+        ru: "И проверки перестали опираться на то, что на машине есть конкретные посторонние файлы: там, где нужна была настоящая программа, она теперь создаётся — с тем расширением, которого требует эта система. Прежде проверка искала то, чего на третьей системе просто нет, и сообщала о поломке поиска, тогда как не хватало лишь того, что он искал.",
+        en: "And the checks stopped resting on particular unrelated files happening to exist on the machine: where a real program was needed, one is now made — carrying the extension that system requires of an executable. Before, a check looked for something the third system simply does not have and reported the lookup broken, when all that was missing was the thing it went looking for.",
+      },
+    ],
+  },
   {
     version: "0.125.0",
     date: "2026-08-05",

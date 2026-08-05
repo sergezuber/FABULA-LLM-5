@@ -48,6 +48,29 @@ export interface HardlineTarget {
 }
 
 /**
+ * A rule anchored at the user's home, in BOTH dialects — the one helper every target set uses.
+ *
+ * The harness does not choose the spelling of `home`: it arrives from the environment, and on Windows it
+ * arrives with backslashes. Joining it with one dialect's separator therefore produces a HYBRID —
+ * `C:\Users\x/.ssh/authorized_keys` — which belongs to no platform and matches nothing at all. That is
+ * how the SSH backdoor rule came to be silent on one platform while its own tests were green: the list
+ * had the rule, and the rule could never fire.
+ *
+ * Written once because it was got wrong three times in three target sets, each in the same way. A caller
+ * cannot now anchor at a home and forget the other spelling, because there is no other way to do it.
+ */
+function homeAnchored(home: string, ...segments: string[]): string[] {
+  const a = posix.join(home, ...segments)
+  const b = win.join(home, ...segments)
+  return a === b ? [a] : [a, b]
+}
+
+/** A pattern written with `/` that must also match the same path spelled with `\`. */
+function anySep(p: string, flags?: string): RegExp {
+  return new RegExp(p.replace(/\//g, "[\\\\/]"), flags)
+}
+
+/**
  * Targets shared by every POSIX host: SSH, system auth, cron.
  *
  * These apply on Windows too (that platform reaches them through the POSIX shell and through WSL), so the
@@ -58,13 +81,11 @@ export interface HardlineTarget {
  * list exists to refuse — was ALLOWED there. Not a test artefact: a live hole on one platform.
  */
 function posixTargets(home: string): HardlineTarget[] {
-  const anySep = (p: string) => new RegExp(p.replace(/\//g, "[\\\\/]"))
   return [
     {
       code: "ssh_authorized_keys",
       reason: "writing SSH authorized_keys installs a login backdoor.",
-      // The home-anchored form in both dialects: whichever spelling the caller used, it is this file.
-      match: [posix.join(home, ".ssh", "authorized_keys"), win.join(home, ".ssh", "authorized_keys")],
+      match: homeAnchored(home, ".ssh", "authorized_keys"),
       kernel: ["authorized_keys"],
     },
     {
@@ -118,7 +139,7 @@ function darwinTargets(home: string): HardlineTarget[] {
     {
       code: "launchagent",
       reason: "writing LaunchAgents installs persistence.",
-      match: [posix.join(home, "Library", "LaunchAgents")],
+      match: homeAnchored(home, "Library", "LaunchAgents"),
       kernel: ["/LaunchAgents/"],
     },
   ]
@@ -136,7 +157,7 @@ function linuxTargets(home: string): HardlineTarget[] {
     {
       code: "systemd_user",
       reason: "writing a user systemd unit installs persistence.",
-      match: [posix.join(home, ".config", "systemd", "user"), /\/\.config\/systemd\/user\//],
+      match: [...homeAnchored(home, ".config", "systemd", "user"), anySep("/\\.config/systemd/user/")],
       kernel: ["/\\.config/systemd/user/"],
     },
     {
@@ -148,13 +169,13 @@ function linuxTargets(home: string): HardlineTarget[] {
     {
       code: "autostart",
       reason: "writing an XDG autostart entry starts a program at every login.",
-      match: [posix.join(home, ".config", "autostart"), /\/\.config\/autostart\//],
+      match: [...homeAnchored(home, ".config", "autostart"), anySep("/\\.config/autostart/")],
       kernel: ["/\\.config/autostart/"],
     },
     {
       code: "shell_rc",
       reason: "writing a shell startup file runs code on every login shell.",
-      match: [/\/\.(bashrc|bash_profile|zshrc|zprofile|profile)$/],
+      match: [anySep("/\\.(bashrc|bash_profile|zshrc|zprofile|profile)$")],
       kernel: ["/\\.(bashrc|bash_profile|zshrc|zprofile|profile)$"],
     },
     {
@@ -181,19 +202,19 @@ function win32Targets(home: string): HardlineTarget[] {
     {
       code: "startup_folder",
       reason: "writing into the Startup folder runs a program at every login.",
-      match: [/\\Start Menu\\Programs\\Startup\\/i, /\/Start Menu\/Programs\/Startup\//i],
+      match: [anySep("/Start Menu/Programs/Startup/", "i")],
       kernel: [],
     },
     {
       code: "scheduled_task",
       reason: "writing into the Tasks store installs a scheduled task.",
-      match: [/\\System32\\Tasks\\/i, /\/System32\/Tasks\//i],
+      match: [anySep("/System32/Tasks/", "i")],
       kernel: [],
     },
     {
       code: "powershell_profile",
       reason: "writing a PowerShell profile runs code in every new shell.",
-      match: [/\\(Microsoft\.PowerShell|Profile)\.ps1$/i, /\/(Microsoft\.PowerShell|Profile)\.ps1$/i],
+      match: [anySep("/(Microsoft\\.PowerShell|Profile)\\.ps1$", "i")],
       kernel: [],
     },
     {
@@ -201,13 +222,13 @@ function win32Targets(home: string): HardlineTarget[] {
       reason: "writing SSH authorized_keys installs a login backdoor.",
       // Both spellings: a Windows machine reaches this file as `C:\\Users\\u\\.ssh\\...` and, through the
       // POSIX shell this harness requires, as `/c/Users/u/.ssh/...`.
-      match: [win.join(home, ".ssh", "authorized_keys"), posix.join(home, ".ssh", "authorized_keys")],
+      match: homeAnchored(home, ".ssh", "authorized_keys"),
       kernel: [],
     },
     {
       code: "ssh_key",
       reason: "writing into ~/.ssh keys/authorized_keys is an SSH backdoor vector.",
-      match: [/[\\/]\.ssh[\\/](authorized_keys|id_[a-z0-9]+)$/i],
+      match: [anySep("/\\.ssh/(authorized_keys|id_[a-z0-9]+)$", "i")],
       kernel: [],
     },
   ]

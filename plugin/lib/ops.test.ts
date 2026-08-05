@@ -2,6 +2,7 @@ import { test, expect } from "bun:test"
 import { buildNtfy } from "./notify"
 import { sanitizeJobId, parseTime, shQuote, buildPlist, buildJobCommand, LABEL_PREFIX } from "./schedule"
 import { current as currentPlatform } from "./platform/index"
+import { shellBinAbsolute } from "./platform/shell"
 const IS_MAC = currentPlatform() === "darwin"
 
 // ── 5.3 notify ──
@@ -39,7 +40,10 @@ test("buildPlist contains label, schedule, command", () => {
   expect(p).toContain("<key>Hour</key><integer>8</integer>")
   expect(p).toContain("<key>Minute</key><integer>15</integer>")
   expect(p).toContain("echo hi")
-  expect(p).toContain("/bin/bash")
+  // The plist names whatever shell the seam RESOLVED, not a POSIX spelling: the claim being made is
+  // that a definition carries a program the scheduler can open, and on a machine where that program
+  // lives elsewhere the literal would assert a fact about someone else's computer.
+  expect(p).toContain(shellBinAbsolute())
 })
 // Scoped to the platform whose MECHANISM it asserts — launchd, Seatbelt, Homebrew paths. The
 // assertion is unchanged; only where it applies is now stated, the same way this suite already

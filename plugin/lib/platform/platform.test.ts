@@ -89,8 +89,8 @@ describe("platform/paths — resolved the way the ENGINE resolves it", () => {
   })
 
   test("without MIMOCODE_HOME the answer is byte-identical to what 26 hand-written copies produced", () => {
-    const d = baseDirs({ HOME: "/home/u" })
-    expect(d.data).toBe(path.join("/home/u", ".local", "share", "fabula"))
+    const d = baseDirs({ HOME: "/home/u" }, "linux")
+    expect(d.data).toBe("/home/u/.local/share/fabula")
     expect(d.config).toBe("/home/u/.config/fabula")
     // XDG still wins over the default, which is what those copies did too.
     expect(baseDirs({ HOME: "/home/u", XDG_DATA_HOME: "/xdg/data" }, "linux").data).toBe("/xdg/data/fabula")
@@ -167,17 +167,38 @@ describe("platform/shell — one shell family, one grammar the guards can parse"
     expect(argv[0]!.toLowerCase()).toContain("bash")
   })
 
+  // `/bin/sh` was the fixture, and it is a fact about POSIX rather than about the resolver: on Windows
+  // there is no such file, so the check reported the lookup broken when the only thing missing was the
+  // program it went looking for. The fixture is now MADE — a real file, in a real directory, on whatever
+  // machine is running — so the assertion is about resolution and nothing else.
+  function withRealProgram<T>(fn: (dir: string, name: string, full: string) => T): T {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fab-which-"))
+    const name = "fabula-probe"
+    // With the extension that platform requires of an executable: on Windows a bare name is not a
+    // program, and a fixture without one would have the check reporting the resolver broken for
+    // faithfully following PATHEXT.
+    const full = path.join(dir, name + exeSuffix(currentPlatform()))
+    fs.writeFileSync(full, "#!/bin/sh\nexit 0\n")
+    fs.chmodSync(full, 0o755)
+    try { return fn(dir, name, full) } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+  }
+
   test("whichBin reads PATH directly — no `which` process, and it works with PATHEXT", () => {
-    // A directory that certainly exists, containing a program that certainly exists.
-    const found = whichBin("sh", { PATH: "/bin:/usr/bin" }, "linux")
-    expect(found).toBe("/bin/sh")
-    expect(whichBin("definitely-not-a-real-binary-xyz", { PATH: "/bin" }, "linux")).toBeNull()
-    expect(whichFirst(["nope-xyz", "sh"], { PATH: "/bin" }, "linux")).toBe("/bin/sh")
+    withRealProgram((dir, name, full) => {
+      const p = currentPlatform()
+      expect(whichBin(name, { PATH: dir }, p)).toBe(full)
+      expect(whichBin("definitely-not-a-real-binary-xyz", { PATH: dir }, p)).toBeNull()
+      expect(whichFirst(["nope-xyz", name], { PATH: dir }, p)).toBe(full)
+    })
   })
 
   test("an explicit path is honoured as given rather than searched for", () => {
-    expect(whichBin("/bin/sh", {}, "linux")).toBe("/bin/sh")
-    expect(whichBin("/bin/nope-xyz", {}, "linux")).toBeNull()
+    withRealProgram((dir, _name, full) => {
+      // Handed a path, the resolver answers with that path — it does not go looking on PATH, which here
+      // does not even contain the directory.
+      expect(whichBin(full, { PATH: "" }, currentPlatform())).toBe(full)
+      expect(whichBin(path.join(dir, "nope-xyz"), {}, currentPlatform())).toBeNull()
+    })
   })
 })
 

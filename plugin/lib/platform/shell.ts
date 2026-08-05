@@ -176,7 +176,12 @@ export function whichBin(
     : [""]
   for (const dir of splitPathList(env.PATH, p)) {
     for (const ext of exts) {
-      const cand = pathDialect(p).join(dir, name + ext)
+      // The CONVENTIONS come from the platform asked about — which separator splits PATH, and whether a
+      // bare name needs an extension. The JOIN is the host's, because the next line asks this filesystem
+      // whether the file is there: acting, not reporting. On a real machine the two are the same; they
+      // differ only while one platform is being asked about from another, which is exactly when a
+      // host-shaped `existsSync` on a target-shaped path answers no about a file that is present.
+      const cand = path.join(dir, name + ext)
       try {
         if (existsSync(cand) && statSync(cand).isFile()) return cand
       } catch { /* unreadable entry on PATH — keep looking */ }

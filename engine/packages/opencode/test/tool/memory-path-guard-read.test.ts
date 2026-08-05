@@ -15,7 +15,12 @@ import { describe, test, expect } from "bun:test"
 import * as path from "path"
 import { assertCheckpointWriterReadAllowed } from "../../src/tool/memory-path-guard"
 
-const MEMORY_ROOT = "/data/memory"
+// The root is built with THIS machine's separator, not spelled as a POSIX path. Everything below
+// joins onto it with `path.join`, and the guard compares the result against the root by prefix —
+// so a `/`-spelled root joined with a `\`-separator produces a path that starts with neither, and
+// the guard reads every target as living outside memory and permits it. Forty-four checks then
+// reported the guard as open when what was wrong was the fixture.
+const MEMORY_ROOT = path.join(path.sep, "data", "memory")
 const SID = "ses_test123"
 const call = (target: string, agentName: string) =>
   assertCheckpointWriterReadAllowed({ target, agentName, memoryRoot: () => MEMORY_ROOT })

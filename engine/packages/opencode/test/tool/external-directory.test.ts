@@ -53,9 +53,9 @@ describe("tool.assertExternalDirectory", () => {
     const { requests, ctx } = makeCtx()
 
     await Instance.provide({
-      directory: "/tmp/project",
+      directory: path.join(path.sep, "tmp", "project"),
       fn: async () => {
-        await assertExternalDirectory(ctx, path.join("/tmp/project", "file.txt"))
+        await assertExternalDirectory(ctx, path.join(path.sep, "tmp", "project", "file.txt"))
       },
     })
 
@@ -65,8 +65,8 @@ describe("tool.assertExternalDirectory", () => {
   test("asks with a single canonical glob", async () => {
     const { requests, ctx } = makeCtx()
 
-    const directory = "/tmp/project"
-    const target = "/tmp/outside/file.txt"
+    const directory = path.join(path.sep, "tmp", "project")
+    const target = path.join(path.sep, "tmp", "outside", "file.txt")
     const expected = glob(path.join(path.dirname(target), "*"))
 
     await Instance.provide({
@@ -85,8 +85,8 @@ describe("tool.assertExternalDirectory", () => {
   test("uses target directory when kind=directory", async () => {
     const { requests, ctx } = makeCtx()
 
-    const directory = "/tmp/project"
-    const target = "/tmp/outside"
+    const directory = path.join(path.sep, "tmp", "project")
+    const target = path.join(path.sep, "tmp", "outside")
     const expected = glob(path.join(target, "*"))
 
     await Instance.provide({
@@ -106,9 +106,9 @@ describe("tool.assertExternalDirectory", () => {
     const { requests, ctx } = makeCtx()
 
     await Instance.provide({
-      directory: "/tmp/project",
+      directory: path.join(path.sep, "tmp", "project"),
       fn: async () => {
-        await assertExternalDirectory(ctx, "/tmp/outside/file.txt", { bypass: true })
+        await assertExternalDirectory(ctx, path.join(path.sep, "tmp", "outside", "file.txt"), { bypass: true })
       },
     })
 
@@ -129,7 +129,7 @@ describe("tool.assertExternalDirectory", () => {
     )
 
     await Instance.provide({
-      directory: "/tmp/project", // memTarget is OUTSIDE the project dir on purpose
+      directory: path.join(path.sep, "tmp", "project"), // memTarget is OUTSIDE the project dir on purpose
       fn: async () => {
         await assertExternalDirectory(ctx, memTarget)
       },
@@ -143,9 +143,9 @@ describe("tool.assertExternalDirectory", () => {
     const { requests, ctx } = makeCtx()
 
     await Instance.provide({
-      directory: "/tmp/project",
+      directory: path.join(path.sep, "tmp", "project"),
       fn: async () => {
-        await assertExternalDirectory(ctx, "/tmp/outside/file.txt")
+        await assertExternalDirectory(ctx, path.join(path.sep, "tmp", "outside", "file.txt"))
       },
     })
 

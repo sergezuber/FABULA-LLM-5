@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.145.0"
+export const FABULA_VERSION = "0.146.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.146.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Проверки охраны каталога памяти и проверки внешних каталогов строят свои абсолютные пути для ТОЙ машины, на которой идут. Записанные с ведущей косой чертой, они были фактом об одной системе: дальше они склеиваются разделителем платформы, и получался путь, не начинающийся ни с корня, ни с каталога проекта, — охрана считала цель посторонней и пропускала её. Пятьдесят с лишним проверок докладывали, что охрана открыта, тогда как неверен был образец. Сама охрана не менялась: она с самого начала сравнивала по разделителю платформы.",
+        en: "The memory-directory guard's checks and the external-directory checks now build their absolute paths for THE machine they run on. Spelled with a leading slash they were a fact about one system: they are then joined with the platform's separator, producing a path that starts with neither the root nor the project directory — so the guard read every target as foreign and let it through. Fifty-odd checks reported the guard as open when what was wrong was the fixture. The guard itself is unchanged; it compared by the platform's separator all along.",
+      },
+    ],
+  },
   {
     version: "0.145.0",
     date: "2026-08-05",

@@ -246,7 +246,9 @@ test("TRAVERSAL: reading a corpus fires the worker with no word ever matched", a
       return
     }
     expect(existsSync(marker)).toBe(true) // the traversal itself launched the worker
-    const argv = readFileSync(marker, "utf8").trim().split("\n")
+    // Split on EITHER line ending: the stand-in a system starts natively writes the one that system
+    // uses, and cutting only on the other leaves a stray character on every value.
+    const argv = readFileSync(marker, "utf8").trim().split(/\r?\n/)
     // The tail is compared as a PATH, not as a string with one separator baked into it. Spelled with a
     // slash it was a claim about one filesystem, false for every real path on another — and it was the
     // last of this class in this file: the marker had begun appearing and this line kept the check red.

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.167.0"
+export const FABULA_VERSION = "0.168.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.168.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Разбор записанного идёт по ЛЮБОМУ окончанию строки. Подставная программа, которую система заводит своими средствами, пишет то окончание, которым пользуется сама, — и разрез только по одному оставлял лишний знак в конце каждого значения, из-за чего верно записанный путь не совпадал сам с собой.",
+        en: "What was recorded is split on EITHER line ending. A stand-in a system starts by its own means writes the ending that system uses, and cutting on only one left a stray character at the end of every value — so a correctly recorded path failed to match itself.",
+      },
+    ],
+  },
   {
     version: "0.167.0",
     date: "2026-08-06",

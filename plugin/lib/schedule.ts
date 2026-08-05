@@ -5,6 +5,7 @@
 
 import { LABEL_PREFIX, selfRemoveCommand, buildPlist as buildPlatformPlist } from "./platform/scheduler"
 import { current } from "./platform/index"
+import { shellBinAbsolute } from "./platform/shell"
 
 export { LABEL_PREFIX }
 
@@ -41,7 +42,10 @@ export interface PlistOpts {
  *  Kept as a named export because callers and tests speak in plists; the rendering itself lives with the
  *  other two schedulers, so adding a field to a job means editing one file rather than three. */
 export function buildPlist(o: PlistOpts): string {
-  return buildPlatformPlist({ ...o, id: "", shell: "/bin/bash" })
+  // RESOLVED, and resolved to an ABSOLUTE path: `/bin/bash` is a fact about macOS and Linux rather than
+  // about every machine this runs on, and a scheduler does not search PATH — a definition naming a program
+  // it cannot find fails at the one moment nobody is watching.
+  return buildPlatformPlist({ ...o, id: "", shell: shellBinAbsolute() })
 }
 
 /** Build the command that a scheduled job runs (sources .env, runs the engine; optional one-shot

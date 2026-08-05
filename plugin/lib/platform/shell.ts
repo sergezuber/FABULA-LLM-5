@@ -17,7 +17,7 @@ import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process"
 import { existsSync, statSync } from "node:fs"
 import * as path from "node:path"
 import { current, hostPlatform, type Platform } from "./index"
-import { homeDir, splitPathList } from "./paths"
+import { homeDir, pathDialect, splitPathList } from "./paths"
 
 /**
  * Where a POSIX shell lives on this platform.
@@ -35,14 +35,37 @@ export function shellBin(env: NodeJS.ProcessEnv = process.env, p: Platform = cur
   const named = env.FABULA_SHELL_BIN
   if (named) return named
   if (p !== "win32") return "bash"
+  const j = pathDialect(p).join
   for (const cand of [
-    path.join(env.ProgramFiles || "C:\\Program Files", "Git", "bin", "bash.exe"),
-    path.join(env["ProgramFiles(x86)"] || "C:\\Program Files (x86)", "Git", "bin", "bash.exe"),
-    path.join(env.LOCALAPPDATA || path.join(homeDir(env), "AppData", "Local"), "Programs", "Git", "bin", "bash.exe"),
+    j(env.ProgramFiles || "C:\\Program Files", "Git", "bin", "bash.exe"),
+    j(env["ProgramFiles(x86)"] || "C:\\Program Files (x86)", "Git", "bin", "bash.exe"),
+    j(env.LOCALAPPDATA || j(homeDir(env), "AppData", "Local"), "Programs", "Git", "bin", "bash.exe"),
   ]) {
     try { if (statSync(cand).isFile()) return cand } catch { /* try the next */ }
   }
   return "bash" // let PATH answer; if it cannot, the caller reports a missing shell rather than guessing
+}
+
+/**
+ * The shell as an ABSOLUTE path, for the files that cannot search for it.
+ *
+ * `shellBin` deliberately answers with a bare `bash` on POSIX and lets PATH resolve it — right for
+ * spawning, wrong for a scheduler definition. launchd and systemd do not search PATH: a plist or unit
+ * whose program is `bash` fails to start, and it fails at the one moment nobody is watching, which is the
+ * whole failure mode the job ledger exists to make visible. Caught by a check that had spelled
+ * `/bin/bash` literally and went red when the resolver was wired in.
+ *
+ * PATH is consulted first so an operator's own shell wins, then the platform's documented location. The
+ * answer is always absolute; there is no branch that returns a bare name.
+ */
+export function shellBinAbsolute(env: NodeJS.ProcessEnv = process.env, p: Platform = current(env)): string {
+  const named = env.FABULA_SHELL_BIN
+  if (named) return named
+  const resolved = whichBin(shellBin(env, p), env, p)
+  if (resolved && resolved.includes(p === "win32" ? "\\" : "/")) return resolved
+  return p === "win32"
+    ? pathDialect(p).join(env.ProgramFiles || "C:\\Program Files", "Git", "bin", "bash.exe")
+    : "/bin/bash"
 }
 
 export interface ShellOptions {
@@ -153,7 +176,7 @@ export function whichBin(
     : [""]
   for (const dir of splitPathList(env.PATH, p)) {
     for (const ext of exts) {
-      const cand = path.join(dir, name + ext)
+      const cand = pathDialect(p).join(dir, name + ext)
       try {
         if (existsSync(cand) && statSync(cand).isFile()) return cand
       } catch { /* unreadable entry on PATH — keep looking */ }

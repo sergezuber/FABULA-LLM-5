@@ -46,7 +46,7 @@ export type BaseDirs = { data: string; cache: string; config: string; state: str
  * agree, so the defect was invisible in production and showed up only where one platform is asked about
  * another — which is precisely where the rules built from these paths are checked.
  */
-function dialect(p: Platform) {
+export function pathDialect(p: Platform) {
   return p === "win32" ? win : posix
 }
 
@@ -59,7 +59,7 @@ function dialect(p: Platform) {
  * throws at startup where the operator sees it. Same decision, different blast radius.
  */
 export function baseDirs(env: NodeJS.ProcessEnv = process.env, p: Platform = current(env)): BaseDirs {
-  const d = dialect(p)
+  const d = pathDialect(p)
   const root = env.MIMOCODE_HOME
   if (root && d.isAbsolute(root)) {
     return {
@@ -112,7 +112,7 @@ export function configPath(...segments: string[]): string {
 export function engineConfigFile(env: NodeJS.ProcessEnv = process.env): string {
   if (env.MIMOCODE_CONFIG) return env.MIMOCODE_CONFIG
   // Acting, not reporting: this path is opened. See the note above dataPath.
-  const d = dialect(hostPlatform())
+  const d = pathDialect(hostPlatform())
   const primary = d.join(baseDirs(env, hostPlatform()).config, "fabula.config.json")
   const xdgRoot = env.XDG_CONFIG_HOME || d.join(homeDir(env), ".config")
   const legacy = d.join(xdgRoot, "mimocode", "fabula.config.json")
@@ -133,17 +133,17 @@ export function engineConfigFile(env: NodeJS.ProcessEnv = process.env): string {
 
 /** `~/.bun/bin` — where the bun installer puts the runtime. */
 export function bunBinDir(env: NodeJS.ProcessEnv = process.env, p: Platform = current(env)): string {
-  return dialect(p).join(homeDir(env), ".bun", "bin")
+  return pathDialect(p).join(homeDir(env), ".bun", "bin")
 }
 
 /** `~/.local/bin` — the user-level convention on POSIX; kept on Windows for parity with the shim. */
 export function localBinDir(env: NodeJS.ProcessEnv = process.env, p: Platform = current(env)): string {
-  return dialect(p).join(homeDir(env), ".local", "bin")
+  return pathDialect(p).join(homeDir(env), ".local", "bin")
 }
 
 /** `~/.lmstudio/bin` — where LM Studio puts its `lms` CLI, on every platform it ships for. */
 export function servingBinDir(env: NodeJS.ProcessEnv = process.env, p: Platform = current(env)): string {
-  return dialect(p).join(homeDir(env), ".lmstudio", "bin")
+  return pathDialect(p).join(homeDir(env), ".lmstudio", "bin")
 }
 
 /**
@@ -169,7 +169,7 @@ export function goBinDirs(env: NodeJS.ProcessEnv = process.env, p: Platform = cu
   const home = homeDir(env)
   const out: string[] = []
   if (env.GOBIN) out.push(env.GOBIN)
-  const j = dialect(p).join
+  const j = pathDialect(p).join
   out.push(env.GOPATH ? j(env.GOPATH, "bin") : j(home, "go", "bin"))
   out.push(p === "win32" ? "C:\\Program Files\\Go\\bin" : "/usr/local/go/bin")
   return out
@@ -202,7 +202,7 @@ export function findProgram(
 ): string {
   const file = name + exeSuffix(p)
   for (const dir of programSearchDirs(env, p)) {
-    const cand = dialect(p).join(dir, file)
+    const cand = pathDialect(p).join(dir, file)
     try {
       const fs = require("node:fs") as typeof import("node:fs")
       if (fs.statSync(cand).isFile()) return cand

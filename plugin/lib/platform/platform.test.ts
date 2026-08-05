@@ -14,7 +14,7 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import { current, current as currentPlatform, isPosix, pathListSeparator, exeSuffix, PLATFORMS } from "./index"
 import { baseDirs, dataPath, homeDir, goBinDirs, systemBinDirs, appendToPath, joinPathList, splitPathList } from "./paths"
-import { shellArgv, shellBin, whichBin, whichFirst, writeMarkerScript } from "./shell"
+import { shellArgv, shellBin, shellBinAbsolute, whichBin, whichFirst, writeMarkerScript } from "./shell"
 import { hardlineTargets, hardlineKernelRegex, credentialReadDirs, persistenceCommands } from "./persistence"
 import { usedBytes, totalBytes, memoryReading, vramBytes } from "./memory"
 import { checkWritePath } from "../pathguard"
@@ -131,6 +131,26 @@ describe("platform/shell — one shell family, one grammar the guards can parse"
   test("a login shell by default, because that is what all 25 call sites used", () => {
     expect(shellArgv("echo hi", { platform: "linux", env: {} })).toEqual(["bash", "-lc", "echo hi"])
     expect(shellArgv("echo hi", { platform: "linux", env: {}, login: false })).toEqual(["bash", "-c", "echo hi"])
+  })
+
+  test("a scheduler definition gets an ABSOLUTE shell, because no scheduler searches PATH", () => {
+    // `bash` is right for spawning and fatal in a plist or unit: launchd and systemd start nothing, and
+    // they say so at the scheduled minute, to no one.
+    expect(shellBinAbsolute({}, "linux")).toBe("/bin/bash")
+    expect(shellBinAbsolute({}, "darwin")).toBe("/bin/bash")
+    expect(shellBinAbsolute({ FABULA_SHELL_BIN: "/opt/sh" }, "linux")).toBe("/opt/sh")
+    const w = shellBinAbsolute({ ProgramFiles: String.raw`C:\Program Files` }, "win32")
+    expect(w).toBe(String.raw`C:\Program Files\Git\bin\bash.exe`)
+  })
+
+  test("no answer is a half-converted path — the mongrel that matches no rule", () => {
+    // Building a Windows path with the host's joiner produced `C:\Program Files/Git/bin/bash.exe`, which
+    // is neither dialect. One separator per answer, and it is the one that platform uses.
+    const w = shellBinAbsolute({ ProgramFiles: String.raw`C:\Program Files` }, "win32")
+    expect(w.includes("/")).toBe(false)
+    for (const p of ["linux", "darwin"] as const) {
+      expect(shellBinAbsolute({}, p).includes("\\")).toBe(false)
+    }
   })
 
   test("FABULA_SHELL_BIN names it explicitly", () => {

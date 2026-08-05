@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.123.0"
+export const FABULA_VERSION = "0.124.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.124.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Запланированная задача теперь называет оболочку полным путём. Планировщики — и системный на macOS, и на Linux — программу в PATH НЕ ищут: определение, где написано просто «bash», не запускается вовсе, и узнаётся об этом в ту самую минуту, когда никто не смотрит. Для запуска короткое имя по-прежнему правильно (пусть PATH и отвечает), поэтому это два разных ответа, а не один: тот, кем запускают, и тот, кого записывают в определение. Поймано проверкой, где полный путь был вписан буквально, — она покраснела, как только вместо буквы появилось вычисление.",
+        en: "A scheduled job now names the shell by full path. Neither scheduler — the one on macOS nor the one on Linux — searches PATH: a definition that says merely «bash» does not start at all, and that is discovered at the exact minute nobody is watching. For spawning, the short name remains right (let PATH answer), so these are two different answers rather than one: the shell you run with, and the shell you write into a definition. Caught by a check that had the full path spelled out literally — it went red the moment a computation replaced the literal.",
+      },
+      {
+        ru: "И собрана в одно место склейка путей под чужую систему: раньше каждый файл шва склеивал сам, и на выходе получались гибриды вроде пути с обеими косыми чертами сразу — форма, не совпадающая ни с одним правилом. Теперь диалект один на весь шов, и отдельная проверка требует, чтобы в ответе была ровно одна разновидность разделителя.",
+        en: "And path joining for another system is collected into one place: each file of the seam used to join for itself, producing hybrids such as a path carrying both kinds of slash at once — a shape matching no rule at all. The dialect is now one definition for the whole seam, and a separate check requires every answer to carry exactly one kind of separator.",
+      },
+    ],
+  },
   {
     version: "0.123.0",
     date: "2026-08-05",

@@ -8,12 +8,14 @@
 // hand-written copy of the rules, that half goes red — which is the only thing that can catch it.
 
 import { test, expect, describe } from "bun:test"
+import * as os from "node:os"
+import * as fs from "node:fs"
 import * as path from "node:path"
 import { current, isPosix, pathListSeparator, exeSuffix, PLATFORMS } from "./index"
 import { baseDirs, homeDir, goBinDirs, systemBinDirs, appendToPath, joinPathList, splitPathList } from "./paths"
 import { shellArgv, shellBin, whichBin, whichFirst } from "./shell"
 import { hardlineTargets, hardlineKernelRegex, credentialReadDirs, persistenceCommands } from "./persistence"
-import { usedBytes, totalBytes, memoryReading, vramBytes } from "./memory"
+import { usedBytes, totalBytes, memoryReading, vramBytes, vramBytes, memoryReading} from "./memory"
 import { checkWritePath } from "../pathguard"
 import { buildSeatbeltProfile, hardlineSandboxConfig, defaultSandboxConfig, sandboxArgv } from "../sandbox"
 import { bashArgv } from "../execbackend"
@@ -346,5 +348,48 @@ describe("platform/memory — the source of the number is a decision", () => {
       // On a non-Linux host /proc/meminfo is absent, so this exercises the failure path itself.
       expect(r.total === 0 ? r.kind : "cpu-only").toBe(r.total === 0 ? "unknown" : "cpu-only")
     })
+  })
+})
+
+// ── The GPU branch, against the driver's REAL output format ────────────────────────────────────────
+//
+// This machine has no discrete GPU and never will, so the honest claim is narrow and is made narrowly:
+// the PARSER is verified against the exact bytes `nvidia-smi --query-gpu=memory.total,memory.used
+// --format=csv,noheader,nounits` prints — MiB integers, one line per device, comma-separated. Whether a
+// real driver behaves as documented is a separate question that needs real hardware, and saying otherwise
+// would be the "declared but never met reality" claim this project spends its time removing.
+describe("discrete VRAM is read from the driver, summed across devices", () => {
+  const shim = (lines: string) => {
+    const p = path.join(os.tmpdir(), `fabula-nvsmi-${process.pid}`)
+    fs.writeFileSync(p, `#!/bin/sh\n${lines.split("\n").map((l) => `echo ${JSON.stringify(l)}`).join("\n")}\n`)
+    fs.chmodSync(p, 0o755)
+    return p
+  }
+
+  test("two cards are summed, not sampled", () => {
+    // A serving runtime handed several GPUs draws on all of them; reading only the first would plan a
+    // window for half the machine.
+    const env = { HOME: "/home/u", FABULA_NVIDIA_SMI: shim("24564, 1843\n24564, 512") }
+    const v = vramBytes("linux", env as any)!
+    expect(v.total).toBe(2 * 24564 * 1024 * 1024)
+    expect(v.used).toBe((1843 + 512) * 1024 * 1024)
+  })
+
+  test("the reading declares itself discrete, so the planner sizes against VRAM", () => {
+    const env = { HOME: "/home/u", FABULA_NVIDIA_SMI: shim("24564, 1843") }
+    const m = memoryReading("linux", env as any)
+    expect(m.kind).toBe("discrete-vram")
+    expect(m.detail).toContain("nvidia-smi")
+  })
+
+  test("garbage from the driver is REFUSED, never half-parsed into a number", () => {
+    // A partial reading is worse than none: it would size a window against an invented pool.
+    const env = { HOME: "/home/u", FABULA_NVIDIA_SMI: shim("no devices found") }
+    expect(vramBytes("linux", env as any)).toBeNull()
+  })
+
+  test("macOS never asks the driver at all", () => {
+    // Apple Silicon has no discrete VRAM to find, and asking would add a spawn to every plan.
+    expect(vramBytes("darwin", { HOME: "/h", FABULA_NVIDIA_SMI: shim("1, 1") } as any)).toBeNull()
   })
 })

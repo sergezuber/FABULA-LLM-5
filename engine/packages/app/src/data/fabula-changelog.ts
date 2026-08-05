@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.108.0"
+export const FABULA_VERSION = "0.109.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.109.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Сторож сборки для второй системы перестал быть только написанным — он запущен и проверен в обе стороны: дерево без нужных файлов объявляется несобранным с названной причиной, правильное дерево — собранным, и коды возврата те, на которые опирается автоматическая проверка. Подмена номера в одном файле делает вердикт отрицательным и заставляет отчёт НАЗВАТЬ, что этот файл несёт на самом деле. Чтение памяти видеокарты проверено на подлинном формате вывода драйвера: две карты складываются, а не берётся первая; мусор от драйвера отвергается целиком, а не разбирается наполовину в выдуманное число; на этой системе драйвер не опрашивается вовсе, потому что спрашивать нечего. Честная граница записана: проверен разбор ответа, а не поведение настоящей видеокарты — её здесь нет.",
+        en: "The build guard for the second system stopped being merely written — it was run and checked in both directions: a tree without the needed files is declared unbuilt with the reason named, a correct tree is declared built, and the exit codes are the ones the automatic check relies on. Substituting the number in one file turns the verdict negative and forces the report to NAME what that file actually carries. Reading video-card memory was verified against the driver's authentic output format: two cards are summed rather than the first being taken; garbage from the driver is refused outright rather than half-parsed into an invented number; on this system the driver is not queried at all, because there is nothing to ask. The honest boundary is recorded: the parsing of the answer is verified, not the behaviour of a real card — there is none here.",
+      },
+    ],
+  },
   {
     version: "0.108.0",
     date: "2026-08-05",

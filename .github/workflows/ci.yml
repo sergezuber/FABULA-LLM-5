@@ -102,6 +102,35 @@ jobs:
           file dist/mimocode-windows-x64/bin/mimo.exe | grep -q "PE32+"     || { echo "::error::windows artifact is not PE32+"; exit 1; }
           echo "cross-build verified"
 
+  deploy-guard-windows:
+    name: Deploy guard runs where bash is optional
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The PowerShell guard exists because on Windows the POSIX shell is a dependency the USER installs,
+      # so the check deciding whether a deploy is real must not depend on it. Exercised against a synthetic
+      # tree in both directions: all three artifacts correct must be FRESH and exit 0, and one artifact
+      # carrying a foreign version must be STALE, exit 1, and NAME what that artifact actually carries.
+      - name: Both verdicts, and the exit codes CI gates on
+        shell: pwsh
+        run: |
+          $v = (Select-String -Path engine/packages/app/src/data/fabula-changelog.ts -Pattern '^export const FABULA_VERSION = "(.*)"$').Matches[0].Groups[1].Value
+          $s = "$env:RUNNER_TEMP\synth"
+          New-Item -ItemType Directory -Force -Path "$s/bin","$s/engine/packages/app/dist/assets","$s/engine/packages/opencode/src","$s/engine/packages/app/src/data","$s/dist" | Out-Null
+          "@echo off`r`necho `"$v`"" | Set-Content "$s/bin/fabula.exe"
+          "const v = `"$v`";" | Set-Content "$s/engine/packages/app/dist/assets/index-S.js"
+          "export const FABULA_VERSION = `"$v`"" | Set-Content "$s/engine/packages/app/src/data/fabula-changelog.ts"
+          $v | Set-Content "$s/dist/fabula.version"
+          "export const x=1" | Set-Content "$s/engine/packages/opencode/src/a.ts"
+          (Get-Item "$s/engine/packages/opencode/src/a.ts").LastWriteTime = (Get-Date).AddYears(-3)
+          ./scripts/verify-deploy.ps1 $s
+          if ($LASTEXITCODE -ne 0) { throw "a correct tree must be FRESH and exit 0" }
+          "9.9.9" | Set-Content "$s/dist/fabula.version"
+          $out = (./scripts/verify-deploy.ps1 $s | Out-String)
+          if ($LASTEXITCODE -eq 0) { throw "a foreign version must be STALE and exit non-zero" }
+          if ($out -notmatch "9\.9\.9") { throw "the report must NAME what the artifact actually carries" }
+          Write-Host "both verdicts correct, and the mismatch is named"
+
   swift-build:
     name: macOS app compiles
     runs-on: macos-14

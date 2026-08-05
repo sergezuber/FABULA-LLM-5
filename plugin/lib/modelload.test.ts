@@ -6,7 +6,7 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test"
 import { shellPathLiteral } from "./platform/shell"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
-import { rmSync, writeFileSync, readFileSync } from "node:fs"
+import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs"
 import { ensureLoadedAtPlannedWindow, readServed, residentsOther, syncEngineLimit, plannedSlots, recordKvSample, readSamples, calibrateCost, unitBytes } from "./modelload"
 import { fitCostFromSamples } from "./kvcost"
 import { writeMarkerScript } from "./platform/shell"
@@ -538,3 +538,44 @@ describe("a load command that succeeded is not a window that changed", () => {
     for (const f of [SAMPLES, MARKER, STATE]) rmSync(f, { force: true })
   }, 20000)
 })
+
+// ── The calibration records the one quantity nobody was measuring ──────────────────────────────────
+//
+// WIRING, not logic. The reachability gate counts an import as a use, so it cannot tell a call from a
+// mention — which means the only thing that can catch the producer being removed is driving the real
+// path and looking for what it should have written down.
+test("calibrateCost records a concurrency reading for THIS machine", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "cal-conc-"))
+  const store = join(dir, "concurrency.json")
+  const prevStore = process.env.FABULA_CONCURRENCY_FILE
+  const prevUrl = process.env.LMSTUDIO_URL
+  process.env.FABULA_CONCURRENCY_FILE = store
+  let srv: any
+  try {
+    // An endpoint that answers like the serving runtime: a completion carrying the prompt size it saw.
+    srv = Bun.serve({
+      port: 0,
+      fetch: () =>
+        new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }], usage: { prompt_tokens: 40_000 } }), {
+          headers: { "Content-Type": "application/json" },
+        }),
+    })
+    // The endpoint is NAMED, because the calibration refuses to make a live call under a test runner
+    // unless one is — the guard that keeps this suite hermetic. Naming a local stand-in is the caller
+    // saying it means to exercise the path.
+    await calibrateCost("some-model", { endpoint: `http://127.0.0.1:${srv.port}/v1`, tokens: 40_000, settleMs: 0 })
+    const written = JSON.parse(readFileSync(store, "utf8"))
+    expect(written.samples.length).toBeGreaterThan(0)
+    const s = written.samples[0]
+    expect(s.slots).toBe(plannedSlots())
+    expect(s.msPerCall).toBeGreaterThan(0)
+    expect(s.fingerprint).toHaveLength(16) // this machine, not any machine
+  } finally {
+    srv?.stop(true)
+    if (prevStore === undefined) delete process.env.FABULA_CONCURRENCY_FILE
+    else process.env.FABULA_CONCURRENCY_FILE = prevStore
+    if (prevUrl === undefined) delete process.env.LMSTUDIO_URL
+    else process.env.LMSTUDIO_URL = prevUrl
+    rmSync(dir, { recursive: true, force: true })
+  }
+}, 60_000)

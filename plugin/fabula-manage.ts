@@ -125,6 +125,38 @@ export const FabulaManage: Plugin = async () => ({
         ].join("\n")
       },
     }),
+    capacity_report: tool({
+      description:
+        "Report what THIS machine is and what the harness decided from it: memory kind and size, cores, " +
+        "accelerator, whether the kernel can confine untrusted code, whether containers are available — " +
+        "and how many calls may reach the model at once, together with WHERE that number came from " +
+        "(set explicitly, measured here, or the unmeasured floor). Read this before believing a window " +
+        "size or a refusal: both are decisions about hardware, and hardware differs for every user.",
+      args: {},
+      async execute() {
+        const { machineProfile, describeProfile } = await import("./lib/platform/profile")
+        const { describeSlots } = await import("./lib/concurrency")
+        const { plannedSlotsExplained } = await import("./lib/modelload")
+        const { policyFor, noPolicyReason } = await import("./lib/windowplan")
+        const p = machineProfile()
+        const pool = p.memory.kind === "discrete-vram"
+          ? { kind: p.memory.kind, totalBytes: p.gpu.totalBytes || p.memory.totalBytes, usedBytes: p.memory.usedBytes }
+          : { kind: p.memory.kind, totalBytes: p.memory.totalBytes, usedBytes: p.memory.usedBytes }
+        const policy = policyFor(pool)
+        const gib = (b: number) => (b / 1024 ** 3).toFixed(1) + " GiB"
+        return [
+          describeProfile(p),
+          `concurrency: ${describeSlots(plannedSlotsExplained())}`,
+          policy
+            ? `window policy: reserve ${gib(policy.systemReserveBytes)} of the ${pool.kind} pool, ` +
+              `committing ${(policy.commitFraction * 100).toFixed(0)}% of what remains` +
+              (pool.kind === "discrete-vram" ? " — the reserve is what the device already holds, plus headroom" : "")
+            : `window policy: NONE — ${noPolicyReason(pool)}`,
+          `profile fingerprint ${p.fingerprint} (a reading taken on other hardware is never served for this machine)`,
+        ].join("\n")
+      },
+    }),
+
     disable_plugin: tool({
       description: "Disable a FABULA plugin so it stops loading on the next Restart Server (⌘⇧R). The plugin " +
         "manager itself cannot be disabled, and neither can the supervision layer (guards and done-gates) — " +

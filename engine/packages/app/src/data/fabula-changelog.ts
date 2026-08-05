@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.149.0"
+export const FABULA_VERSION = "0.150.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,24 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.150.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Сколько вызовов одновременно доходит до модели — теперь ЗАМЕР этой машины, а не константа с чужой. Единица в работе сама пришла из настоящего измерения: два одновременных запроса на одном компьютере стоили 48.4с против 41.9с при последовательном прогоне, потому что одновременная подготовка ухудшает ОБА, а не совмещает их. Вывод верен для той машины и не является фактом обо всех: хост с двумя ускорителями может ответить иначе, а число ядер до сих пор не спрашивалось вообще. Ответ теперь берётся по порядку: что задал владелец → что измерено ЗДЕСЬ → единица как объявленный осторожный пол. И число сопровождается тем, ОТКУДА оно, — этого голое целое сказать не может.",
+        en: "How many calls reach the model at once is now a MEASUREMENT of this machine rather than a constant from another. The 1 in use came from a real measurement itself: two concurrent requests on one computer cost 48.4s against 41.9s run one after the other, because concurrent preparation degrades BOTH instead of overlapping them. Sound for that machine, and not a fact about all of them: a host with two accelerators can answer differently, and the core count was never asked at all. The answer is now taken in order — what the owner set, what was measured HERE, and one as the declared conservative floor. And the number travels with WHERE it came from, which a bare integer cannot say.",
+      },
+      {
+        ru: "Замер бесплатный: калибровка и так делает настоящий запрос известного размера, и его длительность теперь записывается. Сравнение появляется только тогда, когда машину действительно прогнали при двух разных значениях, — то есть ровно тогда, когда есть что сравнивать. Планка доказательности стоит на самой рабочей точке, а не внутри одной записи: иначе собственное измерение обвязки — по одному запросу за раз — было бы вечно неприемлемым.",
+        en: "The measurement is free: the calibration already makes a real request of known size, and its duration is now written down. A comparison appears only once the machine has actually been run at two different settings — precisely when there is something to compare. The evidence bar sits on the working point rather than inside a single reading; otherwise the harness's own measurement, one request at a time, would have been permanently inadmissible.",
+      },
+      {
+        ru: "И появился отчёт «что это за машина и что из неё выведено»: род и объём памяти, ядра, ускоритель, может ли ядро ограничить чужой код, есть ли контейнеры — вместе с рабочей точкой и политикой окна. Читать его стоит прежде, чем верить размеру окна или отказу: и то и другое — решения о железе, а железо у каждого своё.",
+        en: "And there is now a report of what this machine is and what was derived from it: memory kind and size, cores, accelerator, whether the kernel can confine foreign code, whether containers are available — together with the working point and the window policy. Worth reading before believing a window size or a refusal: both are decisions about hardware, and hardware differs for everyone.",
+      },
+    ],
+  },
   {
     version: "0.149.0",
     date: "2026-08-05",

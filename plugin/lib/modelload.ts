@@ -28,6 +28,8 @@ import { homedir } from "node:os"
 // practice is the same as absent.
 import { totalBytes, usedBytes as platformUsedBytes, memoryReading } from "./platform/memory"
 import { bunBinDir, servingBinDir, systemBinDirs, localBinDir, joinPathList, dataPath } from "./platform/paths"
+import { resolveSlots, readSamples as readConcurrencySamples, recordSample as recordConcurrencySample } from "./concurrency"
+import { machineProfile } from "./platform/profile"
 import { planWindow, DEFAULT_POLICY, policyFor, noPolicyReason, type Resident, type WindowPlan } from "./windowplan"
 import { fitCost, fitCostFromSamples, addObservation, safeSecondWindow, marginalCost, MIN_SIGNAL_TOKENS, SAMPLE_DISPERSION_LIMIT, type Observation, type KvSample } from "./kvcost"
 import { resolveModelDir } from "./modeldigest"
@@ -445,6 +447,7 @@ export async function calibrateCost(
       if (now > peak) peak = now
     }, 750)
     try {
+      const startedAt = Date.now()
       const res = await fetch(`${url}/chat/completions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -460,6 +463,22 @@ export async function calibrateCost(
       const tokens = Number(body?.usage?.prompt_tokens) || 0
       const now = usedBytes()
       if (now > peak) peak = now
+        // A REAL request of KNOWN size just happened at the currently-provisioned slot count, so the one
+        // quantity nobody was measuring is free here. Normalised per thousand prompt tokens, because two
+        // probes of different sizes are otherwise not comparable. Nothing is concluded from one reading:
+        // a comparison appears only once this machine has been run at two different counts, which is
+        // exactly when there is something to compare.
+        if (tokens > 0) {
+          const ms = Date.now() - startedAt
+          if (ms > 0) {
+            recordConcurrencySample({
+              fingerprint: machineProfile().fingerprint,
+              slots: plannedSlots(),
+              msPerCall: (ms / tokens) * 1000,
+              calls: 1,
+            })
+          }
+        }
       return tokens > 0 ? { tokens, grew: peak - before } : null
     } catch {
       return null
@@ -569,10 +588,29 @@ export const OVERSHOOT_MARGIN = 0.15
  * by hand.
  */
 export function plannedSlots(env: Record<string, string | undefined> = process.env): number {
-  const n = Math.floor(Number(env.FABULA_MAX_CONCURRENT_UPSTREAM))
-  // 0 means "unlimited" at the gate. Unlimited is not a provisioning a machine can be sized for, so the
-  // honest reading is one slot — the gate will still admit more, and the runtime grows its cache lazily.
-  return n > 0 ? n : 1
+  return plannedSlotsExplained(env).slots
+}
+
+/**
+ * The same number, with WHERE it came from — which a bare integer cannot say.
+ *
+ * Three answers in order: what the operator set, what was measured on THIS machine, and one as the
+ * declared unmeasured floor. The 1 in use was itself a real measurement, but on one machine: two
+ * concurrent requests there cost 48.4s against 41.9s serialized, because concurrent prefill degrades
+ * both instead of overlapping them. Sound for that machine, and not a fact about every machine — a host
+ * with two accelerators can answer differently, and until this the core count was never even asked.
+ */
+export function plannedSlotsExplained(
+  env: Record<string, string | undefined> = process.env,
+): { slots: number; source: "operator" | "measured" | "unmeasured-floor" } {
+  const e = env as NodeJS.ProcessEnv
+  // 0 at the gate means "unlimited", which is not a provisioning a machine can be sized for — the honest
+  // reading is one slot, and the gate still admits more while the runtime grows its cache lazily.
+  return resolveSlots({
+    envSlots: Number(env.FABULA_MAX_CONCURRENT_UPSTREAM),
+    samples: readConcurrencySamples(e),
+    fingerprint: machineProfile(e).fingerprint,
+  })
 }
 
 /** Memory in use with the model unloaded, captured by the most recent load. See lmsLoad. */

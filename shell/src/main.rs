@@ -170,7 +170,7 @@ fn open_log() -> Option<std::fs::File> {
 
 /// Start the engine with the environment the app is contracted to give it.
 ///
-/// Every variable here is load-bearing and each was added for a measured reason, recorded in CLAUDE.md:
+/// Every variable here is load-bearing and each was added for a measured reason:
 /// the git denylist keeps snapshot walks off giant worktrees, the import switch keeps foreign sessions
 /// out, the LSP tool is gated as experimental and simply does not exist without its variable, and the
 /// config pair is what makes the engine read FABULA's renamed files at all.

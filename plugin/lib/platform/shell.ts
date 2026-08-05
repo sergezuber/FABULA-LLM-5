@@ -236,6 +236,41 @@ export function whichFirst(
  * the SCRIPT stays one definition and Windows gets a `.cmd` beside it that hands the same file to the same
  * POSIX shell the harness already requires everywhere. One script, two ways in.
  */
+/**
+ * A stand-in program that records the arguments it was called with, one per line.
+ *
+ * This is the ONE shape every "prove the mechanism really invoked something" check needs, and it is
+ * worth its own helper because the general marker — a POSIX script plus a wrapper that hands it to the
+ * POSIX shell — is a chain of three programs on Windows, and a chain is a thing that can break quietly
+ * with `stdio: "ignore"`. MEASURED: the argv file simply never appeared, and the checks read that as the
+ * traversal never launching its worker, which is the very substitution they exist to catch.
+ *
+ * So each platform gets a recorder written in something it starts WITHOUT help: a `/bin/sh` script where
+ * that exists, and elsewhere a PowerShell script plus the one-line command file that Windows uses to
+ * start it. `-File` is deliberate — it binds the caller's arguments to `$args` intact, quoting and
+ * spaces included, which `-Command` does not.
+ *
+ * Returns the path to hand the harness.
+ */
+export function writeArgvRecorder(
+  scriptPath: string,
+  logPath: string,
+  env: NodeJS.ProcessEnv = process.env,
+  p: Platform = hostPlatform(),
+): string {
+  const fs = require("node:fs") as typeof import("node:fs")
+  if (p !== "win32") {
+    fs.writeFileSync(scriptPath, `#!/bin/sh\nprintf '%s\\n' "$@" > ${shellPathLiteral(logPath)}\nexit 0\n`)
+    fs.chmodSync(scriptPath, 0o755)
+    return scriptPath
+  }
+  const ps1 = scriptPath.replace(/\.[^.\\/]*$/, "") + ".ps1"
+  fs.writeFileSync(ps1, `$args | Set-Content -LiteralPath ${JSON.stringify(logPath)}\r\nexit 0\r\n`)
+  const cmd = scriptPath.replace(/\.[^.\\/]*$/, "") + ".cmd"
+  fs.writeFileSync(cmd, `@echo off\r\npowershell -NoProfile -ExecutionPolicy Bypass -File "${ps1}" %*\r\n`)
+  return cmd
+}
+
 export function writeMarkerScript(
   scriptPath: string,
   body: string,

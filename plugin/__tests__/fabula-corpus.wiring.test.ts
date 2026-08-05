@@ -14,7 +14,7 @@
 //   5. KILL-SWITCH FABULA_CORPUS=0 → inert ({}), no hooks.
 
 import { test, expect, beforeAll, afterAll, beforeEach } from "bun:test"
-import { shellPathLiteral, writeMarkerScript } from "../lib/platform/shell"
+import { writeArgvRecorder } from "../lib/platform/shell"
 import { writeFileSync, mkdtempSync, mkdirSync, chmodSync, existsSync, readFileSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
@@ -117,7 +117,7 @@ test("TRAVERSAL: reading a corpus fires the worker with no word ever matched", a
   const dir = mkdtempSync(join(tmpdir(), "corpus-walk-"))
   const marker = join(dir, "argv.txt")
   let fakeBun = join(dir, "fake-bun.sh")
-  fakeBun = writeMarkerScript(fakeBun, `#!/bin/sh\nprintf '%s\\n' "$@" > ${shellPathLiteral(marker)}\nexit 0\n`)
+  fakeBun = writeArgvRecorder(fakeBun, marker)
   // The chapters live in a SUBFOLDER and the agent reads them there, exactly as it did live. The verdict
   // must name the working directory it was given, not the folder it happened to walk into — which also
   // means the file count has to see below the top level or the root looks smaller than its own child.
@@ -165,7 +165,7 @@ test("TRAVERSAL stays out of an ordinary turn", async () => {
   const dir = mkdtempSync(join(tmpdir(), "corpus-quiet-"))
   const marker = join(dir, "argv.txt")
   let fakeBun = join(dir, "fake-bun.sh")
-  fakeBun = writeMarkerScript(fakeBun, `#!/bin/sh\nprintf '%s\\n' "$@" > ${shellPathLiteral(marker)}\nexit 0\n`)
+  fakeBun = writeArgvRecorder(fakeBun, marker)
   for (let i = 0; i < 20; i++) writeFileSync(join(dir, `ch${i}.md`), "x")
   const prevBun = process.env.FABULA_BUN_BIN
   process.env.FABULA_BUN_BIN = fakeBun
@@ -191,7 +191,7 @@ test("RECURSION GUARD: a re-injected report prefix is not watched at all", async
   const dir = mkdtempSync(join(tmpdir(), "corpus-recur-"))
   const marker = join(dir, "argv.txt")
   let fakeBun = join(dir, "fake-bun.sh")
-  fakeBun = writeMarkerScript(fakeBun, `#!/bin/sh\nprintf '%s\\n' "$@" > ${shellPathLiteral(marker)}\nexit 0\n`)
+  fakeBun = writeArgvRecorder(fakeBun, marker)
   for (let i = 0; i < 20; i++) writeFileSync(join(dir, `ch${i}.md`), "x")
   const prevBun = process.env.FABULA_BUN_BIN
   process.env.FABULA_BUN_BIN = fakeBun
@@ -223,7 +223,7 @@ test("HAND-BACK GUARD: work already handed back is not taken over again, and the
   const dir = mkdtempSync(join(tmpdir(), "corpus-handback-"))
   const marker = join(dir, "argv.txt")
   let fakeBun = join(dir, "fake-bun.sh")
-  fakeBun = writeMarkerScript(fakeBun, `#!/bin/sh\nprintf '%s\\n' "$@" > ${shellPathLiteral(marker)}\nexit 0\n`)
+  fakeBun = writeArgvRecorder(fakeBun, marker)
   for (let i = 0; i < 20; i++) writeFileSync(join(dir, `ch${i}.md`), "x")
   const store = join(process.env.XDG_DATA_HOME!, "fabula", "corpus")
   mkdirSync(store, { recursive: true })
@@ -258,7 +258,7 @@ test("a chapter offloaded before this hook still counts for what it weighed", as
   const dir = mkdtempSync(join(tmpdir(), "corpus-offloaded-"))
   const marker = join(dir, "argv.txt")
   let fakeBun = join(dir, "fake-bun.sh")
-  fakeBun = writeMarkerScript(fakeBun, `#!/bin/sh\nprintf '%s\\n' "$@" > ${shellPathLiteral(marker)}\nexit 0\n`)
+  fakeBun = writeArgvRecorder(fakeBun, marker)
   for (let i = 0; i < 20; i++) writeFileSync(join(dir, `ch${i}.md`), "x")
   const prevBun = process.env.FABULA_BUN_BIN
   process.env.FABULA_BUN_BIN = fakeBun

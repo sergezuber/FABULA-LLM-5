@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.137.0"
+export const FABULA_VERSION = "0.138.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.138.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Подставная программа, которой проверки доказывают, что механизм действительно кого-то ЗАПУСТИЛ, теперь на каждой системе написана на том, что эта система заводит БЕЗ посредников. Прежде это был POSIX-скрипт плюс обёртка, передающая его POSIX-оболочке, — цепочка из трёх программ, а цепочка умеет рваться молча, когда вывод потомка никто не слушает. Так и вышло: файл с аргументами просто не появлялся, и проверки читали это как «обход не запустил воркер» — ровно ту подмену, ради ловли которой они и существуют.",
+        en: "The stand-in program by which checks prove a mechanism really DID launch something is now written, on each system, in what that system starts WITHOUT help. It used to be a POSIX script plus a wrapper handing it to the POSIX shell — a chain of three programs, and a chain can break silently when nobody is listening to the child's output. That is what happened: the argv file simply never appeared, and the checks read it as «the traversal never launched the worker», precisely the substitution they exist to catch.",
+      },
+    ],
+  },
   {
     version: "0.137.0",
     date: "2026-08-05",

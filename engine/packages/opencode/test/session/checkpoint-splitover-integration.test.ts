@@ -8,6 +8,7 @@ import { Bus } from "../../src/bus"
 import { Log } from "../../src/util"
 import { AppRuntime } from "../../src/effect/app-runtime"
 import { Actor } from "../../src/actor/spawn"
+import { spawnRef } from "../../src/actor/spawn-ref"
 import { Session } from "../../src/session"
 import { checkpointPath, metaDir } from "../../src/session/checkpoint-paths"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
@@ -288,13 +289,16 @@ describe("CheckpointContext producer (tryStartCheckpointWriter)", () => {
           AppRuntime.runPromise(
             Effect.gen(function* () {
               // The writer is SPAWNED by the Actor service, which late-binds itself into a module ref
-              // when its layer is built and CLEARS that ref in a finaliser when the scope closes. So
-              // asking for the service here is not ceremony — it is the dependency. Without it this
-              // test was passing on the leftover binding of whichever neighbour had built the layer
-              // last, which held on one operating system and did not on another: there the finaliser
-              // had already run, the writer found no service, and it skipped. The reason it skipped is
-              // now recorded, which is how this was found rather than guessed at.
-              yield* Actor.Service
+              // when its LAYER IS BUILT and clears that ref in a finaliser when that build's scope
+              // closes. The layer is memoised, so asking for the service again returns the existing one
+              // WITHOUT building it — and therefore without re-binding the ref. In production that is
+              // invisible: one long-lived runtime, built once, torn down at exit. In a suite each test
+              // closes a scope, so a neighbour's finaliser empties a ref the next test still needs.
+              // Measured: on one operating system the ordering hid it, on another the writer found no
+              // service and skipped, and the failure named nothing until the skip was taught to record
+              // its reason. Binding it here reproduces the live shape rather than depending on which
+              // neighbour ran last.
+              spawnRef.current = yield* Actor.Service
               const sessions = yield* Session.Service
               const sess = yield* sessions.create({ title: "ctx producer test" })
               sessionIDForCleanup = sess.id
@@ -465,9 +469,8 @@ describe("parentSessionID end-to-end (Axis A wiring)", () => {
                 iteration: number
               }> = []
 
-              // Same dependency as above, and the same reason: the writer cannot be spawned without
-              // the service that spawns it, and that service's binding does not outlive its scope.
-              yield* Actor.Service
+              // Same as above: the binding, not merely the service, is what the writer reads.
+              spawnRef.current = yield* Actor.Service
               const sessions = yield* Session.Service
               const parent = yield* sessions.create({ title: "parentSessionID wiring test" })
               parentSessionIDForCleanup = parent.id

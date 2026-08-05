@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.131.0"
+export const FABULA_VERSION = "0.132.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.132.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Дочитана до конца история про несработавшую контрольную точку. Служба, которая её снимает, подставляет себя в общую ссылку в момент ПОСТРОЕНИЯ своего слоя — а слой запоминается, поэтому повторный запрос отдаёт готовую службу и ссылку заново не выставляет. Финализатор соседней области её при этом уже снял. В работе это невидимо: один долгоживущий рантайм, построен один раз, снят при выходе. В наборе проверок каждая закрывает свою область — и следующей достаётся пустая ссылка. На одной системе порядок это скрывал, на другой нет. Проверки теперь воспроизводят живое состояние прямо, а не полагаются на то, кто из соседей отработал последним.",
+        en: "The story of the checkpoint that was never taken is finished. The service that takes it binds itself into a shared reference when its LAYER IS BUILT — and the layer is memoised, so asking for the service again returns the existing one and does not re-bind. A neighbouring scope's finaliser had meanwhile emptied it. In use this is invisible: one long-lived runtime, built once, torn down at exit. In a suite each check closes a scope, and the next one inherits an empty reference. On one system the ordering hid it; on another it did not. The checks now reproduce the live shape directly instead of depending on which neighbour ran last.",
+      },
+    ],
+  },
   {
     version: "0.131.0",
     date: "2026-08-05",

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.154.0"
+export const FABULA_VERSION = "0.155.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.155.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Провал запуска рабочего процесса перестал быть НЕМЫМ. Обработчик ошибки был пуст — намеренно, чтобы ход не падал из-за не запустившегося помощника, — и из-за этого запуск, которого не было, выглядел ровно как состоявшийся: ни отчёта, ни отметки, ничего, что можно прочитать. Ход по-прежнему переживает такую ошибку, но причина теперь записывается туда же, куда пишутся остальные решения этого механизма.",
+        en: "A worker that fails to start is no longer SILENT. The error handler was empty — deliberately, so a turn would not die because a helper could not start — and that made a launch that never happened look exactly like one that did: no report, no marker, nothing to read. A turn still survives such an error; the reason is now written where the rest of this mechanism's decisions are written.",
+      },
+      {
+        ru: "И командный истолкователь называется ЯВНО, а не запрашивается настройкой «через оболочку». Уважает ли среда такую настройку — свойство среды, а не системы; когда не уважает, запуск падает с «не найдено» про файл, который очевидно есть, — прямо в тот самый пустой обработчик.",
+        en: "And the command interpreter is NAMED outright rather than asked for through a «use a shell» option. Whether a runtime honours that option is a property of the runtime, not of the platform; where it does not, the spawn fails with «not found» about a file that plainly exists — straight into that same empty handler.",
+      },
+    ],
+  },
   {
     version: "0.154.0",
     date: "2026-08-05",

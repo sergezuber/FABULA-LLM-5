@@ -138,18 +138,29 @@ function spawnWorker(pluginInput: any, sessionID: string, taskText: string): voi
   // discarded by design. `unref` is what actually lets the turn finish without waiting, and it applies
   // to both; detaching only adds a separate process group, which is a smaller benefit than the work
   // starting at all.
+  // The command interpreter is NAMED, rather than asked for through a `shell` option. Whether a runtime
+  // honours that option is a property of the runtime, not of the platform, and when it does not the
+  // spawn fails with "not found" for a file that plainly exists — into an error handler that swallows it
+  // by design, so nothing anywhere says the work never started. Naming the interpreter removes the
+  // question. `/d` skips autorun scripts, `/s` keeps the quoting of the line that follows.
   const child = viaShell
-    ? spawn([bin, ...workerArgs].map(q).join(" "), [], {
+    ? spawn(process.env.COMSPEC || "cmd.exe", ["/d", "/s", "/c", `"${[bin, ...workerArgs].map(q).join(" ")}"`], {
         stdio: "ignore",
         env: { ...process.env },
-        shell: true,
-      })
+        windowsVerbatimArguments: true,
+      } as any)
     : spawn(bin, workerArgs, {
         detached: true,
         stdio: "ignore",
         env: { ...process.env },
       })
-  child.on("error", () => {}) // never let a spawn failure crash the turn (fail-open)
+  // FAIL-OPEN, BUT NOT SILENT. A turn must not crash because a worker could not start — and until now
+  // that was the whole handler, so a spawn that never happened looked exactly like one that did: no
+  // report, no marker, nothing to read. The turn still survives; the reason is now written where the
+  // rest of this plugin's decisions are written.
+  child.on("error", (e: any) => {
+    console.error(`[fabula-corpus] worker did not start: ${e?.message ?? e} (interpreter: ${bin})`)
+  })
   // REGISTER IT. Detaching is what lets the work outlive the turn; it is also what puts the child beyond
   // `pkill -P <engine>`, which reaches only DIRECT children. One worker left over from a closed session
   // kept driving the model for hours and cost a live run — see lib/childreg.ts. Surviving the turn is the

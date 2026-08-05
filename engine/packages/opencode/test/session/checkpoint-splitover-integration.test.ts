@@ -18,6 +18,28 @@ import { SessionCheckpoint } from "../../src/session/checkpoint"
 
 void Log.init({ print: false })
 
+// The writer answers "skipped" for five different reasons, and a check that only sees the word cannot
+// say which. That mattered the moment these ran on a second operating system: two of them skipped there
+// and passed here, and the failure text named neither cause. The decision channel already records the
+// reason; turning it on for this file and reading the last entry puts it in the assertion, so a
+// difference between platforms arrives already diagnosed instead of starting an investigation.
+process.env.FABULA_TRACE = "1"
+
+async function lastSkipReason(): Promise<string | undefined> {
+  try {
+    const { traceFilePath } = await import("../../src/session/trace")
+    const text = await Bun.file(traceFilePath()).text()
+    const lines = text.trim().split("\n").filter(Boolean)
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const ev = JSON.parse(lines[i]!)
+      if (ev.event === "ckpt.skip") return JSON.stringify(ev.data ?? ev)
+    }
+  } catch {
+    /* no trace file yet — the caller reports the bare status, which is what it had before */
+  }
+  return undefined
+}
+
 afterEach(async () => {
   await Instance.disposeAll()
 })
@@ -345,7 +367,8 @@ describe("CheckpointContext producer (tryStartCheckpointWriter)", () => {
           ),
       })
 
-      expect(result.status).toBe("started")
+      expect({ status: result.status, why: await lastSkipReason() })
+        .toEqual({ status: "started", why: undefined })
       // During the writer's lifetime, the context entry exists.
       expect(result.midSize).toBeGreaterThanOrEqual(1)
       // After settle, ensuring ran → no leak.
@@ -500,7 +523,15 @@ describe("parentSessionID end-to-end (Axis A wiring)", () => {
               const children = yield* Effect.sync(() => sessions.children(parent.id))
               const childList = yield* children
               const child = childList.find((c) => c.title.startsWith("checkpoint-writer:"))
-              if (!child) throw new Error("expected a checkpoint-writer child session")
+              if (!child) {
+                // No child means the writer never spawned, and the writer has five reasons for that.
+                // Carrying the recorded one into the message is the difference between "it did not
+                // happen" and knowing which decision made it not happen.
+                const why = yield* Effect.promise(() => lastSkipReason())
+                throw new Error(
+                  `expected a checkpoint-writer child session; writer skipped: ${why ?? "no reason recorded"}`,
+                )
+              }
               childSessionIDForCleanup = child.id
 
               // Allow the subscriber fork to drain any tail events.

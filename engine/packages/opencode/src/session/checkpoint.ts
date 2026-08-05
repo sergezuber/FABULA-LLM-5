@@ -563,8 +563,13 @@ export const layer: Layer.Layer<
       // writer-as-subagent migration this becomes mostly impossible, but the
       // guard stays so future paths that fold a system-spawn actor into the
       // main loop don't accidentally re-enter the writer.
+      // Every skip below also NAMES itself on the decision channel. Five different conditions returned the
+      // same word "skipped", so a caller — or a check watching one platform behave differently from
+      // another — could see that no checkpoint was taken and had no way to learn which of the five
+      // decided it. That is the shape this channel exists for: a decision the harness made silently.
       if (yield* actorRegistry.isSystemSpawned(input.sessionID, "main")) {
         log.info("tryStartCheckpointWriter skipping system-spawned session")
+        trace("ckpt.skip", { sid: input.sessionID, reason: "system-spawned" })
         return "skipped" as const
       }
 
@@ -580,6 +585,12 @@ export const layer: Layer.Layer<
       })
       if (msgs.length === 0) {
         log.info("no messages, skipping checkpoint", { sessionID: input.sessionID })
+        trace("ckpt.skip", {
+          sid: input.sessionID,
+          reason: "no-messages",
+          contextFrom: sessionInfo.contextFrom,
+          contextWatermark: sessionInfo.contextWatermark,
+        })
         return "skipped" as const
       }
 
@@ -667,6 +678,7 @@ export const layer: Layer.Layer<
       const actor = spawnRef.current
       if (!actor) {
         log.warn("tryStartCheckpointWriter skipping — Actor service unavailable", { sessionID: input.sessionID })
+        trace("ckpt.skip", { sid: input.sessionID, reason: "no-actor-service" })
         return "skipped" as const
       }
 
@@ -708,6 +720,14 @@ export const layer: Layer.Layer<
           sessionID: input.sessionID,
           endMessageID,
         })
+        trace("ckpt.skip", {
+          sid: input.sessionID,
+          reason: "watermark-not-in-delta",
+          endMessageID,
+          msgs: msgs.length,
+          first: msgs[0]?.info.id,
+          last: msgs[msgs.length - 1]?.info.id,
+        })
         return "skipped" as const
       }
 
@@ -733,6 +753,14 @@ export const layer: Layer.Layer<
           sessionID: input.sessionID,
           endMessageID,
           lastCheckpointMessageID,
+        })
+        trace("ckpt.skip", {
+          sid: input.sessionID,
+          reason: "empty-delta",
+          endMessageID,
+          lastCheckpointMessageID,
+          alignedStart,
+          watermarkIdx,
         })
         return "skipped" as const
       }

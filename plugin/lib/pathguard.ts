@@ -2,18 +2,29 @@
 // classic backdoor/exfil targets. Tight set (hardline) to avoid false-positives on normal project
 // files. The broader "ask"-tier (.env, dotfiles) is policy in fabula-security, not here.
 
-import * as os from "node:os"
 import * as path from "node:path"
 import { hardlineTargets } from "./platform/persistence"
+import { homeDir } from "./platform/paths"
 
 export interface PathVerdict { blocked: boolean; reason: string; code: string }
 const OK: PathVerdict = { blocked: false, reason: "", code: "allow" }
 
+/**
+ * `~` and `$HOME` resolved from the SAME home the rules are anchored at.
+ *
+ * This used to call `os.homedir()` while `hardlineTargets` anchors its rules with `homeDir(env)`. Two
+ * definitions of one thing, and they genuinely disagree: `os.homedir()` reads the password database and
+ * Bun caches it at process start, while the environment's HOME is what the harness, the app and the
+ * tests actually set. Whenever the two differ, `~/.ssh/authorized_keys` expands to one path and the rule
+ * that refuses it is written for another — so the guard sees no match and allows the write. The rule and
+ * the expansion have to mean the same directory or the rule is decoration.
+ */
 function expand(p: string): string {
   if (typeof p !== "string" || !p) return ""
+  const home = homeDir()
   let s = p.trim().replace(/^['"]|['"]$/g, "")
-  if (s.startsWith("~/") || s === "~") s = path.join(os.homedir(), s.slice(1))
-  s = s.replace(/\$\{?HOME\}?/g, os.homedir())
+  if (s.startsWith("~/") || s === "~") s = path.join(home, s.slice(1))
+  s = s.replace(/\$\{?HOME\}?/g, home)
   try { s = path.normalize(s) } catch {}
   return s
 }

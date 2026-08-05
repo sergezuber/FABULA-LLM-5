@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.127.0"
+export const FABULA_VERSION = "0.128.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,24 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.128.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Отказ снять контрольную точку теперь называет себя. Пять разных условий возвращали одно и то же слово «пропущено», и по нему нельзя было узнать, какое из них сработало: ни в логе, ни в проверке. Каждое условие пишет свою причину в бортовой самописец решений — тот самый канал, который для таких молчаливых решений и заведён, — вместе с числами, по которым видно, что именно не сошлось. Пользователь этого не видит: канал только для разбора.",
+        en: "A refusal to take a checkpoint now names itself. Five different conditions returned the same word «skipped», and from that word there was no way to learn which one fired — not from the log, not from a check. Each condition now records its reason on the decision recorder — the very channel that exists for silent decisions like these — together with the numbers that show what did not line up. The user sees none of it: the channel is for diagnosis only.",
+      },
+      {
+        ru: "И закрыта дыра в самом запрете: раскрытие «~» и «$HOME» брало домашний каталог из одного источника, а правила запрета строились из другого. Два прочтения одного и того же — и они действительно расходятся: одно читает системную базу учётных записей и кэшируется на старте, другое берёт то, что реально выставили приложение и обвязка. Как только они разошлись, «~/.ssh/authorized_keys» превращался в один файл, а правило, которое его запрещает, было написано про другой, — совпадения нет, запись разрешена. Теперь источник один; проверка нарочно разводит эти два прочтения и краснеет, если вернуть прежнее.",
+        en: "And a hole inside the refusal itself is closed: expanding «~» and «$HOME» took the home directory from one source while the deny rules were built from another. Two readings of one thing — and they genuinely diverge: one reads the system account database and is cached at process start, the other takes what the app and the harness actually set. The moment they differed, «~/.ssh/authorized_keys» became one file while the rule refusing it named another — no match, write allowed. There is one source now; a check deliberately drives the two apart and goes red if the old reading returns.",
+      },
+      {
+        ru: "Понадобилось это сразу: те же проверки на другой системе показали, что точка не снимается, и не сказали почему. Теперь причина попадает прямо в текст несошедшейся проверки, поэтому расхождение между системами приходит уже с диагнозом, а не как повод начинать расследование.",
+        en: "It was needed at once: the same checks on another system showed that no checkpoint was taken and did not say why. The reason now travels into the text of the failing check itself, so a difference between systems arrives already diagnosed rather than as the start of an investigation.",
+      },
+    ],
+  },
   {
     version: "0.127.0",
     date: "2026-08-05",

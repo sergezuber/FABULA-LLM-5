@@ -535,6 +535,23 @@ describe("a rule written in one dialect must still refuse the other spelling", (
   // point every POSIX rule above stops matching and the list's correctness buys nothing. These drive
   // the real entry point with the rewritten spelling, and they run identically on any host, because
   // the question is about the string the resolver produces rather than about this machine.
+  test("REAL guard: `~` resolves to the SAME home the rules are anchored at", () => {
+    // Two readings of "where is home" is the failure mode, not one wrong reading: the rule is built
+    // from the environment's HOME while the expansion used to read the password database, and Bun
+    // caches that at process start. Wherever they differ, `~/.ssh/authorized_keys` expands to one file
+    // and the rule refusing it names another — no match, write allowed. Moving HOME here is the only
+    // way to make the two disagree, which is exactly why it is what this drives.
+    const moved = fs.mkdtempSync(path.join(os.tmpdir(), "fab-home-"))
+    withEnv({ HOME: moved, USERPROFILE: moved }, () => {
+      expect(checkWritePath("~/.ssh/authorized_keys").code).toBe("ssh_authorized_keys")
+      expect(checkWritePath("$HOME/.ssh/authorized_keys").code).toBe("ssh_authorized_keys")
+      expect(checkWritePath(path.join(moved, ".ssh", "authorized_keys")).code).toBe("ssh_authorized_keys")
+      // And ordinary work under that same home is still ordinary.
+      expect(checkWritePath(path.join(moved, "proj", "index.ts")).blocked).toBe(false)
+    })
+    fs.rmSync(moved, { recursive: true, force: true })
+  })
+
   test("REAL guard: a POSIX target rewritten into Windows form is still refused", () => {
     expect(checkWritePath(String.raw`C:\etc\sudoers`).code).toBe("sudoers")
     expect(checkWritePath(String.raw`C:\etc\sudoers.d\99-evil`).code).toBe("sudoers")

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.128.0"
+export const FABULA_VERSION = "0.129.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.129.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Проверка снятия контрольной точки больше не опирается на случайность. Точку снимает служба запуска подпроцессов; она подставляет себя в общую ссылку при построении и УБИРАЕТ её, когда её область закрывается. Проверка эту службу не запрашивала — и работала на остатке от соседа, который построил её последним. На одной системе остаток доживал, на другой финализатор успевал сработать раньше: службы не оказывалось, точка не снималась. Теперь зависимость заявлена прямо. Найдено не рассуждением, а тем, что накануне научили называть причину отказа: машина сама сказала, чего ей не хватило.",
+        en: "The checkpoint check no longer rests on chance. The checkpoint is taken by the service that spawns subprocesses; it binds itself into a shared reference when its layer is built and CLEARS that reference when its scope closes. The check never asked for the service — it was running on the leftover binding of whichever neighbour had built the layer last. On one system that leftover survived; on another the finaliser ran first, the service was not there, and no checkpoint was taken. The dependency is now stated outright. Found not by reasoning but because the refusal had just been taught to name itself: the machine said what it was missing.",
+      },
+    ],
+  },
   {
     version: "0.128.0",
     date: "2026-08-05",

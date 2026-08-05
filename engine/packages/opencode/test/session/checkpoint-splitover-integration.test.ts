@@ -287,6 +287,14 @@ describe("CheckpointContext producer (tryStartCheckpointWriter)", () => {
         fn: async () =>
           AppRuntime.runPromise(
             Effect.gen(function* () {
+              // The writer is SPAWNED by the Actor service, which late-binds itself into a module ref
+              // when its layer is built and CLEARS that ref in a finaliser when the scope closes. So
+              // asking for the service here is not ceremony — it is the dependency. Without it this
+              // test was passing on the leftover binding of whichever neighbour had built the layer
+              // last, which held on one operating system and did not on another: there the finaliser
+              // had already run, the writer found no service, and it skipped. The reason it skipped is
+              // now recorded, which is how this was found rather than guessed at.
+              yield* Actor.Service
               const sessions = yield* Session.Service
               const sess = yield* sessions.create({ title: "ctx producer test" })
               sessionIDForCleanup = sess.id
@@ -457,6 +465,9 @@ describe("parentSessionID end-to-end (Axis A wiring)", () => {
                 iteration: number
               }> = []
 
+              // Same dependency as above, and the same reason: the writer cannot be spawned without
+              // the service that spawns it, and that service's binding does not outlive its scope.
+              yield* Actor.Service
               const sessions = yield* Session.Service
               const parent = yield* sessions.create({ title: "parentSessionID wiring test" })
               parentSessionIDForCleanup = parent.id

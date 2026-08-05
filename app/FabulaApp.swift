@@ -1279,9 +1279,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
         // rows, FTS segments, freed pages via secure_delete+VACUUM, session memory, logs). Run
         // detached so quitting stays responsive; it waits for the port to free first. Runs even if
         // the server was already down, so a stale-residue scrub still happens.
-        let purge = "\(PROJECT_DIR)/app/fabula-purge.sh"
+        // The purge is TypeScript, not shell: the shell version needed sqlite3, lsof, pgrep and du —
+        // four external programs, one of which is installed by default nowhere and two of which do not
+        // exist off POSIX. A privacy guarantee cannot depend on whether someone installed a CLI.
+        let purge = "\(PROJECT_DIR)/scripts/fabula-purge.ts"
         if FileManager.default.fileExists(atPath: purge) {
-            shell("nohup bash -c 'for i in $(seq 1 40); do lsof -nP -iTCP:\(PORT) -sTCP:LISTEN >/dev/null 2>&1 || break; sleep 0.5; done; sleep 1; \"\(purge)\" >/tmp/fabula-purge.log 2>&1' >/dev/null 2>&1 &")
+            // Wait for the port to free rather than for a process to vanish: a listening socket is the
+            // actual question, and `curl` answers it the same way on every platform `lsof` does not.
+            shell("nohup bash -c 'for i in $(seq 1 40); do curl -s -o /dev/null -m 1 http://127.0.0.1:\(PORT)/global/health || break; sleep 0.5; done; sleep 1; bun \"\(purge)\" >/tmp/fabula-purge.log 2>&1' >/dev/null 2>&1 &")
         }
     }
 }

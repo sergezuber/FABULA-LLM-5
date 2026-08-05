@@ -1,7 +1,7 @@
 // Real-time half of the "no trace of deleted chats" guarantee.
 // When a session is deleted, immediately remove its per-session checkpoint memory
 // from disk. The heavy database scrub (orphan rows + FTS index + freed-page zeroing
-// via VACUUM) requires the DB to be closed, so it runs from app-quit / `fabula-purge.sh`.
+// via VACUUM) requires the DB to be closed, so it runs from app-quit / `scripts/fabula-purge.ts`.
 
 import type { Plugin } from "@mimo-ai/plugin"
 import { gate } from "./lib/manage"
@@ -14,7 +14,7 @@ import { dataPath } from "./lib/platform/paths"
 
 // The engine's XDG data dir follows its app id ("fabula"): ~/.local/share/fabula, where per-session
 // checkpoint memory (memory/sessions/<id>) actually lives. Pointing at the legacy "mimocode" dir made
-// this real-time purge no-op on the live data — deleted-chat memory survived (privacy). Matches fabula-purge.sh.
+// this real-time purge no-op on the live data — deleted-chat memory survived (privacy). Matches scripts/fabula-purge.ts.
 const DATA = dataPath()
 
 export const FabulaPurgeHook: Plugin = async () => gate("purge-hook", ({

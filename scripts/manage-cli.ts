@@ -29,7 +29,7 @@ async function listJson() {
     return {
       id: m.id, ...tr(m.id, m.name, m.description), file: m.file, core: !!m.core, enabled: st.enabled,
       tools: m.tools,
-      deps: st.deps.map((d) => ({ name: d.dep.name, kind: d.dep.kind, required: d.dep.required, present: d.present, install: d.dep.install || null, purpose: d.dep.purpose })),
+      deps: st.deps.map((d) => ({ name: d.dep.name, kind: d.dep.kind, required: d.dep.required, present: d.present, install: d.dep.install || null, purpose: d.dep.purpose })), // d.dep is already platform-resolved
       missingRequired: st.missingRequired, missingOptional: st.missingOptional,
     }
   }))
@@ -69,12 +69,15 @@ switch (cmd) {
     const ran = new Set<string>(); let failed = 0
     for (const d of m.deps) {
       const s = await checkDep(d)
-      if (s.present) { log.push(`✓ ${d.name} present`); continue }
-      if (!d.required && !inclOpt) { log.push(`○ ${d.name} optional skipped`); continue }
-      if (!d.install || d.manual) { log.push(`• ${d.name} manual: ${d.install || d.note || d.purpose}`); continue }
-      if (ran.has(d.install)) continue
-      ran.add(d.install)
-      log.push(`→ ${d.name}: ${d.install}`)
+      // `checkDep` returns the dependency AS IT APPLIES HERE; showing the unresolved one would
+      // print a Homebrew command to a Linux user.
+      const rd = s.dep
+      if (s.present) { log.push(`✓ ${rd.name} present`); continue }
+      if (!rd.required && !inclOpt) { log.push(`○ ${rd.name} optional skipped`); continue }
+      if (!rd.install || rd.manual) { log.push(`• ${rd.name} manual: ${rd.install || rd.note || rd.purpose}`); continue }
+      if (ran.has(rd.install)) continue
+      ran.add(rd.install)
+      log.push(`→ ${rd.name}: ${rd.install}`)
       const r = await installDep(d)
       log.push(r.ok ? `  ✓ done` : `  ✗ failed`)
       if (!r.ok) failed++
@@ -85,7 +88,7 @@ switch (cmd) {
   case "check": {
     const metas = !arg || arg === "all" ? MANIFEST : [pluginById(arg)].filter(Boolean) as any[]
     const out: any = {}
-    for (const m of metas) out[m.id] = await Promise.all(m.deps.map(async (d) => ({ name: d.name, present: (await checkDep(d)).present, required: d.required, install: d.install || null })))
+    for (const m of metas) out[m.id] = await Promise.all(m.deps.map(async (d) => { const s = await checkDep(d); return { name: s.dep.name, present: s.present, required: s.dep.required, install: s.dep.install || null } }))
     console.log(JSON.stringify(out))
     break
   }

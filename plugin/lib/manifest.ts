@@ -28,6 +28,28 @@ export interface Dep {
    *  executes it. Prose with prose punctuation (parens, prose) would otherwise crash `/bin/bash -c`. */
   manual?: boolean
   note?: string
+  /**
+   * Per-platform overrides. `install` is the one field that CANNOT be written once — `brew install go`
+   * is not a portable instruction and neither is `apt install`. A platform absent from this map inherits
+   * the top-level fields, so only the genuinely different ones are spelled out.
+   *
+   * `required` may be overridden too, because a dependency's WEIGHT really does change: Docker is a
+   * convenience on macOS, where the kernel profile is the default isolation, and the only isolation
+   * Windows has at all.
+   */
+  byPlatform?: Partial<Record<"darwin" | "linux" | "win32", Partial<Omit<Dep, "kind" | "name" | "purpose" | "byPlatform">>>>
+}
+
+/**
+ * A dependency as it applies on THIS platform.
+ *
+ * Every consumer — the installer, the management tool, the panel, the generated docs — must ask through
+ * here. Reading `dep.install` directly is how a Homebrew command ends up being offered on Linux, which
+ * is the defect this function exists to remove.
+ */
+export function resolveDep(dep: Dep, platform: "darwin" | "linux" | "win32" = currentPlatform()): Dep {
+  const over = dep.byPlatform?.[platform]
+  return over ? { ...dep, ...over } : dep
 }
 
 export interface PluginMeta {
@@ -54,7 +76,7 @@ export interface PluginMeta {
  * Scheduler — sat installed and unmentioned. A required dependency that cannot be satisfied is worse
  * than an absent one: it makes a working install read as broken.
  */
-function SCHEDULING_BACKEND(): Artifact {
+function SCHEDULING_BACKEND(): Dep {
   const p = currentPlatform()
   if (p === "linux") {
     return { kind: "builtin", name: "systemd (user timers)", required: true, purpose: "scheduling backend",
@@ -71,7 +93,7 @@ function SCHEDULING_BACKEND(): Artifact {
 
 /** The system speech synthesiser, when the platform ships one. Piper is the cross-platform answer and is
  *  declared separately; this is only the no-install fallback, so it is never required anywhere. */
-function SYSTEM_TTS(): Artifact {
+function SYSTEM_TTS(): Dep {
   const p = currentPlatform()
   if (p === "linux") {
     return { kind: "system", name: "espeak-ng", required: false, purpose: "text_to_speech fallback",
@@ -183,7 +205,7 @@ export const MANIFEST: PluginMeta[] = [
     deps: [
       ...NPM_BUNDLED,
       SCHEDULING_BACKEND(),
-      { kind: "system", name: "bun", required: false, purpose: "runs the scheduled-job helper (FABULA_BUN_BIN)", check: "command -v bun >/dev/null", install: "brew install oven-sh/bun/bun" },
+      { kind: "system", name: "bun", required: false, purpose: "runs the scheduled-job helper (FABULA_BUN_BIN)", check: "command -v bun >/dev/null", install: "brew install oven-sh/bun/bun", byPlatform: { linux: { install: "curl -fsSL https://bun.sh/install | bash" }, win32: { install: "powershell -c \"irm bun.sh/install.ps1 | iex\"" } } },
     ],
   },
   {
@@ -195,7 +217,7 @@ export const MANIFEST: PluginMeta[] = [
       { kind: "service", name: "vision endpoint (VLM)", required: false, purpose: "vision_analyze", check: "true", install: "Load a VLM in LM Studio (set LMSTUDIO_VLM_MODEL) or set FABULA_VISION_URL+FABULA_VISION_MODEL", manual: true, note: "vision_analyze returns a clear message if no VLM is configured." },
       SYSTEM_TTS(),
       { kind: "system", name: "piper", required: false, purpose: "text_to_speech (higher quality than say)", check: "command -v piper >/dev/null || test -n \"$FABULA_PIPER_BIN\"", install: "pip3 install piper-tts  # then set FABULA_PIPER_VOICE to a .onnx voice", note: "Optional — say is used if piper is absent." },
-      { kind: "python", name: "faster-whisper", required: false, purpose: "transcribe_audio (speech-to-text)", check: "python3 -c 'import faster_whisper' 2>/dev/null || command -v whisper >/dev/null", install: "pip3 install faster-whisper", note: "No built-in macOS fallback — transcribe_audio needs this." },
+      { kind: "python", name: "faster-whisper", required: false, purpose: "transcribe_audio (speech-to-text)", check: "python3 -c 'import faster_whisper' 2>/dev/null || command -v whisper >/dev/null", install: "pip3 install faster-whisper", byPlatform: { win32: { install: "py -3 -m pip install faster-whisper" } }, note: "No built-in macOS fallback — transcribe_audio needs this." },
     ],
   },
   {
@@ -211,7 +233,7 @@ export const MANIFEST: PluginMeta[] = [
     deps: [
       ...NPM_BUNDLED,
       { kind: "npm", name: "playwright", required: true, purpose: "browser driver", check: "test -d plugin/node_modules/playwright", install: "cd plugin && bun install" },
-      { kind: "system", name: "chromium (playwright browser)", required: true, purpose: "the actual browser binary", check: "ls -d \"$HOME/Library/Caches/ms-playwright/\"chromium* >/dev/null 2>&1", install: "cd plugin && npx playwright install chromium", note: "playwright is bundled, but the Chromium binary (~150 MB) must be downloaded once." },
+      { kind: "system", name: "chromium (playwright browser)", required: true, purpose: "the actual browser binary", check: "ls -d \"$HOME/Library/Caches/ms-playwright/\"chromium* >/dev/null 2>&1", install: "cd plugin && npx playwright install chromium", byPlatform: { linux: { install: "cd plugin && npx playwright install --with-deps chromium", note: "--with-deps pulls the system libraries headless Chromium needs; without them it starts and immediately dies." } }, note: "playwright is bundled, but the Chromium binary (~150 MB) must be downloaded once." },
     ],
   },
   {
@@ -255,12 +277,12 @@ export const MANIFEST: PluginMeta[] = [
     tools: ["go_security_scan", "go_audit_criteria"],
     deps: [
       ...NPM_BUNDLED,
-      { kind: "system", name: "go", required: false, purpose: "the Go toolchain — provides `go vet` and is the HARD requirement for every other analyser here (they are all Go programs)", check: "command -v go >/dev/null", install: "brew install go", note: "Without Go nothing in this plugin runs. Marked optional because the plugin is deliberately INERT in a non-Go project (no go.mod → it never fires and costs nothing), so a missing Go toolchain is not a broken install — it just means you have no Go projects." },
+      { kind: "system", name: "go", required: false, purpose: "the Go toolchain — provides `go vet` and is the HARD requirement for every other analyser here (they are all Go programs)", check: "command -v go >/dev/null", install: "brew install go", byPlatform: { linux: { install: "sudo apt install golang-go  # or: dnf install golang" }, win32: { install: "winget install GoLang.Go" } }, note: "Without Go nothing in this plugin runs. Marked optional because the plugin is deliberately INERT in a non-Go project (no go.mod → it never fires and costs nothing), so a missing Go toolchain is not a broken install — it just means you have no Go projects." },
       { kind: "system", name: "govulncheck", required: false, purpose: "known-CVE detection WITH call-graph reachability (the precision lever: reports only advisories your code actually reaches)", check: "command -v govulncheck >/dev/null || test -x \"${GOBIN:-${GOPATH:-$HOME/go}/bin}/govulncheck\"", install: "go install golang.org/x/vuln/cmd/govulncheck@latest", note: "The ONLY source of reachability. Without it there is no CVE arm at all — the other analysers do not look at dependencies." },
       { kind: "system", name: "gosec", required: false, purpose: "Go security linter (SQL injection, hardcoded credentials, weak crypto, path traversal)", check: "command -v gosec >/dev/null || test -x \"${GOBIN:-${GOPATH:-$HOME/go}/bin}/gosec\"", install: "go install github.com/securego/gosec/v2/cmd/gosec@latest" },
       { kind: "system", name: "staticcheck", required: false, purpose: "the strongest single Go correctness linter (SA/S/ST/QF checks)", check: "command -v staticcheck >/dev/null || test -x \"${GOBIN:-${GOPATH:-$HOME/go}/bin}/staticcheck\"", install: "go install honnef.co/go/tools/cmd/staticcheck@latest" },
       { kind: "system", name: "nilaway", required: false, purpose: "interprocedural nil-panic detection — the dominant crash class of a Go service", check: "command -v nilaway >/dev/null || test -x \"${GOBIN:-${GOPATH:-$HOME/go}/bin}/nilaway\"", install: "go install go.uber.org/nilaway/cmd/nilaway@latest", note: "Installs into $GOPATH/bin (usually ~/go/bin); the plugin adds that directory to its own PATH, so a Finder-launched app finds it too." },
-      { kind: "system", name: "golangci-lint", required: false, purpose: "aggregator (errcheck, bodyclose, sqlclosecheck, rowserrcheck, noctx, containedctx…) — the classes never handed to the model", check: "command -v golangci-lint >/dev/null", install: "brew install golangci-lint" },
+      { kind: "system", name: "golangci-lint", required: false, purpose: "aggregator (errcheck, bodyclose, sqlclosecheck, rowserrcheck, noctx, containedctx…) — the classes never handed to the model", check: "command -v golangci-lint >/dev/null", install: "brew install golangci-lint", byPlatform: { linux: { install: "curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin" }, win32: { install: "winget install golangci-lint" } } },
     ],
   },
   {

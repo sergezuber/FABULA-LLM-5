@@ -103,7 +103,11 @@ export function buildSeatbeltProfile(cfg: SandboxConfig): string {
 /** argv to run a shell command under the sandbox profile. The shell itself comes from the one place
  *  that decides it (`platform/shell.ts`), so the confined shell and the unconfined one can never be
  *  different programs — a difference that would make the guards read one grammar and the kernel confine
- *  another. */
+ *  another.
+ *
+ *  Kept taking a macOS PROFILE STRING because that is what its callers and tests hold. New code should
+ *  use `platform/sandbox.ts sandboxShellArgv`, which asks the platform what it can enforce instead of
+ *  assuming Seatbelt exists. */
 export function sandboxArgv(command: string, profile: string): string[] {
   return ["sandbox-exec", "-p", profile, ...shellArgv(command)]
 }

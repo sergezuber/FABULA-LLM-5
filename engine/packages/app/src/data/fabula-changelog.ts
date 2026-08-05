@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.104.0"
+export const FABULA_VERSION = "0.105.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.105.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Движок теперь собирается для Linux и Windows с этой же машины — и артефакты проверены как настоящие исполняемые файлы тех систем, а не переименованные здешние. Сборка получила выбор целей, потому что раньше можно было собрать либо всё сразу, либо ровно свою систему, и ни то ни другое не годится для двух нужных. Опечатка в имени цели теперь отказывает вместо того, чтобы молча собрать ноль целей и выглядеть успешной. Уборка следов удалённых чатов и безопасный перезапуск переписаны и больше не зависят от четырёх внешних программ, две из которых вне macOS не существуют вовсе: обещание «удалённый чат не оставляет следов» не может держаться на том, установил ли кто-то утилиту. По дороге найден дефект в самой уборке: указание на копию базы всё равно чистило настоящий каталог данных — теперь названная база решает всё, что за ней следует. Зависимости научились называть команду установки той системы, где их ставят, а не только здешнюю. Сборочный сторож проверяет третий артефакт, который есть у этой системы, и отсутствие по-прежнему считает находкой, а не пропуском.",
+        en: "The engine now builds for Linux and Windows from this machine, and the artifacts are verified to be genuine executables of those systems rather than renamed local ones. The build gained target selection, because previously it was all targets or exactly this machine's own, and neither suits building the two that are wanted. A typo in a target name now refuses, instead of quietly building nothing and looking successful. Erasing the traces of deleted chats, and restarting safely, were rewritten and no longer depend on four external programs, two of which do not exist off macOS at all: the promise that a deleted chat leaves nothing behind cannot rest on whether someone installed a utility. A defect in the erasing itself surfaced on the way: pointing it at a copy of the database still cleaned the real data directory — a named database now decides everything downstream of it. Dependencies now name the install command of the system they are being installed on, not only this one's. The build guard checks the third artifact this system actually has, and still treats absence as a finding rather than a skip.",
+      },
+    ],
+  },
   {
     version: "0.104.0",
     date: "2026-08-03",

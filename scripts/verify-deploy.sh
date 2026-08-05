@@ -20,7 +20,17 @@
 #     bash scripts/verify-deploy.sh /path/to/tree
 set -u
 if [ -n "${1:-}" ]; then ROOT="$(cd "$1" && pwd)" || exit 2; else ROOT="$(cd "$(dirname "$0")/.." && pwd)"; fi
+# WHICH platform's artifacts to check. The three carriers are the same idea everywhere and different
+# files on each: an app bundle's Info.plist on macOS, a .desktop entry on Linux, the installer manifest on
+# Windows. Naming the platform once is what keeps the check honest instead of macOS-shaped.
+case "$(uname -s 2>/dev/null)" in
+  Darwin) PLATFORM=darwin ;;
+  Linux)  PLATFORM=linux ;;
+  MINGW*|MSYS*|CYGWIN*) PLATFORM=win32 ;;
+  *)      PLATFORM=linux ;;
+esac
 BIN="$ROOT/bin/fabula"
+[ "$PLATFORM" = "win32" ] && BIN="$ROOT/bin/fabula.exe"
 SRC="$ROOT/engine/packages/opencode/src"
 fail=0
 say() { printf '%s\n' "$1"; }
@@ -125,16 +135,33 @@ else
     GOT="$(strings -a "$BIN" 2>/dev/null | carried)"
     bad "engine binary carries ${GOT:-no recognizable version}, source declares $SRC_VER"
   fi
-  PLIST="$ROOT/FABULA-LLM-5.app/Contents/Info.plist"
-  if [ ! -f "$PLIST" ]; then
-    bad "app bundle has no Info.plist — the app was never built (source declares $SRC_VER)"
+  # THE THIRD CARRIER — the desktop shell's own manifest, whatever this platform calls it. Its ABSENCE
+  # is reported as "never built", never skipped: a check that quietly disappears on a platform is a check
+  # that platform does not have, and the report would read identically to one that passed.
+  case "$PLATFORM" in
+    darwin) THIRD="$ROOT/FABULA-LLM-5.app/Contents/Info.plist"; THIRD_NAME="app bundle Info.plist"
+            THIRD_MISSING="app bundle has no Info.plist" ;;
+    linux)  THIRD="$ROOT/dist/fabula.desktop";                  THIRD_NAME="desktop entry"
+            THIRD_MISSING="no desktop entry at dist/fabula.desktop" ;;
+    win32)  THIRD="$ROOT/dist/fabula.version";                  THIRD_NAME="installer manifest"
+            THIRD_MISSING="no installer manifest at dist/fabula.version" ;;
+  esac
+  if [ ! -f "$THIRD" ]; then
+    bad "$THIRD_MISSING — the desktop shell was never built (source declares $SRC_VER)"
   else
-    APP_VER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PLIST" 2>/dev/null)"
-    [ -n "$APP_VER" ] || APP_VER="$(sed -n 's/.*CFBundleShortVersionString<\/key>[[:space:]]*<string>\([^<]*\)<\/string>.*/\1/p' "$PLIST" 2>/dev/null | head -1)"
-    if [ "$APP_VER" = "$SRC_VER" ]; then
-      ok "app bundle Info.plist carries $SRC_VER"
+    APP_VER=""
+    if [ "$PLATFORM" = "darwin" ]; then
+      APP_VER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$THIRD" 2>/dev/null)"
+      [ -n "$APP_VER" ] || APP_VER="$(sed -n 's/.*CFBundleShortVersionString<\/key>[[:space:]]*<string>\([^<]*\)<\/string>.*/\1/p' "$THIRD" 2>/dev/null | head -1)"
     else
-      bad "app bundle Info.plist carries ${APP_VER:-no recognizable version}, source declares $SRC_VER"
+      # A .desktop entry carries `Version=`; the Windows manifest is a bare version line. Both are read
+      # as "the first version-looking number in the file", which is what each of them holds.
+      APP_VER="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' "$THIRD" 2>/dev/null | head -1)"
+    fi
+    if [ "$APP_VER" = "$SRC_VER" ]; then
+      ok "$THIRD_NAME carries $SRC_VER"
+    else
+      bad "$THIRD_NAME carries ${APP_VER:-no recognizable version}, source declares $SRC_VER"
     fi
   fi
 fi

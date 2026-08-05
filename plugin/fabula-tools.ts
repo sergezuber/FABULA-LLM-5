@@ -40,7 +40,7 @@ const BASH_BACKEND = resolveBackend(process.env, SANDBOX_PROFILE)
 /** The kernel floor under every host shell command: the hardline paths, nothing else. Built once —
  *  it depends only on $HOME. Empty when the platform has no Seatbelt or the operator opted out. */
 const shellKernelFloor: string =
-  process.env.FABULA_SHELL_GUARD !== "0" && existsSync("/usr/bin/sandbox-exec")
+  process.env.FABULA_SHELL_GUARD !== "0" && sandboxPlan(shellScope()).available
     ? buildSeatbeltProfile(hardlineSandboxConfig(os.homedir()))
     : ""
 import { detectVerifyCommand, verifyReport } from "./lib/verifycmd"
@@ -58,6 +58,7 @@ import { buildDockerRun, SANDBOX_IMAGES, interpreterCmd, sandboxNote } from "./l
 import { aggregateCost, formatCostReport, UsageRow } from "./lib/costledger"
 import { dataPath } from "./lib/platform/paths"
 import { spawnShell } from "./lib/platform/shell"
+import { sandboxPlan, shellScope, untrustedScope } from "./lib/platform/sandbox"
 
 // Cached Docker availability probe (sandbox for execute_code).
 let _dockerOk: boolean | null = null
@@ -796,13 +797,17 @@ export const FabulaTools: Plugin = async () => {
           // unconfined child rather than refusing to run code at all, and SAYS which of the two happened.
           const bin = lang === "node" ? "node" : "python3"
           const flag = lang === "node" ? "-e" : "-c"
-          const confined = existsSync("/usr/bin/sandbox-exec") && process.env.FABULA_CODE_SEATBELT !== "0"
-          const argv = confined
-            ? sandboxExecArgv([bin, flag, args.code], buildSeatbeltProfile(defaultSandboxConfig(os.homedir())))
-            : [bin, flag, args.code]
+          // WHAT this platform can enforce is the platform's answer, not an assumption that Seatbelt
+          // exists. On Linux the same claim is made with namespaces; on Windows nothing can make it,
+          // and the plan SAYS so rather than quietly running the code unconfined under a note that
+          // implies otherwise. The degrade is unchanged — code still runs — but the transcript now
+          // carries the real reason.
+          const plan = sandboxPlan(untrustedScope())
+          const confined = plan.available && process.env.FABULA_CODE_SEATBELT !== "0"
+          const argv = confined ? plan.wrap([bin, flag, args.code]) : [bin, flag, args.code]
           const note = confined
-            ? "\n[local exec under the macOS kernel profile — Docker sandbox unavailable; env scrubbed, credential and persistence paths denied by the kernel]"
-            : "\n[local exec — Docker sandbox unavailable and no kernel profile on this platform; env scrubbed]"
+            ? `\n[local exec under the ${plan.mechanism} kernel profile — Docker sandbox unavailable; env scrubbed, ${plan.note}]`
+            : `\n[local exec — Docker sandbox unavailable; env scrubbed; ${plan.note}]`
           return await new Promise((resolve) => {
             const child = spawn(argv[0]!, argv.slice(1), { cwd: ctx.directory, env: scrubEnv(process.env) })
             let out = "", err = "", killed = false

@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url"
 import { homedir } from "node:os"
 import { join, dirname } from "node:path"
 import { MANIFEST, allDeps, pluginById, type Dep, type PluginMeta } from "./manifest"
+import { resolveDep } from "./manifest"
 import { configPath } from "./platform/paths"
 import { shellArgv } from "./platform/shell"
 
@@ -27,15 +28,25 @@ function sh(cmd: string, timeoutMs = 600000): Promise<{ ok: boolean; out: string
 
 export type DepStatus = { dep: Dep; present: boolean; checked: boolean }
 
-/** Run a dependency's check command (exit 0 = present). No check = treated as present (builtin/manual). */
+/**
+ * Run a dependency's check command (exit 0 = present). No check = treated as present (builtin/manual).
+ *
+ * THE PLATFORM IS APPLIED HERE, at the choke point every consumer already goes through, and the RESOLVED
+ * dependency is what comes back in `DepStatus`. That is deliberate: six call sites read `.check`,
+ * `.install` and `.note` off the result to display or run them, and asking each of them to remember to
+ * resolve first is how a Homebrew command ends up being offered on Linux. One place applies it; nowhere
+ * else can forget.
+ */
 export async function checkDep(dep: Dep): Promise<DepStatus> {
-  if (!dep.check) return { dep, present: true, checked: false }
-  const r = await sh(dep.check, 30000)
-  return { dep, present: r.ok, checked: true }
+  const d = resolveDep(dep)
+  if (!d.check) return { dep: d, present: true, checked: false }
+  const r = await sh(d.check, 30000)
+  return { dep: d, present: r.ok, checked: true }
 }
 
 /** Install a dependency via its install command. Returns the combined output. */
-export async function installDep(dep: Dep): Promise<{ ok: boolean; out: string; skipped?: string }> {
+export async function installDep(depIn: Dep): Promise<{ ok: boolean; out: string; skipped?: string }> {
+  const dep = resolveDep(depIn)
   if (dep.manual) return { ok: false, out: "", skipped: "manual step (guidance, not a runnable command)" }
   if (!dep.install) return { ok: false, out: "", skipped: "no install command (manual/builtin)" }
   const r = await sh(dep.install)

@@ -7,6 +7,8 @@
 // The harness owns the blast radius, not the model.
 
 import { shellArgv } from "./platform/shell"
+import { sandboxShellArgv, shellScope } from "./platform/sandbox"
+import { current } from "./platform/index"
 
 export interface BackendConfig { sandboxProfile?: string; dockerCid?: string }
 
@@ -23,7 +25,16 @@ export interface BackendConfig { sandboxProfile?: string; dockerCid?: string }
  */
 export function bashArgv(command: string, cfg: BackendConfig = {}): string[] {
   if (cfg.dockerCid) return ["docker", "exec", "-i", cfg.dockerCid, "bash", "-lc", command]
-  if (cfg.sandboxProfile) return ["sandbox-exec", "-p", cfg.sandboxProfile, ...shellArgv(command)]
+  if (cfg.sandboxProfile) {
+    // A profile STRING is Seatbelt's own language, so it means something on macOS and nothing anywhere
+    // else. Where it means something the CALLER'S profile is used exactly as given — a caller that built
+    // a narrower or wider profile has decided, and substituting our own would silently enforce a
+    // different claim than the one it asked for. Everywhere else the platform is asked what it can
+    // enforce instead of being handed a document it cannot read; where it can enforce nothing, `wrap` is
+    // the identity and the command runs exactly as it would have, with the caller's note saying so.
+    if (current() === "darwin") return ["sandbox-exec", "-p", cfg.sandboxProfile, ...shellArgv(command)]
+    return sandboxShellArgv(command, shellScope()).argv
+  }
   return shellArgv(command)
 }
 

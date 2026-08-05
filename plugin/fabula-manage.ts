@@ -41,8 +41,11 @@ export const FabulaManage: Plugin = async () => ({
           out.push(`## ${m.id} — ${m.name}${isEnabled(m.id) ? " (on)" : " (off)"}`)
           for (const d of m.deps) {
             const s = await checkDep(d)
-            const mark = s.present ? "✓" : d.required ? "✗ MISSING(required)" : "○ missing(optional)"
-            out.push(`  ${mark} ${d.name} [${d.kind}] — ${d.purpose}` + (!s.present && d.install ? `\n      install: ${d.install}` : !s.present && d.note ? `\n      ${d.note}` : ""))
+            // Everything shown comes off the RESOLVED dependency: the check that actually ran, the
+            // install command that would actually work here, and whether it is required on THIS platform.
+            const rd = s.dep
+            const mark = s.present ? "✓" : rd.required ? "✗ MISSING(required)" : "○ missing(optional)"
+            out.push(`  ${mark} ${rd.name} [${rd.kind}] — ${rd.purpose}` + (!s.present && rd.install ? `\n      install: ${rd.install}` : !s.present && rd.note ? `\n      ${rd.note}` : ""))
           }
         }
         return out.join("\n")
@@ -65,12 +68,13 @@ export const FabulaManage: Plugin = async () => ({
         let failed = 0
         for (const d of m.deps) {
           const s = await checkDep(d)
-          if (s.present) { out.push(`  ✓ ${d.name} already present`); continue }
-          if (!d.required && !inclOpt) { out.push(`  ○ ${d.name} (optional) — skipped`); continue }
-          if (!d.install || d.manual) { out.push(`  • ${d.name} — manual step: ${d.install || d.note || d.purpose}`); continue }
-          if (ran.has(d.install)) continue
-          ran.add(d.install)
-          out.push(`  → ${d.name}: ${d.install}`)
+          const rd = s.dep
+          if (s.present) { out.push(`  ✓ ${rd.name} already present`); continue }
+          if (!rd.required && !inclOpt) { out.push(`  ○ ${rd.name} (optional) — skipped`); continue }
+          if (!rd.install || rd.manual) { out.push(`  • ${rd.name} — manual step: ${rd.install || rd.note || rd.purpose}`); continue }
+          if (ran.has(rd.install)) continue
+          ran.add(rd.install)
+          out.push(`  → ${rd.name}: ${rd.install}`)
           const r = await installDep(d)
           out.push(r.ok ? "    ✓ done" : `    ✗ failed: ${r.out.slice(-200)}`)
           if (!r.ok) failed++

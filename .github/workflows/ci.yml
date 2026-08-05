@@ -6,9 +6,16 @@ on:
   pull_request:
 
 jobs:
+  # The harness runs on every platform it claims to support, so a rule that holds on only one is a red
+  # build rather than something someone discovers later on their own machine. macOS stays first because it
+  # is where the product is developed; the other two are not "extra" — a failure on either is a failure.
   plugin-tests:
-    name: Plugin tests (bun)
-    runs-on: macos-14
+    name: Plugin tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false # one platform's failure must not hide another's
+      matrix:
+        os: [macos-14, ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -19,7 +26,81 @@ jobs:
         run: bun install --frozen-lockfile || bun install
       - name: Run tests
         working-directory: plugin
+        # The bunfig preload in plugin/ is what makes these hermetic — run from there, never the repo root.
         run: bun test
+
+  engine-tests:
+    name: Engine tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install engine dependencies
+        working-directory: engine
+        run: bun install
+      - name: Run engine tests
+        working-directory: engine/packages/opencode
+        run: bun test test/session test/task test/tool
+
+  adapter-tests:
+    name: Adapter tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run adapter tests
+        working-directory: proxy
+        shell: bash
+        run: |
+          python -m pytest --collect-only -q > collected.txt
+          python -m pytest -q
+      - name: The suite must have COLLECTED tests, not merely reported success
+        working-directory: proxy
+        shell: bash
+        # `-q` once printed "110 passed" while five files contributed ZERO tests, so the count is
+        # asserted rather than the word "passed": a suite that collected nothing must not read as green.
+        run: |
+          # pytest prints "N tests collected" as its last summary line; the per-test lines above it are
+          # what a second -q would have suppressed, which is exactly how this check first read zero.
+          n=$(grep -oE '[0-9]+ tests? collected' collected.txt | head -1 | grep -oE '[0-9]+' || true)
+          echo "collected ${n:-0} test(s)"
+          n=${n:-0}
+          [ "$n" -ge 40 ] || { echo "::error::only $n tests collected — the suite is not running what it claims"; exit 1; }
+
+  cross-build:
+    name: Engine cross-build (Linux + Windows from macOS)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install engine dependencies
+        working-directory: engine
+        run: bun install
+      - name: Build the Linux and Windows engine binaries
+        working-directory: engine/packages/opencode
+        env:
+          MIMOCODE_CHANNEL: prod
+        run: bun run script/build.ts --only=linux-x64,windows-x64 --skip-embed-web-ui
+      - name: Each artifact must be its own platform's format, not a renamed host binary
+        working-directory: engine/packages/opencode
+        run: |
+          file dist/mimocode-linux-x64/bin/mimo       | grep -q "ELF 64-bit" || { echo "::error::linux artifact is not ELF"; exit 1; }
+          file dist/mimocode-windows-x64/bin/mimo.exe | grep -q "PE32+"     || { echo "::error::windows artifact is not PE32+"; exit 1; }
+          echo "cross-build verified"
 
   swift-build:
     name: macOS app compiles

@@ -131,7 +131,10 @@ export function checkCommand(rawCmd: string): CmdVerdict {
 
   // 2b. Decode-then-execute — `… base64 -d | bash`, `xxd -r | sh`, `openssl enc -d | python` (obfuscated RCE).
   const DECODER = /\b(base64\s+(-d|--decode|-D)|base32\s+-d|xxd\s+(-p\s+)?-r|openssl\s+enc\b[^|]*-d|uudecode|gunzip|gzip\s+-d|zcat|bunzip2|xz\s+(-d|--decode))\b/
-  const PIPE_INTERP = /\|\s*(sudo\s+)?((ba|z|da|k|c)?sh|python3?|perl|ruby|node|osascript)\b/
+  // Every interpreter a piped payload could land in, on every platform. A list that knows only the
+  // POSIX ones reads `curl ... | powershell -c` as harmless text on the platform where that is the
+  // normal way to run anything.
+  const PIPE_INTERP = /\|\s*(sudo\s+)?((ba|z|da|k|c)?sh|python3?|perl|ruby|node|osascript|pwsh|powershell(\.exe)?|cmd(\.exe)?|wscript|cscript)\b/i
   if (DECODER.test(m) && PIPE_INTERP.test(m))
     return { blocked: true, code: "decode_pipe_shell", reason: "decoding opaque data and piping it into a shell/interpreter — obfuscated remote/arbitrary code execution. Decode to a file and inspect it first." }
 

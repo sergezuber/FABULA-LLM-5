@@ -145,7 +145,22 @@ const allTargets: {
   },
 ]
 
-const targets = singleFlag
+// `--only=<substring>[,<substring>]` builds just the named targets — `--only=linux-x64,windows-x64`.
+//
+// Without it the choice is all twelve or exactly this machine's own, and neither is what a cross-build
+// wants: producing the Linux and Windows binaries from a Mac means compiling two targets, not twelve, and
+// the other ten cost real minutes each. The match is against the DIST NAME (`mimocode-linux-x64`), which
+// is the string the build already prints and the one a person reading the output would name back.
+const onlyArg = process.argv.find((a) => a.startsWith("--only="))
+const onlyPatterns = onlyArg ? onlyArg.slice("--only=".length).split(",").map((x) => x.trim()).filter(Boolean) : []
+const distName = (item: { os: string; arch: string; abi?: string; avx2?: false }) =>
+  [BINARY_PREFIX, item.os === "win32" ? "windows" : item.os, item.arch, item.avx2 === false ? "baseline" : undefined, item.abi]
+    .filter(Boolean)
+    .join("-")
+
+const targets = onlyPatterns.length
+  ? allTargets.filter((item) => onlyPatterns.some((pat) => distName(item).includes(pat)))
+  : singleFlag
   ? allTargets.filter((item) => {
       if (item.os !== process.platform || item.arch !== process.arch) {
         return false
@@ -165,6 +180,13 @@ const targets = singleFlag
       return true
     })
   : allTargets
+
+if (onlyPatterns.length && targets.length === 0) {
+  // A typo in --only must not read as a successful build of nothing.
+  console.error(`--only=${onlyPatterns.join(",")} matched no target. Available: ${allTargets.map(distName).join(", ")}`)
+  process.exit(2)
+}
+console.log(`building ${targets.length} target(s): ${targets.map(distName).join(", ")}`)
 
 await $`rm -rf dist`
 

@@ -229,24 +229,32 @@ jobs:
           mkdir -p bin
           cp engine/packages/opencode/dist/mimocode-windows-x64/bin/mimo.exe bin/fabula.exe
           ./bin/fabula.exe --version
-      - name: Run the acceptance matrix
+      - name: Run the acceptance matrix, and FAIL when it fails
         shell: bash
-        # THE POINT OF THIS JOB. Criteria 1 and 2 need a human opening a window and watching a real task,
-        # and are reported MANUAL rather than faked — but 3 through 10 are exactly the ones nobody can
-        # eyeball, and this is the only place they meet a real Windows kernel, scheduler and filesystem.
-        # A SKIP is not acceptance: the script prints skips as loudly as failures and names the reason.
-        run: bun scripts/acceptance.ts || true
-      - name: The criteria that must not merely be skipped here
-        shell: bash
-        # A run that skipped everything would exit clean and prove nothing. These three have no excuse on
-        # a real Windows host: the guards, the scheduler, and the deploy guard.
+        # THE FIRST VERSION OF THIS STEP REPORTED SUCCESS OVER A FAILING ACCEPTANCE. It ran the script with
+        # `|| true` so the output would always be visible, and then asserted only that three criteria were
+        # not SKIPPED — and a criterion that FAILED satisfied that assertion. The job went green while the
+        # acceptance said "4 pass, 2 fail". A gate that cannot go red is not a gate, and this one was
+        # reporting on itself rather than on the product.
+        #
+        # Now: run ONCE, print everything, and let three separate conditions turn the job red —
+        #   · the script's own exit code (any FAIL),
+        #   · a SKIP of a criterion this machine can certainly run (4, 5, 8),
+        #   · output that does not look like an acceptance report at all.
+        # Criteria 1 and 2 stay MANUAL and are named as still-open rather than counted.
         run: |
-          out=$(bun scripts/acceptance.ts 2>&1 || true)
+          set -o pipefail
+          out=$(bun scripts/acceptance.ts 2>&1); rc=$?
           echo "$out"
+          grep -q "criteria:" <<<"$out" || { echo "::error::the acceptance produced no report"; exit 1; }
           for n in 4 5 8; do
-            echo "$out" | grep -qE "^\[( *ok *| FAIL )\] +$n\." \
+            grep -qE "^\[( *ok *| FAIL )\] +$n\." <<<"$out" \
               || { echo "::error::criterion $n was skipped on a machine that can run it"; exit 1; }
           done
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::the acceptance failed on this machine — see the named criteria above"
+            exit 1
+          fi
 
   swift-build:
     name: macOS app compiles

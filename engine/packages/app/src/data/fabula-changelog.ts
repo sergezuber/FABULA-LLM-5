@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.115.0"
+export const FABULA_VERSION = "0.116.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.116.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Проверка приёмки на второй системе показывала успех поверх упавшей приёмки — и это худший вид дефекта, потому что он врёт именно в ту сторону, в которую врать нельзя. Она запускала проверку так, чтобы её код возврата не учитывался (ради того, чтобы вывод был виден всегда), и требовала лишь, чтобы три условия не были ПРОПУЩЕНЫ; условие, которое ПРОВАЛИЛОСЬ, этому требованию удовлетворяло. Внутри было «4 пройдено, 2 провалено», снаружи — зелёная галочка. Теперь проверка запускается один раз, печатает всё, и краснеет от любого из трёх: собственного кода возврата, пропуска условия, которое эта машина заведомо может выполнить, и вывода, не похожего на отчёт вообще. Заодно с настоящей второй системы получены первые честные результаты: защита отказывает во всех дверях, планировщик отвечает, расчёт окна модели подходит этой машине, после закрытия не остаётся процессов.",
+        en: "The acceptance check on the second system reported success over a failing acceptance — the worst kind of defect, because it lies in the one direction that must never be lied in. It ran the check so that its exit code was ignored (so the output would always be visible) and then required only that three conditions were not SKIPPED; a condition that FAILED satisfied that requirement. Inside it said \"4 passed, 2 failed\"; outside it showed a green tick. It now runs once, prints everything, and goes red on any of three things: its own exit code, a skip of a condition this machine can certainly run, and output that does not look like a report at all. Along with it came the first honest results from the real second system: the protection refuses through every door, the scheduler answers, the model-window arithmetic fits that machine, and nothing is left running after closing.",
+      },
+    ],
+  },
   {
     version: "0.115.0",
     date: "2026-08-05",

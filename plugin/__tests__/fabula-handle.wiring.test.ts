@@ -10,7 +10,7 @@
 // tools are never offloaded back into themselves, and a store that cannot be written leaves the result
 // exactly as it was rather than replacing it with a pointer to nothing.
 
-import { test, expect, beforeAll, afterEach } from "bun:test"
+import { test, expect, beforeAll, beforeEach, afterEach } from "bun:test"
 import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
@@ -43,6 +43,17 @@ async function hooks() {
 }
 
 const WINDOW = 40_000
+
+// THE SUITE DECLARES THE WINDOW IT IS ABOUT, rather than inheriting whatever the process was last
+// taught. Every size below is derived from this number, while the mechanism under test asks the process
+// for the window at run time — so a neighbour that measured a different one silently moved the budget
+// out from under these sizes, and a result meant to be comfortably under it became one that had to be
+// offloaded. Measured that way: three checks here went red for a figure set in another file.
+beforeEach(async () => {
+  const { forgetLearnedWindow, setLearnedWindow } = await import("../lib/ctxguard")
+  forgetLearnedWindow()
+  setLearnedWindow(WINDOW)
+})
 const BUDGET = materialBudgetChars(WINDOW, { FABULA_CTX_CHARS_PER_TOKEN: "5" } as any)
 /** Comfortably past the share one result may take on its own. */
 const BIG = Math.ceil(BUDGET * SINGLE_RESULT_SHARE) + 1000

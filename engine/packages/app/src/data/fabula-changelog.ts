@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.163.0"
+export const FABULA_VERSION = "0.164.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.164.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Набор проверок, где размеры выводятся из окна, теперь ОБЪЯВЛЯЕТ окно, о котором говорит, вместо того чтобы наследовать последнее, которому научили процесс. Все его величины считаются от этого числа, а сам механизм спрашивает окно у процесса во время работы — поэтому сосед, измеривший другое, беззвучно сдвигал бюджет из-под этих величин, и результат, задуманный заведомо помещающимся, приходилось выгружать. Обратная проверка воспроизводит это точно: с чужим окном — три красных, со своим — все зелёные.",
+        en: "A suite whose sizes are derived from the window now DECLARES the window it is about, instead of inheriting whichever one the process was last taught. Every size in it follows from that number while the mechanism under test asks the process for the window at run time — so a neighbour that measured a different one silently moved the budget out from under those sizes, and a result meant to fit comfortably had to be offloaded instead. The reverse check reproduces it exactly: with the other window three go red, with its own all pass.",
+      },
+    ],
+  },
   {
     version: "0.163.0",
     date: "2026-08-06",

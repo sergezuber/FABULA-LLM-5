@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.147.0"
+export const FABULA_VERSION = "0.148.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.148.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Двенадцать проверок прав оболочки, не найдя ожидаемого запроса разрешения, теперь показывают, какие запросы БЫЛИ. Прежде каждая сообщала лишь «не найдено», и семнадцать одинаковых сообщений не отличали «разрешение не запросили вовсе» от «до него не дошли, потому что первым остановил другой запрос». Это разные неисправности с разными исправлениями, а стенд намеренно останавливается на первом же запросе — значит порядок и есть то, что нужно видеть.",
+        en: "Twelve shell-permission checks, on not finding the request they expect, now show which requests there WERE. Each previously reported only «not found», and seventeen identical messages did not separate «the permission was never asked for» from «nothing reached it because an earlier request stopped the run». Those are different faults with different corrections, and the harness deliberately stops at the first request — so the order is exactly what needs to be visible.",
+      },
+    ],
+  },
   {
     version: "0.147.0",
     date: "2026-08-05",

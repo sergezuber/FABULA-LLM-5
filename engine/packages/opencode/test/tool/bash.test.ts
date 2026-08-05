@@ -288,7 +288,8 @@ describe("tool.bash permissions", () => {
           ),
         ).rejects.toThrow(err.message)
         const extDirReq = requests.find((r) => r.permission === "external_directory")
-        expect(extDirReq).toBeDefined()
+        expect({ found: !!extDirReq, asked: requests.map((r) => r.permission) })
+            .toEqual({ found: true, asked: expect.arrayContaining(["external_directory"]) })
         expect(extDirReq!.patterns).toContain(want)
       },
     })
@@ -321,7 +322,8 @@ describe("tool.bash permissions", () => {
               )
               const extDirReq = requests.find((r) => r.permission === "external_directory")
               const bashReq = requests.find((r) => r.permission === "bash")
-              expect(extDirReq).toBeDefined()
+              expect({ found: !!extDirReq, asked: requests.map((r) => r.permission) })
+            .toEqual({ found: true, asked: expect.arrayContaining(["external_directory"]) })
               expect(extDirReq!.patterns).toContain(glob(path.join(outerTmp.path, "*")))
               expect(bashReq).toBeDefined()
               expect(bashReq!.patterns).toContain(`cat "${file}"`)
@@ -355,7 +357,8 @@ describe("tool.bash permissions", () => {
                 ),
               ).rejects.toThrow(err.message)
               const extDirReq = requests.find((r) => r.permission === "external_directory")
-              expect(extDirReq).toBeDefined()
+              expect({ found: !!extDirReq, asked: requests.map((r) => r.permission) })
+            .toEqual({ found: true, asked: expect.arrayContaining(["external_directory"]) })
               expect(extDirReq!.patterns).toContain(glob(path.join(process.env.WINDIR!, "*")))
             },
           })
@@ -384,7 +387,8 @@ describe("tool.bash permissions", () => {
               )
               const extDirReq = requests.find((r) => r.permission === "external_directory")
               const bashReq = requests.find((r) => r.permission === "bash")
-              expect(extDirReq).toBeDefined()
+              expect({ found: !!extDirReq, asked: requests.map((r) => r.permission) })
+            .toEqual({ found: true, asked: expect.arrayContaining(["external_directory"]) })
               expect(extDirReq!.patterns).toContain(glob(path.join(process.env.WINDIR!, "*")))
               expect(bashReq).toBeDefined()
               expect(bashReq!.patterns).toContain(`Get-Content ${file}`)
@@ -543,7 +547,8 @@ describe("tool.bash permissions", () => {
                   ),
                 ).rejects.toThrow(err.message)
                 const extDirReq = requests.find((r) => r.permission === "external_directory")
-                expect(extDirReq).toBeDefined()
+                expect({ found: !!extDirReq, asked: requests.map((r) => r.permission) })
+            .toEqual({ found: true, asked: expect.arrayContaining(["external_directory"]) })
                 expect(extDirReq!.patterns).toContain(glob(path.join(process.env.WINDIR!, "*")))
               },
             })
@@ -574,7 +579,8 @@ describe("tool.bash permissions", () => {
                 ),
               )
               const extDirReq = requests.find((r) => r.permission === "external_directory")
-              expect(extDirReq).toBeDefined()
+              expect({ found: !!extDirReq, asked: requests.map((r) => r.permission) })
+            .toEqual({ found: true, asked: expect.arrayContaining(["external_directory"]) })
               expect(extDirReq!.patterns).toContain(
                 Filesystem.normalizePathPattern(path.join(process.env.WINDIR!, "*")),
               )
@@ -668,7 +674,8 @@ describe("tool.bash permissions", () => {
               )
               const extDirReq = requests.find((r) => r.permission === "external_directory")
               const bashReq = requests.find((r) => r.permission === "bash")
-              expect(extDirReq).toBeDefined()
+              expect({ found: !!extDirReq, asked: requests.map((r) => r.permission) })
+            .toEqual({ found: true, asked: expect.arrayContaining(["external_directory"]) })
               expect(extDirReq!.patterns).toContain(
                 Filesystem.normalizePathPattern(path.join(process.env.WINDIR!, "*")),
               )
@@ -730,7 +737,8 @@ describe("tool.bash permissions", () => {
           ),
         ).rejects.toThrow(err.message)
         const extDirReq = requests.find((r) => r.permission === "external_directory")
-        expect(extDirReq).toBeDefined()
+        expect({ found: !!extDirReq, asked: requests.map((r) => r.permission) })
+            .toEqual({ found: true, asked: expect.arrayContaining(["external_directory"]) })
       },
     })
   })
@@ -756,7 +764,8 @@ describe("tool.bash permissions", () => {
           ),
         ).rejects.toThrow(err.message)
         const extDirReq = requests.find((r) => r.permission === "external_directory")
-        expect(extDirReq).toBeDefined()
+        expect({ found: !!extDirReq, asked: requests.map((r) => r.permission) })
+            .toEqual({ found: true, asked: expect.arrayContaining(["external_directory"]) })
         expect(extDirReq!.patterns).toContain(glob(path.join(os.tmpdir(), "*")))
       },
     })
@@ -892,7 +901,8 @@ describe("tool.bash permissions", () => {
         ).rejects.toThrow(err.message)
         const extDirReq = requests.find((r) => r.permission === "external_directory")
         const expected = glob(path.join(outerTmp.path, "*"))
-        expect(extDirReq).toBeDefined()
+        expect({ found: !!extDirReq, asked: requests.map((r) => r.permission) })
+            .toEqual({ found: true, asked: expect.arrayContaining(["external_directory"]) })
         expect(extDirReq!.patterns).toContain(expected)
         expect(extDirReq!.always).toContain(expected)
       },

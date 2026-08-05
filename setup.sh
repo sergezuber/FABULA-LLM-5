@@ -9,6 +9,10 @@ set -e
 HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE"
 
+# One platform question, asked once. Everything below branches on this rather than assuming a Mac.
+IS_MAC=""
+[ "$(uname -s 2>/dev/null)" = "Darwin" ] && IS_MAC=1
+
 DEPS_ARGS=()
 BUILD_APP=1
 for a in "$@"; do
@@ -34,10 +38,16 @@ echo "▸ 2/5  System dependencies (from the manifest)…"
 bun scripts/install-deps.ts "${DEPS_ARGS[@]}" || echo "  (some optional deps were skipped — install later via setup.sh --all or the in-app install_plugin_deps tool)"
 
 if [ "$BUILD_APP" = "1" ]; then
-  echo "▸ 3/5  Engine + macOS app…"
+  echo "▸ 3/5  Engine${IS_MAC:+ + macOS app}…"
   # The engine binary is repo-local (bin/fabula, gitignored) — build it if it isn't there yet.
   [ -x bin/fabula ] || ./build.sh
-  [ -d FABULA-LLM-5.app ] || bash app/build.sh
+  # The native shell exists on macOS only. Elsewhere the engine serves its own UI and the browser is
+  # the window — a real product, and the thing to use until the cross-platform shell lands.
+  if [ -n "$IS_MAC" ]; then
+    [ -d FABULA-LLM-5.app ] || bash app/build.sh
+  else
+    echo "  no native shell on this platform yet — run: bin/fabula serve --port 4096 and open http://127.0.0.1:4096"
+  fi
 else
   echo "▸ 3/5  Skipped engine/app build (--deps)."
 fi
@@ -49,8 +59,10 @@ echo "▸ 4/5  Config + engine command…"
 # Project config dir for the engine (MIMOCODE_CONFIG_DIR): nothing inside is tracked, so a fresh
 # clone lacks it — an engine built before v0.1.4 dies at startup writing .fabula/.gitignore.
 mkdir -p "$HERE/.fabula"
-mkdir -p "$HOME/.config"
-[ -e "$HOME/.config/fabula" ] || [ -L "$HOME/.config/fabula" ] || ln -s "$HERE" "$HOME/.config/fabula"
+# The engine's config dir follows XDG, exactly as the engine resolves it — not a hardcoded ~/.config.
+CFG_ROOT="${XDG_CONFIG_HOME:-$HOME/.config}"
+mkdir -p "$CFG_ROOT"
+[ -e "$CFG_ROOT/fabula" ] || [ -L "$CFG_ROOT/fabula" ] || ln -s "$HERE" "$CFG_ROOT/fabula"
 
 # The `fabula` command: ALWAYS prefer the repo-local engine built above. An unrelated engine
 # binary already on PATH (found via `command -v mimo`) must NOT win — the app would then serve
@@ -68,7 +80,10 @@ if [ -n "$ENGINE_REAL" ]; then
     chmod +x "$EXISTING"
     echo "  engine command repointed: $EXISTING → $ENGINE_REAL"
   elif [ -z "$EXISTING" ]; then
-    for BIN_DIR in /opt/homebrew/bin /usr/local/bin "$HOME/.local/bin"; do
+    # ~/.local/bin first on Linux (no Homebrew there, and it needs no privilege); Homebrew first on macOS.
+    if [ -n "$IS_MAC" ]; then SHIM_DIRS="/opt/homebrew/bin /usr/local/bin $HOME/.local/bin"
+    else SHIM_DIRS="$HOME/.local/bin /usr/local/bin"; fi
+    for BIN_DIR in $SHIM_DIRS; do
       mkdir -p "$BIN_DIR" 2>/dev/null || true
       if [ -d "$BIN_DIR" ] && [ -w "$BIN_DIR" ]; then
         printf '#!/bin/sh\nexec "%s" "$@"\n' "$ENGINE_REAL" > "$BIN_DIR/fabula"
@@ -88,6 +103,10 @@ echo "▸ 5/5  Local-model adapter (:1235)…"
 bun scripts/install-adapter-service.ts || echo "  (adapter service not installed — run it manually: bun scripts/install-adapter-service.ts --status)"
 
 echo ""
-echo "✓ Setup complete.  →  open FABULA-LLM-5.app"
+if [ -n "$IS_MAC" ]; then
+  echo "✓ Setup complete.  →  open FABULA-LLM-5.app"
+else
+  echo "✓ Setup complete.  →  bin/fabula serve --port 4096   then open http://127.0.0.1:4096"
+fi
 echo "  (Pick a model served by LM Studio, or add a cloud key in .env — the config is fabula.config.json.)"
 echo "  Manage plugins any time from chat: list_plugins / enable_plugin / disable_plugin / install_plugin_deps."

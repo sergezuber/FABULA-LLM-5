@@ -224,7 +224,13 @@ export const FabulaCorpus: Plugin = async (pluginInput) =>
         // trigger that still cancelled the model's next step would silence the turn and put nothing in
         // its place — the reader's task simply dropped, which is the worst outcome on offer.
         t.fired = true
-        if (handedBack(sid, v.dir)) return
+          if (handedBack(sid, v.dir)) {
+            // The last silent exit. A previous attempt handed this task back, so nothing runs — correct,
+            // and it produced no evidence at all, indistinguishable from a worker that started and
+            // vanished. Both were reached during one investigation and only one of them was true.
+            console.error(`[fabula-corpus] already handed back for this session and corpus; no worker started (${v.dir})`)
+            return
+          }
         t.owned = true
         console.error(`[fabula-corpus] traversal: ${v.reason}`)
         spawnWorker({ ...pluginInput, directory: v.dir }, sid, t.task || "")

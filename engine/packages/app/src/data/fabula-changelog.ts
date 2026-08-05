@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.159.0"
+export const FABULA_VERSION = "0.160.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.160.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Закрыт последний немой выход этого механизма: когда работа уже была передана обратно ранее, помощник не запускается — это верно и не оставляло НИКАКОГО следа, неотличимо от помощника, который стартовал и пропал. Оба состояния встретились в одном разборе, и истинным было одно. Теперь каждое решение здесь — сработать, отказаться, промолчать по прежней передаче — называет себя.",
+        en: "The last silent exit of this mechanism is closed: where the work was handed back on an earlier attempt, no helper starts — correct, and it left NO trace at all, indistinguishable from a helper that started and vanished. Both states were met in one investigation and only one of them was true. Every decision here now names itself: acting, declining, and standing down on an earlier hand-back.",
+      },
+    ],
+  },
   {
     version: "0.159.0",
     date: "2026-08-06",

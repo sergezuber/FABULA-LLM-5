@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.153.0"
+export const FABULA_VERSION = "0.154.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.154.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "🔴 На третьей системе разрешение «выйти за пределы проекта» не запрашивалось НИКОГДА. Правило «путь внутри проекта» решало по одному признаку: относительный путь между ними не поднимается вверх. Между двумя КОРНЯМИ файловой системы относительного пути не существует вовсе — система возвращает абсолютный, в нём подъёма нет, и правило читало это как «внутри». То есть при проекте на одном диске любой путь на другом считался своим: ничего не оказывалось внешним, и охрана, которая обязана спросить перед тем, как тронуть что-то вне проекта, молчала — присутствуя. На системе с одним корнем такой случай породить НЕЛЬЗЯ, поэтому он и пережил все машины, на которых проверялся.",
+        en: "🔴 On the third system the permission to reach outside the project was NEVER requested. The rule for «this path is inside the project» decided on one sign: the relative path between them does not climb. Between two filesystem ROOTS no relative path exists at all — the system answers with an absolute one, it contains no climb, and the rule read that as «inside». So with a project on one drive, every path on another counted as its own: nothing was ever external, and the guard whose job is to ask before touching anything outside stayed silent while being present. On a system with a single root the case CANNOT be produced, which is why it survived every machine it was checked on.",
+      },
+      {
+        ru: "Само решение отделено от системы, поэтому проверяется где угодно — в том числе там, где такой случай невозможен: абсолютность спрашивается в ОБОИХ написаниях, а не в том, на котором говорит машина-читатель. Найдено не догадкой: падающая проверка была научена называть, что у неё СПРАШИВАЛИ, и вернула пустой список.",
+        en: "The decision itself is separated from the platform, so it can be checked anywhere — including where the case cannot arise: absoluteness is asked in BOTH spellings rather than the one the reading machine happens to speak. Not found by guessing: the failing check had been taught to name what it HAD been asked for, and it came back with an empty list.",
+      },
+    ],
+  },
   {
     version: "0.153.0",
     date: "2026-08-05",

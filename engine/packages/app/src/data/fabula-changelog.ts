@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.151.0"
+export const FABULA_VERSION = "0.152.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.152.0",
+    date: "2026-08-05",
+    items: [
+      {
+        ru: "Отчёт о возможностях машины описан там, где перечислены остальные средства управления: что это за машина и что из неё выведено — род и объём памяти, ядра, ускоритель, может ли ядро ограничить чужой код, есть ли контейнеры, — вместе с политикой окна и рабочей точкой, каждая с указанием, откуда взялось число.",
+        en: "The machine-capacity report is described where the other management tools are listed: what this machine is and what was derived from it — memory kind and size, cores, accelerator, whether the kernel can confine foreign code, whether containers are available — together with the window policy and the working point, each naming where its number came from.",
+      },
+    ],
+  },
   {
     version: "0.151.0",
     date: "2026-08-05",

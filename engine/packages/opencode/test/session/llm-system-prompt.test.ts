@@ -14,6 +14,7 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { AppRuntime } from "../../src/effect/app-runtime"
 import { Global } from "../../src/global"
+import { memoryRoot } from "@/session/checkpoint-paths"
 
 // Reuses the same HTTP-mock approach from llm.test.ts to capture the
 // system prompt the LLM layer assembled before sending. The system prompt
@@ -466,11 +467,16 @@ describe("session.llm system prompt — memory-instructions guard", () => {
           .filter((m) => m.role === "system")
           .map((m) => m.content)
           .join("\n")
-        expect(allSys).toContain(path.join(Global.Path.data, "memory", "projects", Instance.current.project.id, "MEMORY.md"))
-        expect(allSys).toContain(path.join(Global.Path.data, "memory", "sessions", sessionID, "checkpoint.md"))
+        // The root is taken from the PRODUCT (`memoryRoot()` — the same one the prompt is built from and
+        // the same one the index compares against), not rebuilt here from the data directory. Rebuilding it
+        // asserts a SPELLING: where a filesystem hands out both a short and a long form for a directory,
+        // the prompt carried one and this expectation the other, and a correct prompt read as wrong.
+        const root = memoryRoot()
+        expect(allSys).toContain(path.join(root, "projects", Instance.current.project.id, "MEMORY.md"))
+        expect(allSys).toContain(path.join(root, "sessions", sessionID, "checkpoint.md"))
         // Global memory is taught (read-side) and points at the canonical path.
         expect(allSys).toContain("## Global memory")
-        expect(allSys).toContain(path.join(Global.Path.data, "memory", "global", "MEMORY.md"))
+        expect(allSys).toContain(path.join(root, "global", "MEMORY.md"))
         expect(allSys).not.toContain("<data>/memory/projects")
         expect(allSys).not.toContain("<data>/memory/sessions")
       },

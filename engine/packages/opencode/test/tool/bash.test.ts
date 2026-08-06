@@ -439,7 +439,14 @@ describe("tool.bash permissions", () => {
               // request was the generic one; it does not say whether the path was never extracted, was
               // extracted and judged inside the project, or was asked for in a different order — three
               // different defects with three different fixes. The whole sequence travels in the message.
-              expect({ first: requests[0]?.permission, asked: requests.map((r) => r.permission).join(",") })
+              expect({
+                first: requests[0]?.permission,
+                asked: requests.map((r) => r.permission).join(",") || "(nothing was asked)",
+                // Which shell the TOOL resolved, and whether it classed it as PowerShell. `asked: "bash"`
+                // alone says the path was never recognised; it does not say whether the shell the test
+                // selected is the shell the tool used, and only one of those is a defect in the product.
+                shell: Shell.name(Shell.acceptable()),
+              })
                 .toMatchObject({ first: "external_directory" })
               if (requests[0]?.permission !== "external_directory") return
               expect(requests[0].patterns).toContain(glob(path.join(path.dirname(tmp.path), "*")))
@@ -474,7 +481,14 @@ describe("tool.bash permissions", () => {
               // request was the generic one; it does not say whether the path was never extracted, was
               // extracted and judged inside the project, or was asked for in a different order — three
               // different defects with three different fixes. The whole sequence travels in the message.
-              expect({ first: requests[0]?.permission, asked: requests.map((r) => r.permission).join(",") })
+              expect({
+                first: requests[0]?.permission,
+                asked: requests.map((r) => r.permission).join(",") || "(nothing was asked)",
+                // Which shell the TOOL resolved, and whether it classed it as PowerShell. `asked: "bash"`
+                // alone says the path was never recognised; it does not say whether the shell the test
+                // selected is the shell the tool used, and only one of those is a defect in the product.
+                shell: Shell.name(Shell.acceptable()),
+              })
                 .toMatchObject({ first: "external_directory" })
               if (requests[0]?.permission !== "external_directory") return
               expect(requests[0].patterns).toContain(glob(path.join(os.homedir(), ".ssh", "*")))
@@ -510,7 +524,14 @@ describe("tool.bash permissions", () => {
               // request was the generic one; it does not say whether the path was never extracted, was
               // extracted and judged inside the project, or was asked for in a different order — three
               // different defects with three different fixes. The whole sequence travels in the message.
-              expect({ first: requests[0]?.permission, asked: requests.map((r) => r.permission).join(",") })
+              expect({
+                first: requests[0]?.permission,
+                asked: requests.map((r) => r.permission).join(",") || "(nothing was asked)",
+                // Which shell the TOOL resolved, and whether it classed it as PowerShell. `asked: "bash"`
+                // alone says the path was never recognised; it does not say whether the shell the test
+                // selected is the shell the tool used, and only one of those is a defect in the product.
+                shell: Shell.name(Shell.acceptable()),
+              })
                 .toMatchObject({ first: "external_directory" })
               if (requests[0]?.permission !== "external_directory") return
               expect(requests[0].patterns).toContain(glob(path.join(path.dirname(tmp.path), "*")))
@@ -545,7 +566,14 @@ describe("tool.bash permissions", () => {
               // request was the generic one; it does not say whether the path was never extracted, was
               // extracted and judged inside the project, or was asked for in a different order — three
               // different defects with three different fixes. The whole sequence travels in the message.
-              expect({ first: requests[0]?.permission, asked: requests.map((r) => r.permission).join(",") })
+              expect({
+                first: requests[0]?.permission,
+                asked: requests.map((r) => r.permission).join(",") || "(nothing was asked)",
+                // Which shell the TOOL resolved, and whether it classed it as PowerShell. `asked: "bash"`
+                // alone says the path was never recognised; it does not say whether the shell the test
+                // selected is the shell the tool used, and only one of those is a defect in the product.
+                shell: Shell.name(Shell.acceptable()),
+              })
                 .toMatchObject({ first: "external_directory" })
               if (requests[0]?.permission !== "external_directory") return
               expect(requests[0].patterns).toContain(glob(path.join(path.dirname(item.shell), "*")))
@@ -650,7 +678,14 @@ describe("tool.bash permissions", () => {
               // request was the generic one; it does not say whether the path was never extracted, was
               // extracted and judged inside the project, or was asked for in a different order — three
               // different defects with three different fixes. The whole sequence travels in the message.
-              expect({ first: requests[0]?.permission, asked: requests.map((r) => r.permission).join(",") })
+              expect({
+                first: requests[0]?.permission,
+                asked: requests.map((r) => r.permission).join(",") || "(nothing was asked)",
+                // Which shell the TOOL resolved, and whether it classed it as PowerShell. `asked: "bash"`
+                // alone says the path was never recognised; it does not say whether the shell the test
+                // selected is the shell the tool used, and only one of those is a defect in the product.
+                shell: Shell.name(Shell.acceptable()),
+              })
                 .toMatchObject({ first: "external_directory" })
               if (requests[0]?.permission !== "external_directory") return
               expect(requests[0].patterns).toContain(
@@ -687,7 +722,14 @@ describe("tool.bash permissions", () => {
               // request was the generic one; it does not say whether the path was never extracted, was
               // extracted and judged inside the project, or was asked for in a different order — three
               // different defects with three different fixes. The whole sequence travels in the message.
-              expect({ first: requests[0]?.permission, asked: requests.map((r) => r.permission).join(",") })
+              expect({
+                first: requests[0]?.permission,
+                asked: requests.map((r) => r.permission).join(",") || "(nothing was asked)",
+                // Which shell the TOOL resolved, and whether it classed it as PowerShell. `asked: "bash"`
+                // alone says the path was never recognised; it does not say whether the shell the test
+                // selected is the shell the tool used, and only one of those is a defect in the product.
+                shell: Shell.name(Shell.acceptable()),
+              })
                 .toMatchObject({ first: "external_directory" })
               if (requests[0]?.permission !== "external_directory") return
               expect(requests[0].patterns).toContain(

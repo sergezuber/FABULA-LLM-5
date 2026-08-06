@@ -180,12 +180,15 @@ function criterion8() {
     // The guard's OWN words, however it marks them. Filtering for one marker was a second definition of
     // what a failure line looks like, and the other platform's guard does not use it — so the report said
     // "the tree reports STALE:" and then nothing at all.
-    const said = fresh.out
+    // The lines that carry the VERDICT, plus the tail. The first version printed the last four non-empty
+    // lines and they were all "ok" — the guard says why somewhere in its output, and where that is differs
+    // per platform, so both are reported rather than guessing which.
+    const lines = fresh.out
       .split("\n")
       .map((l) => l.trimEnd())
       .filter((l) => l.length > 0)
-      .slice(-4)
-      .join("\n      ")
+    const marked = lines.filter((l) => /STALE|\[!!\]|❌|FAIL|missing|does not|not found/i.test(l))
+    const said = [...new Set([...marked.slice(0, 6), ...lines.slice(-3)])].join("\n      ")
     record(8, "the deploy guard is green AND can say STALE", "FAIL", `the tree reports STALE:\n      ${said}`)
     return
   }

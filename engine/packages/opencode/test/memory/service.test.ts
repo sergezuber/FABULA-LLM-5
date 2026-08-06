@@ -54,11 +54,14 @@ describe("Memory.search", () => {
 
         const globalOnly = yield* memory.search({ query: "matching", scope: "global" })
         expect(globalOnly.length).toBe(1)
-        expect(globalOnly[0].path).toContain("/global/")
+        // The claim is the SCOPE, and a path is written in the separator of the system it is on — asserting
+        // a literal "/global/" asserts the separator, so a correct answer read as wrong wherever the other
+        // one is used. The segment is what carries the meaning.
+        expect(globalOnly[0].path.split(/[\\/]/)).toContain("global")
 
         const sessionOnly = yield* memory.search({ query: "matching", scope: "sessions" })
         expect(sessionOnly.length).toBe(1)
-        expect(sessionOnly[0].path).toContain("/sessions/")
+        expect(sessionOnly[0].path.split(/[\\/]/)).toContain("sessions")
       }),
     ),
   )

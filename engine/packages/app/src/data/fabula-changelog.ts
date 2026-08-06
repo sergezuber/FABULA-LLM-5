@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.183.0"
+export const FABULA_VERSION = "0.184.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.184.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Удаление рабочего дерева больше не объявляет неудачу там, где система просто ещё не отпустила каталог. Где удаление отказывает, пока открыт последний описатель, освобождение приходит через секунды после того, как программа, читавшая этот каталог, закончила, — а прежний запас был в полсекунды. Пользователю сообщали, что удалить не удалось, хотя оно ещё не случилось.",
+        en: "Removing a worktree no longer declares failure where the system has simply not let the directory go yet. Where removal is refused until the last handle closes, the release arrives seconds after the program that was reading that directory finished — and the old allowance was half a second. The user was told the removal failed when it merely had not happened yet.",
+      },
+      {
+        ru: "Проверка отчёта о развёртывании печатает строки вердикта, а не последние четыре. Прежде она показывала «дерево устарело:» и следом четыре строки «ок» — причина оставалась за пределами окна.",
+        en: "The deploy-report check prints the verdict lines rather than the last four. It used to show \"the tree reports stale:\" followed by four lines all reading ok — the reason itself stayed outside the window.",
+      },
+    ],
+  },
   {
     version: "0.183.0",
     date: "2026-08-06",

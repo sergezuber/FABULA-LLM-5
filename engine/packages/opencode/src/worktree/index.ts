@@ -355,10 +355,28 @@ export const layer: Layer.Layer<
       )
     }
 
+    /** How long removal keeps retrying a directory the system still holds. Half a second is enough where
+     *  a closed process has already released its handles; where the release lags behind the process it
+     *  belonged to, it is not. */
+    const REMOVE_RETRY_MS = process.platform === "win32" ? 12_000 : 500
+
     function cleanDirectory(target: string) {
       return Effect.promise(() =>
         import("fs/promises")
-          .then((fsp) => fsp.rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
+          .then((fsp) =>
+            fsp.rm(target, {
+              recursive: true,
+              force: true,
+              // A system that refuses to remove a directory while ANY handle under it is open releases
+              // those handles whenever it gets to it — and `git` has just been reading this tree, so the
+              // wait is measured in seconds, not in the half-second five retries buy. MEASURED: removing a
+              // worktree failed with "resource busy or locked" immediately after git released it, so a
+              // user removing a worktree would have been told the removal failed when it merely had not
+              // happened yet. The window is per-platform because the semantics are.
+              maxRetries: Math.round(REMOVE_RETRY_MS / 100),
+              retryDelay: 100,
+            }),
+          )
           .catch((error) => {
             const message = errorMessage(error)
             throw new RemoveFailedError({ message: message || "Failed to remove git worktree directory" })

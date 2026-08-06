@@ -74,7 +74,9 @@ function criterion1() {
   const bin = path.join(ROOT, "bin", `fabula${exeSuffix(PLATFORM)}`)
   record(1, "the application starts on a clean machine", "MANUAL",
     existsSync(bin)
-      ? `open the desktop shell on a machine with no dev environment and confirm the window appears.\n      engine present at ${path.relative(ROOT, bin)}`
+      ? `open the desktop shell on a machine with no dev environment and confirm the window appears.\n      engine present at ${path.relative(ROOT, bin)}\n      ` +
+          "NOT manual everywhere: on Linux this is MEASURED in CI — a runner is a clean machine, and the job\n      " +
+          "starts the real shell under a real X server and asserts the window manager lists its window."
       : `no engine binary at ${path.relative(ROOT, bin)} — build it first (./setup.sh or .\\setup.ps1)`)
 }
 
@@ -295,7 +297,7 @@ function criterion10() {
 if (process.argv.includes("--list")) {
   console.log(`FABULA acceptance — ${PLATFORM}\n`)
   for (const [n, t] of [
-    [1, "the application starts on a clean machine (MANUAL)"],
+    [1, "the application starts on a clean machine (MANUAL here; MEASURED on Linux in CI, under a real X server)"],
     [2, "a real task through the live application (MANUAL — RULE #0)"],
     [3, "every plugin loads, zero ERROR lines"],
     [4, "the guards refuse through every door"],

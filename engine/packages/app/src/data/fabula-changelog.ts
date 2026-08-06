@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.199.0"
+export const FABULA_VERSION = "0.200.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.200.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "«Приложение запускается на чистой машине» на Linux ИЗМЕРЯЕТСЯ, а не отмечается человеком. Исполнитель непрерывной проверки и есть чистая машина: ничего из этого проекта на нём не установлено. Ряд собирает движок и оболочку, поднимает настоящий сервер окон, запускает настоящую оболочку и ждёт ПОЯВЛЕНИЯ ОКНА, а не отрезка времени, после чего требует, чтобы оконный распорядитель назвал его в своём перечне. Само окно и есть утверждение — оно и проверяется.",
+        en: "\"The application starts on a clean machine\" is MEASURED on Linux rather than ticked by a person. A continuous-integration runner IS a clean machine: nothing of this project is installed on it. The row builds the engine and the shell, brings up a real window server, starts the real shell and waits for the WINDOW rather than for a stretch of time, then requires the window manager to name it in its own listing. The window is the claim, so the window is what is asserted.",
+      },
+    ],
+  },
   {
     version: "0.199.0",
     date: "2026-08-06",

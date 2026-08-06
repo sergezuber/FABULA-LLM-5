@@ -173,6 +173,43 @@ jobs:
         # never been built for their own platform, and the first attempt found a frontend path that only
         # resolved because the crate directory happened to be named `shell`.
         run: cargo build --release
+      # Criterion 1 of the acceptance — "the application starts on a clean machine" — measured rather
+      # than left to a human. A runner IS a clean machine: nothing of this project is installed on it.
+      # The window is the claim, so the window is what is asserted: a real X server, the real shell
+      # binary, and the window manager's own listing naming it. `--init` is not needed here (no docker),
+      # but the engine must be built for THIS machine first, since the shell starts it.
+      - name: The application starts on a clean machine, and its window exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y xvfb x11-utils
+          (cd engine/packages/opencode && bun run script/build.ts --only=linux-x64)
+          mkdir -p bin
+          cp engine/packages/opencode/dist/mimocode-linux-x64/bin/mimo bin/fabula
+          chmod +x bin/fabula
+          Xvfb :99 -screen 0 1280x860x24 >/dev/null 2>&1 &
+          export DISPLAY=:99
+          sleep 3
+          ./shell/target/release/fabula-shell >/tmp/shell.log 2>&1 &
+          shell_pid=$!
+          # Wait for the CONDITION — the window — not for a duration.
+          for i in $(seq 1 60); do
+            if xwininfo -root -tree 2>/dev/null | grep -qi "fabula"; then break; fi
+            sleep 2
+          done
+          echo "── windows the server knows about ──"
+          xwininfo -root -tree 2>/dev/null | grep -i "fabula" || true
+          echo "── the engine answers ──"
+          curl -s -o /dev/null -w "GET /global/health -> %{http_code}\n" http://127.0.0.1:4096/global/health || true
+          echo "── shell log ──"
+          tail -20 /tmp/shell.log || true
+          xwininfo -root -tree 2>/dev/null | grep -qi "fabula" || {
+            echo "::error::the application produced no window on a clean machine"
+            kill $shell_pid 2>/dev/null || true
+            exit 1
+          }
+          kill $shell_pid 2>/dev/null || true
+
       - name: Bundle a .deb, and it must carry the version the source declares
         working-directory: shell
         run: |

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.195.0"
+export const FABULA_VERSION = "0.196.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.196.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Когда набор не назвал ни одного числа, о себе сообщает САМ ПРОГОН — код выхода и последние строки. «Ноль пройденных» одинаково выглядит у трёх разных находок: набор уменьшился, набор не запустился, прогон оборвали на полпути. Срок прогона поднят до двадцати пяти минут — тот же набор идёт около двенадцати на спокойном исполнителе, а этот критерий работает рядом со всей остальной матрицей.",
+        en: "When the suite reported no numbers at all, the RUN itself now speaks — its exit code and last lines. \"Zero passed\" looks identical for three different findings: the suite shrank, the suite never started, the run was cut off part-way. Its budget is raised to twenty-five minutes; the same suite takes about twelve on a quiet runner, and this criterion runs beside the whole rest of the matrix.",
+      },
+    ],
+  },
   {
     version: "0.195.0",
     date: "2026-08-06",

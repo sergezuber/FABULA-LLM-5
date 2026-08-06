@@ -239,10 +239,21 @@ function criterion9() {
 const BASELINE = { plugin: 2644, proxy: 40 }
 
 function criterion10() {
-  const t = run(["bun", "test"], { cwd: path.join(ROOT, "plugin"), timeout: 900_000 })
+  // 25 minutes: the same suite takes ~12 on a quiet Windows runner and this criterion runs beside the
+  // rest of the matrix. A suite that was CUT OFF reports zero tests, which this criterion then reads as
+  // "smaller than the baseline" — a true sentence about the wrong thing.
+  const t = run(["bun", "test"], { cwd: path.join(ROOT, "plugin"), timeout: 1_500_000 })
   const pass = Number(/([0-9]+) pass/.exec(t.out)?.[1] ?? 0)
   const fail = Number(/([0-9]+) fail/.exec(t.out)?.[1] ?? -1)
   const ok = fail === 0 && pass >= BASELINE.plugin
+  // When no count could be read, the numbers say nothing and the RUN has to. Its exit code and last lines
+  // separate "the suite shrank" from "the suite never started" and from "it was cut off part-way" —
+  // three different findings that a bare `0 pass` presents identically.
+  const silent =
+    pass === 0
+      ? `\n      the run itself: exit ${t.code}\n      ` +
+        (t.out.trim().split("\n").slice(-6).join("\n      ") || "(it produced no output at all)")
+      : ""
   // The named failures, so a reader can tell a port defect from a machine under load. Several tests here
   // spawn REAL subprocesses against their own timeouts — an MCP handshake, a git probe, a Go analyser —
   // and on a saturated machine those exceed their budgets. That is a property of running 164 test files
@@ -251,7 +262,7 @@ function criterion10() {
   record(10, "the suites are green and no smaller than the baseline", ok ? "PASS" : "FAIL",
     `plugin: ${pass} pass / ${fail} fail (baseline ${BASELINE.plugin}).` +
     (pass < BASELINE.plugin ? " A SMALLER suite is a finding: tests that vanish read exactly like tests that passed." : "") +
-    (named.length ? `\n      ${named.slice(0, 4).join("\n      ")}` : ""))
+    (named.length ? `\n      ${named.slice(0, 4).join("\n      ")}` : "") + silent)
 }
 
 // ── report ────────────────────────────────────────────────────────────────────────────────────────

@@ -90,17 +90,28 @@ const cache = new Map<string, { facts: ProjectFacts; ts: number }>()
 // otherwise never reads. Capped (~3KB) + TTL-cached + try/catch → can never bloat context or break a turn.
 const MEMORY_CAP = 3000
 const MEMORY_TTL = 30_000
-const MEMORY_FILE = process.env.FABULA_MEMORY_FILE || (() => {
+// READ AT CALL TIME, not captured at import. A snapshot here means `FABULA_MEMORY_FILE` is honoured or
+// ignored depending on whether this module happened to be imported before the variable was set — which is
+// not a rule anyone can rely on, and it is how a test suite came to read the developer's own curated
+// memory: the override existed and could not take effect.
+function memoryFile(): string {
+  const named = process.env.FABULA_MEMORY_FILE
+  if (named) return named
   let dir: string
   try { dir = path.dirname(realpathSync(fileURLToPath(import.meta.url))) } catch { dir = path.dirname(fileURLToPath(import.meta.url)) }
   return path.join(dir, "..", ".fabula", "memory", "MEMORY.md")
-})()
-let memCache: { block: string; ts: number } | null = null
+}
+// KEYED BY THE FILE IT READ. It was one slot for a value whose INPUT can change, so whichever caller ran
+// first decided what every caller saw for the next thirty seconds — including callers pointed at a
+// different file entirely. A cache that ignores its own input is not a cache of that input.
+const memCache = new Map<string, { block: string; ts: number }>()
 async function memoryBlock(nowMs: number): Promise<string> {
-  if (memCache && nowMs - memCache.ts < MEMORY_TTL) return memCache.block
+  const file = memoryFile()
+  const hit = memCache.get(file)
+  if (hit && nowMs - hit.ts < MEMORY_TTL) return hit.block
   let block = ""
   try {
-    const text = (await fs.readFile(MEMORY_FILE, "utf8")).trim()
+    const text = (await fs.readFile(file, "utf8")).trim()
     if (text) {
       // Pin-aware, because the naive slice was POSITIONAL: whether a hard constraint reached the model
       // depended on where in the file someone happened to type it. A rule at the bottom of MEMORY.md was
@@ -109,7 +120,7 @@ async function memoryBlock(nowMs: number): Promise<string> {
       block = "<operating-memory>\n" + capped + "\n</operating-memory>"
     }
   } catch { block = "" }
-  memCache = { block, ts: nowMs }
+  memCache.set(file, { block, ts: nowMs })
   return block
 }
 

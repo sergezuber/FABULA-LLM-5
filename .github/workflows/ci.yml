@@ -274,7 +274,16 @@ jobs:
         # Criteria 1 and 2 stay MANUAL and are named as still-open rather than counted.
         run: |
           set -o pipefail
+          # `set +e` around the capture, and it is load-bearing. The runner starts this shell with `-e`, under
+          # which an assignment from a command substitution that exits non-zero KILLS THE SHELL AT THAT LINE —
+          # before the echo, before every named criterion, before all three error annotations. MEASURED: a
+          # three-minute run that printed NOTHING and failed with an exit code and no report. The previous
+          # version of this step went GREEN over a failing acceptance; this one went RED over an invisible one.
+          # Both are the gate reporting on ITSELF rather than on the product, and the second is worse, because
+          # it cannot say what failed.
+          set +e
           out=$(bun scripts/acceptance.ts 2>&1); rc=$?
+          set -e
           echo "$out"
           grep -q "criteria:" <<<"$out" || { echo "::error::the acceptance produced no report"; exit 1; }
           for n in 4 5 8; do

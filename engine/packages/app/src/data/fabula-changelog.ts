@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.177.0"
+export const FABULA_VERSION = "0.178.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.178.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Путь к файлу с записанными правилами читается в момент обращения, а не запоминается при загрузке. Снимок означал, что указание, где этот файл лежит, соблюдается или игнорируется в зависимости от того, успел ли модуль загрузиться раньше — правилом такое не назовёшь. И хранилище прочитанного теперь привязано к файлу, который прочитало: одна ячейка на значение, вход которого меняется, отдавала всем следующим то, что положил первый.",
+        en: "The path to the file of written-down rules is read when it is asked for, not remembered at load. A snapshot meant the setting that says where that file lives was honoured or ignored depending on whether the module happened to load first, which is not a rule anyone can rely on. And what was read is now keyed by the file it was read from: one slot for a value whose input can change handed everyone after the first whatever the first had put there.",
+      },
+      {
+        ru: "Проверки, зависящие от общей системной службы — синтеза речи и распознавания, — называют свою предпосылку. Выбор движка решается до первого произведённого звука; сам звук требует службы, которую делят все, и на занятой машине она отвечает в тридцать раз дольше. Не дождались — так и сказано, с причиной; ответила и отказала — по-прежнему провал.",
+        en: "Checks that depend on a shared system service — speech synthesis and recognition — name their precondition. Which engine is chosen is decided before a single sample is produced; producing them needs a service everyone shares, and on a busy machine it answers thirty times slower. Not finishing is said outright with the reason; answering and refusing is still a failure.",
+      },
+    ],
+  },
   {
     version: "0.177.0",
     date: "2026-08-06",

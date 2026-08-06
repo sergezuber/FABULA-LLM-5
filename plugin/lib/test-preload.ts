@@ -22,6 +22,25 @@ import { join } from "node:path"
 const dir = mkdtempSync(join(tmpdir(), "fabula-test-cfg-"))
 process.env.XDG_CONFIG_HOME = dir
 
+// The curated operating-memory block is read from a file in the WORKING TREE, and that file exists on a
+// developer's machine and not on a fresh checkout. A suite that reads it measures what somebody happened
+// to write there: three checks asserting what the injected block does NOT contain failed here and passed
+// in CI, for no reason anybody could see from the assertion. Pointed at a path inside this throwaway
+// directory, which does not exist — so the product's own "no memory, no block" path is what runs, and a
+// test that WANTS a memory block sets the variable itself.
+process.env.FABULA_MEMORY_FILE = require("node:path").join(dir, "no-curated-memory", "MEMORY.md")
+
+// The OWNER's operating settings must not decide what the suite measures. `FABULA_PROFILE` is read from
+// the repository's `.env` by whatever bun process starts, and it is INHERITED by a spawned suite even when
+// that suite's own directory has no `.env` at all — so the same tests passed when run from a shell and
+// failed when run by the acceptance, which is the difference between two invocations and not between two
+// states of the code. Measured: with the coding profile the per-turn block gains a tool-belt note listing
+// `verify_done` as an available TOOL, and two checks asserting that a directory with no manifest gets no
+// verify COMMAND matched that note by substring.
+//
+// A test that WANTS a profile sets it itself.
+for (const k of ["FABULA_PROFILE", "FABULA_TOOL_MASK"]) delete process.env[k]
+
 // Also isolate the on-disk DATA stores so wiring tests that fire a checkpoint/handoff/ops write (via a
 // real plugin before/after hook) never litter the developer's LIVE ~/.local/share/fabula (the engine
 // data dir — home to the real shadow-git undo history). Each store honors its own override env; point

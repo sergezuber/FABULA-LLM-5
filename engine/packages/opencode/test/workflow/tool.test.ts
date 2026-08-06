@@ -340,7 +340,19 @@ describe("WorkflowTool run", () => {
   it.live("run rejects when BOTH name and script are given", () =>
     provideTmpdirServer(
       Effect.fnUntraced(function* ({ llm }) {
-        const def = yield* Tool.init(yield* WorkflowTool)
+        // The EARLIEST thing after the fixture, bounded and named. The outer budget has now expired at
+        // twenty, sixty and a hundred and eighty seconds with every inner bound silent, and this check
+        // finishes in about a second on its own — so whatever does not return sits before them. If this
+        // one reports, the fixture is fine and the hang is here; if nothing reports, the fixture itself is
+        // where to look. Either answer is worth more than another number.
+        const def = yield* Tool.init(yield* WorkflowTool).pipe(
+          Effect.timeout("30 seconds"),
+          Effect.catch(() =>
+            Effect.sync<never>(() => {
+              throw new Error("initialising the workflow tool did not return within 30s")
+            }),
+          ),
+        )
         const session = yield* Session.Service
         const parent = yield* session.create({
           title: "wf both",
@@ -500,8 +512,11 @@ describe("WorkflowTool run", () => {
       }),
       { git: true, config: providerCfg },
     ),
-    // LARGER THAN THE SUM OF THE BOUNDS INSIDE IT (20s to create the session + 30s to launch + 45s to
-    // finish). An outer budget below that sum wins every race and reports only the clock — which is what
+    // LARGER THAN THE SUM OF EVERY BOUND INSIDE IT — and that sum grew as bounds were added, past this
+    // number, which is the rule broken twice in a row now: 90s (fixture) + 30s (tool init) + 20s (session)
+    // + 30s (launch) + 45s (finish) = 215s of allowances under a 180s ceiling. Five separately named steps
+    // stayed silent while the check expired, and the reason was arithmetic, not a hang: the time is
+    // SPREAD, no single step exceeds its own generous allowance, and the outer number was below their sum. An outer budget below that sum wins every race and reports only the clock — which is what
     // happened twice: the inner bounds exist so a hang names its step, and the outer one kept firing first
     // and saying nothing. A backstop has to sit BEHIND the things it is backing.
     //
@@ -509,7 +524,7 @@ describe("WorkflowTool run", () => {
     // isolation this check finishes in about a second; inside a run of 366 files competing for the machine
     // it has exceeded two minutes. That is the price of what it starts, not a fault it found, and the
     // inner bounds are what keep a real hang from hiding behind this number.
-    180000,
+    300000,
   )
 })
 

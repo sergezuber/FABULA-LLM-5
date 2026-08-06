@@ -209,7 +209,20 @@ export function provideTmpdirInstance<A, E, R>(
   options?: { git?: boolean; config?: Partial<Config.Info>; outsideGit?: boolean },
 ) {
   return Effect.gen(function* () {
-    const path = yield* tmpdirScoped(options)
+    // BOUNDED AND NAMED. Creating this directory spawns git half a dozen times and, for the server
+    // fixture, brings a real HTTP server up — and when a check that uses it expires, the report is the
+    // outer budget's number and nothing else. Four separately bounded steps INSIDE one such check all
+    // stayed silent while the check itself timed out at twenty, sixty and a hundred and eighty seconds,
+    // which is what points here. Ninety seconds is far above any honest cost of this setup, so tripping
+    // it says something happened rather than something was slow.
+    const path = yield* tmpdirScoped(options).pipe(
+      Effect.timeout("90 seconds"),
+      Effect.catch(() =>
+        Effect.sync<never>(() => {
+          throw new Error("the test fixture's temporary directory did not finish being created within 90s")
+        }),
+      ),
+    )
     let provided = false
 
     yield* Effect.addFinalizer(() =>

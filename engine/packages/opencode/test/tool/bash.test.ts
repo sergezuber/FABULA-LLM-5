@@ -87,8 +87,11 @@ const forms = (dir: string) => {
   if (process.platform !== "win32") return [dir]
   const full = Filesystem.normalizePath(dir)
   const slash = full.replaceAll("\\", "/")
-  const root = slash.replace(/^[A-Za-z]:/, "")
-  return Array.from(new Set([full, slash, root, root.toLowerCase()]))
+  // The drive letter is KEPT in every variant. Stripped, `D:\a\...` becomes `/a/...`, whose first
+  // segment is a single letter — and a leading `/<letter>/` is the Git Bash spelling of a DRIVE, which
+  // the product resolves to `A:\...` exactly as that convention says. The variants are meant to be the
+  // same path written differently; that one is a different path, and the ambiguity is manufactured here.
+  return Array.from(new Set([full, slash, slash.toLowerCase()]))
 }
 
 // Non-login zsh still reads ~/.zshenv from the developer machine, which can emit
@@ -492,6 +495,47 @@ describe("tool.bash permissions", () => {
                 .toMatchObject({ first: "external_directory" })
               if (requests[0]?.permission !== "external_directory") return
               expect(requests[0].patterns).toContain(glob(path.join(os.homedir(), ".ssh", "*")))
+            },
+          })
+        }),
+      )
+    }
+
+    // WHICH LINK IS BROKEN. The whole PowerShell permission group asks for a path OUTSIDE the project and
+    // gets only the generic request — measured on a real runner, with the shell correctly resolved. That
+    // can be either of two things and they have different fixes: the variable was not expanded, or the
+    // path was never extracted. This case removes the variable entirely and uses a plain absolute path, so
+    // a run tells the two apart instead of leaving them to be guessed at.
+    //
+    // (This group had never executed anywhere before the suite was widened: these cases only run where
+    // PowerShell exists, and nothing ran them there.)
+    for (const item of ps) {
+      test(
+        `asks for external_directory permission for a plain absolute PowerShell path [${item.label}]`,
+        withShell(item, async () => {
+          await using outer = await tmpdir()
+          await using tmp = await tmpdir()
+          await Instance.provide({
+            directory: tmp.path,
+            fn: async () => {
+              const bash = await initBash()
+              const err = new Error("stop after permission")
+              const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+              const target = path.join(outer.path, "outside.txt")
+              await expect(
+                Effect.runPromise(
+                  bash.execute(
+                    { command: `Get-Content "${target}"`, description: "Read an absolute path" },
+                    capture(requests, err),
+                  ),
+                ),
+              ).rejects.toThrow(err.message)
+              expect({
+                first: requests[0]?.permission,
+                asked: requests.map((r) => r.permission).join(",") || "(nothing was asked)",
+                shell: Shell.name(Shell.acceptable()),
+                target,
+              }).toMatchObject({ first: "external_directory" })
             },
           })
         }),

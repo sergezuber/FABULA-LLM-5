@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.185.0"
+export const FABULA_VERSION = "0.186.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.186.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Набор проверок движка полностью зелёный и на этой машине тоже. Последняя неустойчивая истекала по сроку, при том что каждый её отдельный шаг молчал: причина оказалась арифметической, а не зависанием — сумма допусков, отведённых внутренним шагам, превышала внешний срок, который должен был стоять ЗА ними. Время не сосредоточено, оно размазано, и ни один шаг своего допуска не превышает.",
+        en: "The engine suite is fully green on this machine too. The last unsteady check expired while every one of its individual steps stayed silent, and the cause turned out to be arithmetic rather than a hang: the allowances given to the inner steps summed to more than the outer budget that was supposed to sit BEHIND them. The time is not concentrated, it is spread, and no single step exceeds its own allowance.",
+      },
+      {
+        ru: "Проверки написаний пути перестали подделывать двусмысленность. Снимая букву диска, они превращали путь в такой, чей первый отрезок — одна буква, а это ровно то, как Git Bash пишет ДИСК. Программа читала его как другой диск — по этому соглашению верно, — и проверка сообщала о дефекте там, где двусмысленность создала сама фикстура.",
+        en: "The path-variant checks stopped manufacturing an ambiguity. Stripping the drive letter turned a path into one whose first segment is a single letter, and a leading slash-letter-slash is exactly how Git Bash spells a DRIVE. The program read it as a different drive — correctly, by that convention — and the check reported a defect where the fixture had invented the ambiguity itself.",
+      },
+    ],
+  },
   {
     version: "0.185.0",
     date: "2026-08-06",

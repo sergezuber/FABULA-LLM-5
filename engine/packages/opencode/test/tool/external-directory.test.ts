@@ -164,10 +164,12 @@ describe("tool.assertExternalDirectory", () => {
       await using tmp = await tmpdir({ git: true })
 
       const target = path.join(outerTmp.path, "outside.txt")
-      const alt = target
-        .replace(/^[A-Za-z]:/, "")
-        .replaceAll("\\", "/")
-        .toLowerCase()
+// A drive-relative form of the SAME path — lowercased and with the other separator, which is what
+      // "path variants" means here. The drive letter is KEPT: stripping it turns `D:\a\...` into
+      // `/a/...`, whose first segment is a single letter — and a leading `/<letter>/` is the Git Bash
+      // spelling of a DRIVE. The product read it as drive A, correctly by that convention, and the
+      // check reported a defect where the fixture had manufactured an ambiguity.
+      const alt = target.replaceAll("\\", "/").toLowerCase()
 
       await Instance.provide({
         directory: tmp.path,

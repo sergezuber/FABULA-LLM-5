@@ -250,16 +250,34 @@ function criterion10() {
   // rest of the matrix. A suite that was CUT OFF reports zero tests, which this criterion then reads as
   // "smaller than the baseline" — a true sentence about the wrong thing.
   const t = run(["bun", "test"], { cwd: path.join(ROOT, "plugin"), timeout: 1_500_000 })
-  const pass = Number(/([0-9]+) pass/.exec(t.out)?.[1] ?? 0)
-  const fail = Number(/([0-9]+) fail/.exec(t.out)?.[1] ?? -1)
+  // The LAST count, not the first. The summary is printed at the END, and the first match may come from
+  // anywhere above it — a file name, a test name, a line of a failure's own output. Whitespace between
+  // the number and the word is allowed to be anything, so a carriage return or a padded column cannot
+  // turn a real count into no count at all.
+  const last = (word: string) => {
+    const all = [...t.out.matchAll(new RegExp(`([0-9]+)\\s+${word}\\b`, "g"))]
+    return all.length ? Number(all[all.length - 1]![1]) : undefined
+  }
+  const pass = last("pass") ?? 0
+  const fail = last("fail") ?? -1
   const ok = fail === 0 && pass >= BASELINE.plugin
   // When no count could be read, the numbers say nothing and the RUN has to. Its exit code and last lines
   // separate "the suite shrank" from "the suite never started" and from "it was cut off part-way" —
   // three different findings that a bare `0 pass` presents identically.
+  // When no count could be read, the lines are shown ESCAPED. Colour was the first suspect and stripping
+  // it changed nothing, while the printed tail looked perfectly ordinary — which is exactly what an
+  // invisible character does. Whatever sits between the digits and the word will be visible here.
   const silent =
     pass === 0
       ? `\n      the run itself: exit ${t.code}\n      ` +
-        (t.out.trim().split("\n").slice(-6).join("\n      ") || "(it produced no output at all)")
+        (t.out.trim().split("\n").slice(-6).join("\n      ") || "(it produced no output at all)") +
+        `\n      lines carrying a count, exactly as they arrived:\n      ` +
+        (t.out
+          .split("\n")
+          .filter((l) => /pass|fail/.test(l) && /[0-9]/.test(l))
+          .slice(-4)
+          .map((l) => JSON.stringify(l))
+          .join("\n      ") || "(no line carries a count at all)")
       : ""
   // The named failures, so a reader can tell a port defect from a machine under load. Several tests here
   // spawn REAL subprocesses against their own timeouts — an MCP handshake, a git probe, a Go analyser —

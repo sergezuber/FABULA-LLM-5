@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.198.0"
+export const FABULA_VERSION = "0.199.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.199.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Число берётся ПОСЛЕДНЕЕ, а не первое, и промежуток между числом и словом может быть любым. Сводка печатается в конце, а первое совпадение приходит откуда угодно выше — из имени файла, имени проверки, вывода самой ошибки; возврат каретки или выравнивание столбца превращали настоящее число в его отсутствие. А когда число всё-таки прочесть не удалось, строки печатаются со всеми знаками: цвет был первым подозреваемым, его снятие ничего не изменило, а хвост при этом выглядел совершенно обычно — ровно так и выглядит невидимый знак.",
+        en: "The LAST count is taken, not the first, and whatever sits between the number and the word may be anything. The summary is printed at the end while the first match can come from anywhere above it — a file name, a test name, a failure's own output; a carriage return or a padded column turned a real count into no count. And when a count still cannot be read, the lines are printed escaped: colour was the first suspect, stripping it changed nothing, and the tail looked perfectly ordinary — which is exactly how an invisible character looks.",
+      },
+    ],
+  },
   {
     version: "0.198.0",
     date: "2026-08-06",

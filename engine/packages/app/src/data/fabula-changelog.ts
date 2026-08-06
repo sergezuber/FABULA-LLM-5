@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.189.0"
+export const FABULA_VERSION = "0.190.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.190.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Проверки разрешений оболочки спрашивают ещё и о том, считается ли целевой каталог внешним ВООБЩЕ. Вся эта группа сообщает, что разрешение не запрошено, — но у этого две причины с разными исправлениями: путь не извлекли, либо он и не снаружи, потому что временные каталоги проверки — соседи под корнем, лежащим внутри рабочей копии. Одно поле разделяет их, вместо того чтобы гадать дальше.",
+        en: "The shell-permission checks also ask whether the target counts as outside the project AT ALL. The whole group reports that no permission was requested, and that has two causes with different fixes: the path was not extracted, or it is not outside — the check's temporary directories are siblings under a root that itself sits inside a working copy. One field tells them apart instead of leaving it to be guessed.",
+      },
+    ],
+  },
   {
     version: "0.189.0",
     date: "2026-08-06",

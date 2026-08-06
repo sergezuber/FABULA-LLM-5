@@ -535,7 +535,13 @@ describe("tool.bash permissions", () => {
                 asked: requests.map((r) => r.permission).join(",") || "(nothing was asked)",
                 shell: Shell.name(Shell.acceptable()),
                 target,
-              }).toMatchObject({ first: "external_directory" })
+                // Is the target OUTSIDE the project at all? If it is not, no permission was ever due and
+                // the fixture is the thing at fault: these directories are siblings under a root that
+                // itself sits inside a checkout, so "outside the project" depends on where the project's
+                // worktree is taken to be. One field settles which of the two is being measured.
+                outsideProject: !Instance.containsPath(target),
+                worktree: Instance.worktree,
+              }).toMatchObject({ first: "external_directory", outsideProject: true })
             },
           })
         }),

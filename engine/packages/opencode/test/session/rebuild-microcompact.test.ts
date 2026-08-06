@@ -190,10 +190,7 @@ describe("rebuild microcompact", () => {
         const info = yield* ssn.create({})
 
         yield* Effect.promise(async () => {
-          await fs.mkdir(
-            checkpointPath(info.id).replace(/\/[^/]+$/, ""),
-            { recursive: true },
-          )
+          await fs.mkdir(path.dirname(checkpointPath(info.id)), { recursive: true })
           await Bun.write(checkpointPath(info.id), "## §1 Active intent\n\nno-op test\n")
         })
 
@@ -236,7 +233,7 @@ describe("rebuild microcompact", () => {
         const info = yield* ssn.create({})
 
         yield* Effect.promise(async () => {
-          await fs.mkdir(checkpointPath(info.id).replace(/\/[^/]+$/, ""), { recursive: true })
+          await fs.mkdir(path.dirname(checkpointPath(info.id)), { recursive: true })
           await Bun.write(checkpointPath(info.id), "## §1 Active intent\n\nC1 lookup test\n")
         })
 
@@ -284,7 +281,7 @@ describe("rebuild microcompact", () => {
         const info = yield* ssn.create({})
 
         yield* Effect.promise(async () => {
-          await fs.mkdir(checkpointPath(info.id).replace(/\/[^/]+$/, ""), { recursive: true })
+          await fs.mkdir(path.dirname(checkpointPath(info.id)), { recursive: true })
           await Bun.write(checkpointPath(info.id), "## §1 Active intent\n\nC1 fail-closed test\n")
         })
 

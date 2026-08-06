@@ -319,6 +319,8 @@ describe("tool.bash permissions", () => {
         "asks for nested bash command permissions [bash]",
         withShell({ label: "bash", shell: bash }, async () => {
           await using outerTmp = await tmpdir({
+            // OUTSIDE any checkout — see the note on the other fixtures here.
+            outsideGit: true,
             init: async (dir) => {
               await Bun.write(path.join(dir, "outside.txt"), "x")
             },
@@ -494,7 +496,12 @@ describe("tool.bash permissions", () => {
               })
                 .toMatchObject({ first: "external_directory" })
               if (requests[0]?.permission !== "external_directory") return
-              expect(requests[0].patterns).toContain(glob(path.join(os.homedir(), ".ssh", "*")))
+              // BOTH sides through the same normaliser. The product canonicalises the directory it asks
+              // about; an expectation built straight from the home directory does not, so where a
+              // filesystem has a short and a long spelling for one directory the two describe the same
+              // place in different words and a correct request reads as the wrong one.
+              const want = Filesystem.normalizePathPattern(glob(path.join(os.homedir(), ".ssh", "*")))
+              expect(requests[0].patterns.map((p) => Filesystem.normalizePathPattern(p))).toContain(want)
             },
           })
         }),
@@ -1013,6 +1020,8 @@ describe("tool.bash permissions", () => {
 
   each("asks for external_directory permission when file arg is outside project", async () => {
     await using outerTmp = await tmpdir({
+            // OUTSIDE any checkout — see the note on the other fixtures here.
+            outsideGit: true,
       init: async (dir) => {
         await Bun.write(path.join(dir, "outside.txt"), "x")
       },

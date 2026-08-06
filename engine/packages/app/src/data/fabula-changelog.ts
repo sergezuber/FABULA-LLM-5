@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.191.0"
+export const FABULA_VERSION = "0.192.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,24 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.192.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Проверка псевдотерминала ждёт УСЛОВИЯ, а не отрезка времени. Терминал сперва отправляет собственные управляющие последовательности, и сколько это займёт — дело системы: замерено, что ста миллисекунд хватало ровно на них, и эхо, которое ещё не пришло, объявлялось не пришедшим никогда.",
+        en: "The pseudo-terminal check waits for a CONDITION rather than a stretch of time. A terminal sends its own control sequences first, and how long that takes is the system's business: measured, a hundred milliseconds bought exactly those, and an echo that had not arrived yet was declared never to arrive.",
+      },
+      {
+        ru: "Остальные каталоги «снаружи проекта» тоже вынесены за рабочую копию — те, что объявлялись с параметрами, прежняя правка не задела.",
+        en: "The remaining \"outside the project\" directories are placed outside the working copy too — the ones declared with options were missed by the earlier pass.",
+      },
+      {
+        ru: "Ожидание пути к домашнему каталогу сравнивается с ответом программы через ОДНО приведение с обеих сторон.",
+        en: "The expectation about the home directory is compared against the program's answer through ONE normalisation on both sides.",
+      },
+    ],
+  },
   {
     version: "0.191.0",
     date: "2026-08-06",

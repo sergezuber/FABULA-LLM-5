@@ -133,7 +133,15 @@ describe("pty", () => {
               ctx.connId = 2
 
               yield* pty.write(a.id, "AAA\n")
-              yield* Effect.promise(() => sleep(100))
+              // Wait for the CONDITION, not for a duration. A pseudo-terminal sends its own mode-setting
+              // sequences before anything the program wrote, and how long that takes is the platform's
+              // business — measured on a runner, a hundred milliseconds bought the escape prelude and
+              // nothing else, so the check reported an echo that had not arrived yet as one that never
+              // would. Polling makes it deterministic without accepting less: the assertion is unchanged,
+              // and a run where the echo truly never arrives still fails on it.
+              yield* Effect.promise(async () => {
+                for (let i = 0; i < 100 && !out.join("").includes("AAA"); i++) await sleep(50)
+              })
 
               expect(out.join("")).toContain("AAA")
             } finally {

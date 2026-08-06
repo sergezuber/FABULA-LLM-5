@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.196.0"
+export const FABULA_VERSION = "0.197.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.197.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Проверка возобновления называет ШАГ, а не только часы. Она делает два полных прогона и возобновление там, где соседи по файлу делают один, — и при истечении срока сообщала лишь, что время вышло, а это не отличает застрявший первый прогон от застрявшего возобновления и подталкивает поднять число вместо того, чтобы узнать, какой именно. Внешний срок теперь стоит ЗА суммой собственных границ, а не перед ней.",
+        en: "The resume check names the STEP, not just the clock. It performs two full runs and a resume where its neighbours perform one, and on expiry it reported only that time had run out — which cannot tell a stalled first run from a stalled resume, and invites raising the number instead of learning which. Its outer budget now sits BEHIND the sum of its own bounds rather than in front of them.",
+      },
+    ],
+  },
   {
     version: "0.196.0",
     date: "2026-08-06",

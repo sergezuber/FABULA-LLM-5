@@ -233,7 +233,20 @@ describe("WorkflowRuntime workflow() journal (two-level resume)", () => {
           "return await workflow(" + JSON.stringify(child) + ")",
         ].join("\n")
         const { runID } = yield* runtime.start({ script: orchestrator, sessionID: parent.id, parentActorID: "main", model: ref })
-        const out1 = yield* runtime.wait({ runID })
+        // Each step bounded and NAMED. This check does TWO full runs and a resume where its neighbours in
+        // this file do one, and when its budget expired all it could report was the clock — which cannot
+        // tell a first run that stalled from a resume that did, and invites raising the number instead of
+        // learning which. Every bound here is far above what the step costs when it works.
+        const step = <A,>(name: string, eff: Effect.Effect<A, never, never>) =>
+          eff.pipe(
+            Effect.timeout("40 seconds"),
+            Effect.catch(() =>
+              Effect.sync<A>(() => {
+                throw new Error(`"${name}" did not return within 40s`)
+              }),
+            ),
+          )
+        const out1 = yield* step("the first run", runtime.wait({ runID }))
         expect(out1.status).toBe("completed")
         expect((out1 as { result: unknown }).result).toBe("child-done")
         const callsAfterFirst = yield* llm.calls
@@ -241,9 +254,9 @@ describe("WorkflowRuntime workflow() journal (two-level resume)", () => {
         // the child sub-run is NOT relaunched — its body never re-runs. The orchestrator
         // completes with the cached value, the marker file stays at one "x", and no new
         // LLM request is made (the child never spawns its agent again).
-        const r = yield* runtime.resume({ runID })
+        const r = yield* step("resuming the orchestrator", runtime.resume({ runID }))
         expect(r.resumed).toBe(true)
-        const out2 = yield* runtime.wait({ runID })
+        const out2 = yield* step("the resumed run", runtime.wait({ runID }))
         expect(out2.status).toBe("completed")
         expect((out2 as { result: unknown }).result).toBe("child-done")
         // The discriminating assertions: child body ran exactly once (parent journal
@@ -256,7 +269,8 @@ describe("WorkflowRuntime workflow() journal (two-level resume)", () => {
       }),
       { git: true, config: providerCfg },
     ),
-    25000,
+    // Behind its own parts, not in front of them: three named 40s bounds plus the work around them.
+    150000,
   )
 })
 

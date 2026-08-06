@@ -444,8 +444,17 @@ describe("WorkflowTool run", () => {
   )
 
   it.live("run op accepts an explicit workspace and the script's file ops are jailed to it", () =>
+      // HOW FAR IT GOT, and how long each part took. Every step below is separately bounded and named, and
+      // the outer budget sits behind their sum — so when this check expires anyway, no single step was at
+      // fault and the time was SPREAD. That leaves one question a bare "timed out after N" cannot answer:
+      // which part consumed it. The fixture in particular starts a REAL server before the body begins and
+      // lies outside every bound there is, so its cost is invisible unless the body says when it finally
+      // started. These lines cost nothing when the check passes and turn the next expiry into a fact.
     provideTmpdirServer(
       Effect.fnUntraced(function* ({ dir }) {
+        const t0 = Date.now()
+        const mark = (what: string) => console.log(`  [wf ws] ${what} at +${Date.now() - t0}ms`)
+        mark("the body started, so the fixture is done")
         const def = yield* Tool.init(yield* WorkflowTool)
         const session = yield* Session.Service
         const parent = yield* session
@@ -489,6 +498,7 @@ describe("WorkflowTool run", () => {
           ),
         )
         expect(res.metadata.runID).toBeDefined()
+        mark("the run was launched")
         // Wait for completion + assert the file landed under the chosen workspace (sub), not the worktree root.
         const runtime = yield* WorkflowRuntime.Service
         // Bounded, and it NAMES what it was waiting on. An unbounded wait that expires reports only the
@@ -505,6 +515,7 @@ describe("WorkflowTool run", () => {
             ),
           ),
         )
+        mark("the run finished")
         expect(outcome.status).toBe("completed")
         expect((outcome as { result: boolean }).result).toBe(true)
         const wrote = yield* Effect.promise(() => Bun.file(path.join(sub, "out.txt")).text())

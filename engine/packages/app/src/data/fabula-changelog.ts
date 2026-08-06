@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.201.0"
+export const FABULA_VERSION = "0.202.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.202.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Проверка рабочего пространства сообщает, ДОКУДА дошла и за сколько. Каждый её шаг ограничен и назван, а внешний срок стоит за их суммой — значит, когда она всё-таки истекает, виноват не отдельный шаг: время растекается. Остаётся один вопрос, на который «вышло время» ответить не может, — какая часть его съела. В одиночку тело проверки идёт двадцать миллисекунд, то есть под нагрузкой всё уходит в фикстуру, поднимающую настоящий сервер до начала тела и лежащую вне всех границ. Теперь это видно числом, а не догадкой.",
+        en: "The workspace check reports HOW FAR it got and how long each part took. Every step is bounded and named and the outer budget sits behind their sum, so when it expires anyway no single step is at fault — the time is spread. That leaves one question \"timed out after N\" cannot answer: which part consumed it. In isolation the body takes twenty milliseconds, so under load it all goes to the fixture, which starts a real server before the body begins and lies outside every bound. That is now a number rather than a guess.",
+      },
+    ],
+  },
   {
     version: "0.201.0",
     date: "2026-08-06",

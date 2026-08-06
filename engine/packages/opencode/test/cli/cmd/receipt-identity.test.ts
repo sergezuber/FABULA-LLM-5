@@ -17,6 +17,15 @@
 import { describe, expect, test } from "bun:test"
 import { createHash } from "node:crypto"
 
+/** Read a source file with ONE line ending, whatever the checkout wrote.
+ *
+ *  Every pin below anchors on `)\n`, and a checkout that writes CRLF puts a carriage return between them:
+ *  the expression is right there in the file and the pin reports it MISSING — "it was renamed or
+ *  restructured" — on a tree where nothing was renamed. A pin that reads source text must not also be a
+ *  test of which platform checked it out. */
+function readSource(url: URL): string {
+  return (require("node:fs").readFileSync(url, "utf8") as string).replaceAll("\r\n", "\n")
+}
 /** The project's canonicalisation, READ FROM `plugin/lib/modeldigest.ts` — not transcribed.
  *
  *  This was the last hand-written twin in the file, and it was the most dangerous one: the pin held the
@@ -26,9 +35,7 @@ import { createHash } from "node:crypto"
  *  reads the CLI. The rule stated in this header applies to every layer that holds a copy, including the
  *  one the test itself owns. */
 function referenceExpressions(): { canon: string; hash: string } {
-  const src = require("node:fs").readFileSync(
-    new URL("../../../../../../plugin/lib/modeldigest.ts", import.meta.url), "utf8",
-  ) as string
+  const src = readSource(new URL("../../../../../../plugin/lib/modeldigest.ts", import.meta.url))
   // Same refusal the CLI extractor has, and it should have been written here in the same breath: this
   // function was ADDED in the round that gave `cliCanonicalExpression` its multi-match refusal, and did
   // not get it. An identical decoy above a divergent `descriptorHash` then passed the whole pin — the
@@ -57,8 +64,10 @@ function referenceHash(d: Record<string, unknown>): string {
  *  canonicalisation left this file green, because the twin never changed with it. A pin that carries its
  *  own copy of the thing it pins is not a pin. This reads the real line and evaluates it. */
 function cliSource(): string {
-  return require("node:fs").readFileSync(new URL("../../../src/cli/cmd/receipt.ts", import.meta.url), "utf8") as string
+  return readSource(new URL("../../../src/cli/cmd/receipt.ts", import.meta.url))
 }
+
+
 function cliCanonicalExpression(): string {
   const src = cliSource()
   // LAST match, not first: an identical decoy placed above a divergent real expression shadowed it, so
@@ -255,7 +264,7 @@ describe("what the CLI DOES — the real command, driven end to end", () => {
 })
 
 describe("what the CLI must say", () => {
-  const src = () => require("node:fs").readFileSync(new URL("../../../src/cli/cmd/receipt.ts", import.meta.url), "utf8")
+  const src = () => readSource(new URL("../../../src/cli/cmd/receipt.ts", import.meta.url))
 
   test("a self-contradicting receipt is reported AND changes the exit code", () => {
     // The first version printed the objection and still returned 0, so `fabula receipt verify && deploy`

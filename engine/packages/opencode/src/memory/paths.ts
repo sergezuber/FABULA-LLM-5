@@ -42,19 +42,36 @@ function detectType(key: string): MemoryType {
   return "free"
 }
 
+/**
+ * These two READ a path the filesystem handed us and answer what it denotes — so they must accept the
+ * separator the filesystem uses, whichever it is. They accepted only `/`, and the walker feeds them
+ * host-dialect paths: on Windows nothing ever matched, so NOTHING was indexed and every memory search
+ * came back empty. Not a slow index — no index at all, silently, because a path that does not parse is
+ * indistinguishable from a file that is not a memory file.
+ *
+ * The KEY they return is a stored identifier, not a path to open, so it is written in one dialect. A key
+ * recorded on one machine has to mean the same thing on another, and `TYPE_PATTERNS` matches against it.
+ */
+const SEP = "[\\\\/]"
+const MEMORY_RE = new RegExp(`${SEP}memory${SEP}(global|projects|sessions)(?:${SEP}([^\\\\/]+))?${SEP}(.+)\\.md$`)
+
+function asKey(raw: string): string {
+  return raw.replaceAll("\\", "/")
+}
+
 export function parsePath(absPath: string): MemoryLocator | null {
-  const m = absPath.match(/\/memory\/(global|projects|sessions)(?:\/([^/]+))?\/(.+)\.md$/)
+  const m = absPath.match(MEMORY_RE)
   if (!m) return null
   const [, scope, idMaybe, keyRaw] = m
   const scope_id = scope === "global" ? "" : (idMaybe ?? "")
-  const key = keyRaw
+  const key = asKey(keyRaw!)
   return { scope: scope as Scope, scope_id, type: detectType(key), key }
 }
 
-// Match: <anything>/.claude/projects/<slug>/memory/<key>.md
+// Match: <anything>/.claude/projects/<slug>/memory/<key>.md — in either separator, for the reason above.
 // <slug> is a single path segment (CC's path-derived project identifier).
-// <key> may contain '/' for nested dirs.
-const CC_PATH_RE = /\/\.claude\/projects\/([^/]+)\/memory\/(.+)\.md$/
+// <key> may contain a separator, for nested dirs.
+const CC_PATH_RE = new RegExp(`${SEP}\\.claude${SEP}projects${SEP}([^\\\\/]+)${SEP}memory${SEP}(.+)\\.md$`)
 
 export function parseCcPath(absPath: string): MemoryLocator | null {
   const m = absPath.match(CC_PATH_RE)
@@ -64,7 +81,7 @@ export function parseCcPath(absPath: string): MemoryLocator | null {
     scope: "cc",
     scope_id: slug,
     type: "free", // type is finalized from frontmatter at index time
-    key: keyRaw,
+    key: asKey(keyRaw!),
   }
 }
 

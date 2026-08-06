@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { parsePath, buildPath, resolveProjectId } from "../../src/memory/paths"
+import path from "path"
 
 describe("parsePath", () => {
   test("global scope, key is filename", () => {
@@ -151,16 +152,39 @@ describe("parsePath", () => {
 })
 
 describe("buildPath", () => {
+  // `buildPath` ACTS: what it returns is opened on this machine, so it answers in this machine's dialect.
+  // The expectation was written in one dialect and compared literally, which made a correct answer on the
+  // other read as wrong. `parsePath` is the opposite case — it READS a path somebody else wrote, so it
+  // accepts either separator, and the two are asserted round-trip below.
   test("session checkpoint", () => {
-    expect(
-      buildPath({ root: "/data/memory", scope: "sessions", scope_id: "ses_abc", key: "checkpoint" }),
-    ).toBe("/data/memory/sessions/ses_abc/checkpoint.md")
+    expect(buildPath({ root: "/data/memory", scope: "sessions", scope_id: "ses_abc", key: "checkpoint" })).toBe(
+      path.join("/data/memory", "sessions", "ses_abc", "checkpoint.md"),
+    )
   })
 
   test("global free", () => {
     expect(buildPath({ root: "/data/memory", scope: "global", key: "tooling" })).toBe(
-      "/data/memory/global/tooling.md",
+      path.join("/data/memory", "global", "tooling.md"),
     )
+  })
+
+  test("what buildPath writes, parsePath reads back — on this machine, in its own dialect", () => {
+    const built = buildPath({ root: "/data/memory", scope: "sessions", scope_id: "ses_abc", key: "checkpoint" })
+    expect(parsePath(built)).toMatchObject({ scope: "sessions", scope_id: "ses_abc", key: "checkpoint" })
+  })
+
+  test("parsePath reads a path recorded in the OTHER dialect too", () => {
+    expect(parsePath("D:\\data\\memory\\sessions\\ses_abc\\checkpoint.md")).toMatchObject({
+      scope: "sessions",
+      scope_id: "ses_abc",
+      key: "checkpoint",
+    })
+    expect(parsePath("/data/memory/global/tooling.md")).toMatchObject({ scope: "global", key: "tooling" })
+  })
+
+  test("a nested key is stored in one dialect, whichever the path used", () => {
+    expect(parsePath("D:\\d\\memory\\projects\\p1\\notes\\api.md")?.key).toBe("notes/api")
+    expect(parsePath("/d/memory/projects/p1/notes/api.md")?.key).toBe("notes/api")
   })
 
   test("rejects key with .. segment", () => {

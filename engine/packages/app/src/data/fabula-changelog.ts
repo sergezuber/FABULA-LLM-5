@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.173.0"
+export const FABULA_VERSION = "0.174.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,24 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.174.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Память снова записывается там, где пути пишутся обратной косой чертой. Разбор пути признавал только прямую, а обходчик подаёт ему написание своей системы — совпадений не было ни одного, поэтому не индексировалось НИЧЕГО и любой поиск по памяти возвращал пусто. Не медленно — вовсе, и молча: путь, который не разобрался, неотличим от файла, который памятью не является. Ключ при этом сохраняется в одном написании, чтобы запись, сделанная на одной машине, значила то же на другой.",
+        en: "Memory is indexed again where paths are written with backslashes. The path reader accepted only forward slashes while the walker hands it the system's own spelling, so nothing ever matched: NOTHING was indexed and every memory search came back empty. Not slowly — not at all, and silently, because a path that does not parse is indistinguishable from a file that is not a memory file. The stored key is written in one spelling, so a record made on one machine means the same on another.",
+      },
+      {
+        ru: "Каталог, который система ещё держит после теста, больше не выдаётся за неудачу теста. Там, где удаление отказывает, пока не закрыт последний описатель, это обычное состояние конца работы, а не улика: подопытное уже прошло, а не удалась уборка за ним — она доделывается в конце прогона, и об отложенном сообщается вслух. Там, где занятость означает, что запущенное тестом всё ещё живо, ошибка по-прежнему поднимается.",
+        en: "A directory the system still holds after a test is no longer reported as the test failing. Where removal is refused until the last handle closes, that is the ordinary end-of-work state rather than evidence: the subject had passed and what failed was the tidying, which is finished by the end-of-run sweep and said aloud when deferred. Where a busy directory means something the test started is still alive, it is still raised.",
+      },
+      {
+        ru: "Проверки, читающие исходник, приводят окончания строк. Выражение искалось с закрывающей скобкой и переводом строки подряд, а выгрузка может положить между ними возврат каретки — и проверка сообщала, что выражение «переименовано или перестроено», на дереве, где ничего не переименовывали.",
+        en: "Checks that read source text normalise line endings. An expression was matched by a closing bracket followed immediately by a newline, and a checkout may put a carriage return between them — so the check reported the expression \"renamed or restructured\" on a tree where nothing had been renamed.",
+      },
+    ],
+  },
   {
     version: "0.173.0",
     date: "2026-08-06",

@@ -174,7 +174,18 @@ function criterion8() {
   // deployment that was never made, which is a different statement from a deployment that fell behind. The
   // positive half is reported as not-applicable there, and the negative half below is still checked, so
   // the criterion keeps the assertion it is really about: a guard that cannot say STALE proves nothing.
-  const deployed = existsSync(path.join(ROOT, "engine", "packages", "app", "dist", "assets"))
+  // A DEPLOYMENT is all three carriers, not one. Asking only about the frontend bundle answered "deployed"
+  // on a machine where only the engine had been built — the engine's own build produces that bundle — and
+  // the guard then correctly reported the MISSING third artifact as staleness, which is a true sentence
+  // about a deployment nobody made. The third carrier is per-platform because the artifact is.
+  const thirdCarrier =
+    PLATFORM === "win32"
+      ? path.join(ROOT, "dist", "fabula.version")
+      : PLATFORM === "darwin"
+        ? path.join(ROOT, "FABULA-LLM-5.app", "Contents", "Info.plist")
+        : path.join(ROOT, "dist", "fabula.desktop")
+  const deployed =
+    existsSync(path.join(ROOT, "engine", "packages", "app", "dist", "assets")) && existsSync(thirdCarrier)
   const fresh = deployed ? run(guard, { timeout: 120_000 }) : { code: 0, out: "" }
   if (fresh.code !== 0) {
     // The guard's OWN words, however it marks them. Filtering for one marker was a second definition of
@@ -202,7 +213,7 @@ function criterion8() {
       stale.code !== 0
         ? deployed
           ? "FRESH on this tree, STALE on an empty one — both verdicts reachable"
-          : "nothing is deployed here to call fresh; STALE on an empty tree — the guard can still fail"
+          : `nothing is deployed here to call fresh (no ${path.basename(thirdCarrier)}); STALE on an empty tree — the guard can still fail`
                        : "the guard called an EMPTY tree fresh; it cannot fail, so it proves nothing")
   } finally {
     rmSync(tmp, { recursive: true, force: true })

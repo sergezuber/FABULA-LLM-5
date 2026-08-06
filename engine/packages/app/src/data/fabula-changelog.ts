@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.188.0"
+export const FABULA_VERSION = "0.189.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.189.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "«Развёрнуто ли здесь» спрашивается про ВСЕ три носителя версии, а не про один. Проверка смотрела только на собранный лицевой слой — а его порождает и сборка одного движка, — и отвечала «развёрнуто» там, где оболочку не собирали вовсе. Дальше сторож верно сообщал об отсутствии третьего артефакта как об устаревании: правдивая фраза о развёртывании, которого никто не делал.",
+        en: "\"Is anything deployed here\" is asked of ALL three carriers of the version, not one. The check looked only at the built front end — which building the engine alone also produces — and answered \"deployed\" where the shell had never been built. The guard then correctly reported the missing third artifact as staleness: a true sentence about a deployment nobody made.",
+      },
+    ],
+  },
   {
     version: "0.188.0",
     date: "2026-08-06",

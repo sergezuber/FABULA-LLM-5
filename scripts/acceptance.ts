@@ -169,10 +169,24 @@ function criterion8() {
   const guard = PLATFORM === "win32"
     ? ["pwsh", "-NoProfile", "-File", path.join(ROOT, "scripts", "verify-deploy.ps1")]
     : shellArgv(`bash "${ROOT}/scripts/verify-deploy.sh"`)
-  const fresh = run(guard, { timeout: 120_000 })
+  // Is there a DEPLOYMENT here to ask about? A checkout that built only the engine has no frontend bundle
+  // and no app artifact, and the guard is right to call that stale — but "stale" then describes a
+  // deployment that was never made, which is a different statement from a deployment that fell behind. The
+  // positive half is reported as not-applicable there, and the negative half below is still checked, so
+  // the criterion keeps the assertion it is really about: a guard that cannot say STALE proves nothing.
+  const deployed = existsSync(path.join(ROOT, "engine", "packages", "app", "dist", "assets"))
+  const fresh = deployed ? run(guard, { timeout: 120_000 }) : { code: 0, out: "" }
   if (fresh.code !== 0) {
-    record(8, "the deploy guard is green AND can say STALE", "FAIL",
-      `the tree reports STALE:\n      ${fresh.out.split("\n").filter((l) => /❌|\[!!\]/.test(l)).slice(0, 2).join("\n      ")}`)
+    // The guard's OWN words, however it marks them. Filtering for one marker was a second definition of
+    // what a failure line looks like, and the other platform's guard does not use it — so the report said
+    // "the tree reports STALE:" and then nothing at all.
+    const said = fresh.out
+      .split("\n")
+      .map((l) => l.trimEnd())
+      .filter((l) => l.length > 0)
+      .slice(-4)
+      .join("\n      ")
+    record(8, "the deploy guard is green AND can say STALE", "FAIL", `the tree reports STALE:\n      ${said}`)
     return
   }
   // The negative half: a guard that cannot say STALE is not a guard. Checked on a THROWAWAY tree so the
@@ -182,7 +196,10 @@ function criterion8() {
     const stale = run(PLATFORM === "win32" ? [...guard, tmp] : shellArgv(`bash "${ROOT}/scripts/verify-deploy.sh" "${tmp}"`),
                       { timeout: 120_000 })
     record(8, "the deploy guard is green AND can say STALE", stale.code !== 0 ? "PASS" : "FAIL",
-      stale.code !== 0 ? "FRESH on this tree, STALE on an empty one — both verdicts reachable"
+      stale.code !== 0
+        ? deployed
+          ? "FRESH on this tree, STALE on an empty one — both verdicts reachable"
+          : "nothing is deployed here to call fresh; STALE on an empty tree — the guard can still fail"
                        : "the guard called an EMPTY tree fresh; it cannot fail, so it proves nothing")
   } finally {
     rmSync(tmp, { recursive: true, force: true })

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.180.0"
+export const FABULA_VERSION = "0.181.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.181.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Проверка развёртывания различает «развёрнутого здесь нет» и «развёрнутое отстало». Выгрузка, где собран только движок, не имеет ни собранного лицевого слоя, ни приложения — сторож верно называет это устаревшим, но речь тогда о развёртывании, которого не делали, а это другое утверждение. И когда сторож всё же ругается, в отчёт едут ЕГО СОБСТВЕННЫЕ слова: прежде отбирались строки по одному значку, которого сторож другой платформы не печатает, поэтому отчёт сообщал «дерево устарело:» и дальше ничего.",
+        en: "The deploy check distinguishes \"nothing is deployed here\" from \"what is deployed fell behind\". A checkout that built only the engine has neither a built front end nor an application artifact — the guard is right to call that stale, but stale then describes a deployment nobody made, which is a different statement. And when the guard does object, its OWN words reach the report: lines used to be selected by one marker that the other platform's guard does not print, so the report said \"the tree reports STALE:\" and then nothing at all.",
+      },
+    ],
+  },
   {
     version: "0.180.0",
     date: "2026-08-06",

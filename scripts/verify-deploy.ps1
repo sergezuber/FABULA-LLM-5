@@ -85,17 +85,17 @@ if (-not $srcVer) {
     Bad "frontend dist carries a different version, source declares $srcVer ($($dist.Name))"
   }
 
-  # 2) the bytes of the engine binary itself
+  # 2) the bytes of the engine binary itself.
+  #
+  # Searched with the runtime's OWN string search, not a per-byte loop in this language. The binary is
+  # ~143 MB, so the loop this replaces ran a hundred and forty-three million interpreted iterations: it
+  # took longer than the caller's whole allowance, was killed part-way, and the report simply STOPPED
+  # after the line above — a guard that never reached its own verdict, reporting a stale deployment on a
+  # tree that was fine. Latin-1 maps every byte to exactly one character, so a byte search and this
+  # character search are the same question, and IndexOf answers it in native code.
   $bytes = [System.IO.File]::ReadAllBytes($Bin)
-  $needle = [System.Text.Encoding]::UTF8.GetBytes("""$srcVer""")
-  $found = $false
-  for ($i = 0; $i -le $bytes.Length - $needle.Length; $i++) {
-    if ($bytes[$i] -eq $needle[0]) {
-      $hit = $true
-      for ($j = 1; $j -lt $needle.Length; $j++) { if ($bytes[$i + $j] -ne $needle[$j]) { $hit = $false; break } }
-      if ($hit) { $found = $true; break }
-    }
-  }
+  $haystack = [System.Text.Encoding]::Latin1.GetString($bytes)
+  $found = $haystack.IndexOf("""$srcVer""", [System.StringComparison]::Ordinal) -ge 0
   if ($found) { Ok "engine binary carries $srcVer" } else { Bad "engine binary does not carry $srcVer" }
 
   # 3) THE THIRD CARRIER - the desktop shell's own manifest. Its ABSENCE is a finding, never a skip: a

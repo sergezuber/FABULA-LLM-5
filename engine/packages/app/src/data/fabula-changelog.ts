@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.186.0"
+export const FABULA_VERSION = "0.187.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.187.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Проверка развёртывания ищет строку в двоичном файле средствами самой среды, а не перебором байтов на языке сценария. Файл весит около ста сорока трёх мегабайт, поэтому прежний перебор шёл сотнями миллионов шагов в интерпретаторе: он не укладывался в отведённое ему время, обрывался на полпути — и отчёт просто ЗАКАНЧИВАЛСЯ, ни разу не дойдя до собственного вывода. Развёртывание объявлялось устаревшим на дереве, с которым всё было в порядке.",
+        en: "The deploy check searches the binary with the runtime's own string search rather than walking bytes in the script language. The file is about a hundred and forty-three megabytes, so the old walk ran hundreds of millions of interpreted steps: it did not fit in the time it was given, was cut off part-way, and the report simply ENDED without ever reaching its own verdict. A deployment was called stale on a tree that was fine.",
+      },
+    ],
+  },
   {
     version: "0.186.0",
     date: "2026-08-06",

@@ -135,3 +135,27 @@ describe("strictly below", () => {
     expect(offenders).toEqual([])
   })
 })
+
+// ── The path rules have ONE definition, and this refuses a second ─────────────────────────────────
+//
+// Five of them lived twice: once in `AppFileSystem`, which thirty-nine files call, and once in the
+// `src/util` barrel, which six more call. They had already drifted — the shared one canonicalises a path
+// whose leaf does not exist yet, the copy gave up on it — so a check comparing an expectation built with
+// one against an answer produced by the other described the same directory in two spellings and reported
+// a correct answer as wrong. Whichever definition a call site happened to reach decided the outcome.
+test("the util module re-exports the path rules rather than restating them", async () => {
+  const source = await Bun.file(new URL("../../src/util/filesystem.ts", import.meta.url)).text()
+  for (const name of [
+    "normalizePath",
+    "normalizePathPattern",
+    "resolve",
+    "windowsPath",
+    "overlaps",
+    "contains",
+    "isContainedRelative",
+    "isFilesystemRoot",
+  ]) {
+    expect(source).toContain(`export const ${name} = AppFileSystem.${name}`)
+    expect(source).not.toContain(`export function ${name}(`)
+  }
+})

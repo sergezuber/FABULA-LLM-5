@@ -12,6 +12,20 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     version: "0.194.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Все правила путей имеют ОДНО определение. Пять из них жили дважды — в общем модуле, который зовут тридцать девять файлов, и в почти-копии, которую зовут ещё шесть, — и уже разошлись: общее умеет привести путь, которого ещё нет, копия сдавалась. Значит одно и то же место описывалось двумя написаниями, и верный ответ читался как неверный. Новое второе определение теперь отклоняется проверкой.",
+        en: "Every path rule has ONE definition. Five of them lived twice — in the shared module thirty-nine files call, and in a near-copy six more call — and had already drifted: the shared one canonicalises a path whose leaf does not exist yet, the copy gave up. So one place was described in two spellings and a correct answer read as wrong. A new second definition is now refused by a check.",
+      },
+      {
+        ru: "Удаление рабочего дерева не объявляет несостоявшимся то, что состоялось. К моменту стирания оставшихся байтов git уже не знает об этом дереве; там, где описатель переживает породивший его процесс, отказ на этих байтах выдавал завершённое удаление за провал и вдобавок отменял удаление ветки. Любая другая ошибка по-прежнему поднимается, а вызов, когда git о дереве и не знал, остаётся строгим — там байты и есть вся работа.",
+        en: "Removing a worktree no longer calls a completed removal a failure. By the time the leftover bytes are erased, git no longer knows the tree; where a handle outlives the process that held it, refusing on those bytes reported a finished removal as a failure and skipped the branch deletion too. Every other error is still raised, and the call made when git never knew the tree stays strict — there the bytes are the whole job.",
+      },
+    ],
+  },
+  {
+    version: "0.194.0",
     date: "2026-08-03",
     items: [
       {

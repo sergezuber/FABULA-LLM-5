@@ -360,7 +360,16 @@ export const layer: Layer.Layer<
      *  belonged to, it is not. */
     const REMOVE_RETRY_MS = process.platform === "win32" ? 12_000 : 500
 
-    function cleanDirectory(target: string) {
+    /**
+     * Remove the directory's leftover bytes.
+     *
+     * `tolerateBusy` is for the call that runs AFTER git has already removed the worktree: at that point
+     * the removal HAS happened — git no longer knows this tree — and what is left is housekeeping. Where a
+     * handle can outlive the process that held it, refusing to finish reports a completed removal as a
+     * failure and skips the branch deletion below it. Every other error still throws, and the call that
+     * runs when git never knew the tree stays strict, because there the bytes ARE the whole operation.
+     */
+    function cleanDirectory(target: string, tolerateBusy = false) {
       return Effect.promise(() =>
         import("fs/promises")
           .then((fsp) =>
@@ -378,6 +387,12 @@ export const layer: Layer.Layer<
             }),
           )
           .catch((error) => {
+            const busy =
+              typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "EBUSY"
+            if (tolerateBusy && busy && process.platform === "win32") {
+              log.info("worktree directory still held; git has already removed the worktree", { target })
+              return
+            }
             const message = errorMessage(error)
             throw new RemoveFailedError({ message: message || "Failed to remove git worktree directory" })
           }),
@@ -425,7 +440,7 @@ export const layer: Layer.Layer<
         }
       }
 
-      yield* cleanDirectory(entry.path)
+      yield* cleanDirectory(entry.path, true)
 
       const branch = entry.branch?.replace(/^refs\/heads\//, "")
       if (branch) {

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect } from "bun:test"
+import path from "path"
 import { Effect, Layer } from "effect"
 import { Bus } from "../../src/bus"
 import { Config } from "../../src/config"
@@ -186,7 +187,7 @@ describe("renderRebuildContext — recent user input section", () => {
         // checkpoint.md so the first renderRebuildContext is non-empty and the
         // boundary actually gets inserted.
         yield* Effect.promise(async () => {
-          await fs.mkdir(checkpointPath(sess.id).replace(/\/[^/]+$/, ""), { recursive: true })
+          await fs.mkdir(path.dirname(checkpointPath(sess.id)), { recursive: true })
           await Bun.write(checkpointPath(sess.id), "## §1 Active intent\n\nUNIQUE-CHECKPOINT-SENTINEL\n")
         })
         const m = yield* Effect.promise(() => seedUserMessage(sess.id, "REAL-HUMAN-PROMPT-ZZZ"))

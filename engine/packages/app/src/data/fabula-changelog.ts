@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.176.0"
+export const FABULA_VERSION = "0.177.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.177.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Имена файлов, которые сценарий рабочего потока получает от поиска по образцу, пишутся одним способом на любой системе. Сценарий — переносимый текст: он передаёт эти имена обратно на чтение и запись, сравнивает их и сортирует. Отдавая ему разделитель хозяина, мы заставляли один и тот же сценарий сортировать и совпадать по-разному в зависимости от того, где он запущен.",
+        en: "The file names a workflow script receives from a pattern search are written the same way on every system. A script is portable text: it hands those names back to read and write, compares them and sorts them. Giving it the host's separator made one and the same script sort differently and match differently depending on where it ran.",
+      },
+      {
+        ru: "Ожидание завершения работы называет, чего дождалось. Неограниченное ожидание, истекая, сообщало только про часы — а по такому сообщению единственный доступный ответ — снова увеличить число. Теперь на истечении читается собственное состояние работы, и следующий отказ будет фактом о ней, а не о секундомере.",
+        en: "A wait for a run to finish now names what it was waiting on. An unbounded wait reported only the clock when it expired, and the only available response to that is to raise the number again. The run's own status is read on expiry, so the next failure is a fact about the run rather than about the stopwatch.",
+      },
+    ],
+  },
   {
     version: "0.176.0",
     date: "2026-08-06",

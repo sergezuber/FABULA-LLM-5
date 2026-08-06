@@ -61,9 +61,16 @@ export function makeFileHooks(root: string) {
       // a relative path starting with `..` (or an absolute path on some inputs), so
       // drop those. Empty-string (the root itself) is also dropped. Then sort for
       // deterministic fan-out order.
+      //
+      // The names handed back are the guest's, and a workflow script is portable text: it receives these,
+      // passes them to readFile/writeFile, compares them, and may print them into a report. So they are
+      // written in ONE dialect rather than the host's — otherwise the same script sorts differently, and
+      // matches differently, depending on which machine ran it. `resolveInWorkspace` accepts either
+      // separator on the way back in, so nothing is lost by choosing one on the way out.
       return abs
         .map((p) => path.relative(root, p))
         .filter((rel) => AppFileSystem.isBelowRelative(rel))
+        .map((rel) => rel.replaceAll("\\", "/"))
         .sort()
     },
   }

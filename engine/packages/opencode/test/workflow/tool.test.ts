@@ -463,7 +463,20 @@ describe("WorkflowTool run", () => {
         expect(res.metadata.runID).toBeDefined()
         // Wait for completion + assert the file landed under the chosen workspace (sub), not the worktree root.
         const runtime = yield* WorkflowRuntime.Service
-        const outcome = yield* runtime.wait({ runID: res.metadata.runID as string })
+        // Bounded, and it NAMES what it was waiting on. An unbounded wait that expires reports only the
+        // clock — "timed out after N" — which says nothing about whether the run was queued, running, or
+        // finished and unnoticed, so the only available response is to raise the number again. Reading the
+        // run's own status on expiry turns the next failure into a fact about the run.
+        const outcome = yield* runtime.wait({ runID: res.metadata.runID as string }).pipe(
+          Effect.timeout("45 seconds"),
+          Effect.catch(() =>
+            runtime.status({ runID: res.metadata.runID as string }).pipe(
+              Effect.map((st) => {
+                throw new Error(`the run did not finish within 45s; its status is "${st.status}"`)
+              }),
+            ),
+          ),
+        )
         expect(outcome.status).toBe("completed")
         expect((outcome as { result: boolean }).result).toBe(true)
         const wrote = yield* Effect.promise(() => Bun.file(path.join(sub, "out.txt")).text())

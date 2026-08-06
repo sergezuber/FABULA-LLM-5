@@ -2,23 +2,30 @@ import { describe, expect, test } from "bun:test"
 import { resolveInWorkspace, makeFileHooks } from "../../src/workflow/workspace"
 import { tmpdir } from "os"
 import { mkdtempSync } from "fs"
+import path from "path"
 
 describe("resolveInWorkspace", () => {
+  // The root is an absolute path on the system this runs on, and what comes back is a path to OPEN there,
+  // so both are written in that system's dialect. Comparing against a literal with forward slashes made a
+  // correct answer read as wrong on the platform that spells them the other way — the escape assertions
+  // below, which are what this function is for, were passing all along.
+  const WS = path.resolve(path.sep + "ws")
+
   test("resolves a relative path inside the root", () => {
-    expect(resolveInWorkspace("/ws", "a/b.txt")).toBe("/ws/a/b.txt")
+    expect(resolveInWorkspace(WS, "a/b.txt")).toBe(path.join(WS, "a", "b.txt"))
   })
 
   test("rejects a parent-traversal escape", () => {
-    expect(() => resolveInWorkspace("/ws", "../escape")).toThrow(/workspace/)
+    expect(() => resolveInWorkspace(WS, "../escape")).toThrow(/workspace/)
   })
 
   test("rejects an absolute path that escapes the root", () => {
-    expect(() => resolveInWorkspace("/ws", "/etc/passwd")).toThrow(/workspace/)
+    expect(() => resolveInWorkspace(WS, path.resolve(path.sep + "etc", "passwd"))).toThrow(/workspace/)
   })
 
   test("allows the root itself and nested dirs", () => {
-    expect(resolveInWorkspace("/ws", ".")).toBe("/ws")
-    expect(resolveInWorkspace("/ws", "deep/nested/x")).toBe("/ws/deep/nested/x")
+    expect(resolveInWorkspace(WS, ".")).toBe(WS)
+    expect(resolveInWorkspace(WS, "deep/nested/x")).toBe(path.join(WS, "deep", "nested", "x"))
   })
 })
 
@@ -84,5 +91,24 @@ describe("makeFileHooks glob", () => {
     expect(await hooks.glob("../*")).toEqual([])
     // A normal in-workspace glob still works.
     expect(await hooks.glob("*.txt")).toEqual(["inside.txt"])
+  })
+})
+
+// ── The names a script receives are in one dialect, whatever machine ran it ────────────────────────
+//
+// A workflow script is portable text: it takes these names, hands them back to readFile/writeFile,
+// compares and sorts them, and may print them into a report. Handing it the host's separator makes the
+// same script sort differently and match differently depending on where it runs.
+describe("guest-facing paths", () => {
+  test("glob answers in one separator and the answer round-trips", async () => {
+    const root = mkdtempSync(`${tmpdir()}/wf-ws-sep-`)
+    const hooks = makeFileHooks(root)
+    await hooks.writeFile("deep/nested/x.txt", "hi")
+    const [only] = await hooks.glob("deep/nested/*.txt")
+    expect(only).toBe("deep/nested/x.txt")
+    expect(only).not.toContain("\\")
+    // …and what it handed back is accepted on the way in, which is what makes one dialect safe to choose.
+    expect(await hooks.readFile(only!)).toBe("hi")
+    expect(await hooks.exists(only!)).toBe(true)
   })
 })

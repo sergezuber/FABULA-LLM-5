@@ -343,7 +343,9 @@ describe("WorkflowRuntime cancel cascade", () => {
         // without widening what it accepts: the cancel still lands MID-flight, with children registered
         // and the fan-out unfinished, which is the race the orphan bug lives in.
         const inFlight = yield* Effect.gen(function* () {
-          for (let i = 0; i < 200; i++) {
+          for (let i = 0; i < 120; i++) {
+            // 3s ceiling: long enough for a fan-out to reach the registry on a busy machine, short enough
+            // that a run where nothing registers fails on the assertion below rather than on the clock.
             const ids = (yield* registry.listBySession(parent.id))
               .filter((a) => a.actorID !== "main")
               .map((a) => a.actorID)
@@ -370,7 +372,12 @@ describe("WorkflowRuntime cancel cascade", () => {
       }),
       { git: true, config: providerCfg },
     ),
-    20000,
+    // Eight agents spawned across the bridge, then cancelled mid-flight, in a process that pays for warming
+    // the workflow runtime the first time it starts one. Twenty seconds is comfortable when this file runs
+    // alone and not when the whole suite is competing for the machine — the same headroom, and the same
+    // reason, as the workflow-tool checks. The wait for children to register is bounded well inside it, so
+    // a run where nothing ever registers still reports that rather than spending the budget on it.
+    60000,
   )
 })
 

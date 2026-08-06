@@ -61,6 +61,7 @@ import { spawnShell, whichFirst } from "./lib/platform/shell"
 import { pythonCandidates } from "./lib/platform/service"
 import { homeDir } from "./lib/platform/paths"
 import { sandboxPlan, shellScope, untrustedScope } from "./lib/platform/sandbox"
+import { containerBin } from "./lib/platform/profile"
 
 /**
  * Can Docker run the sandbox images this tool actually uses?
@@ -76,17 +77,16 @@ import { sandboxPlan, shellScope, untrustedScope } from "./lib/platform/sandbox"
  * them reads as unavailable — and the tool falls back to the kernel profile, or refuses an explicit
  * `sandbox: true`, both of which SAY what happened.
  */
+//
+// ASKED IN ONE PLACE. The reasoning above was written here and the machine profile asked the same question
+// with its own spawn — two implementations of one rule, and they had already parted company: this one
+// ignored `FABULA_DOCKER_BIN`, so a stand-in runtime was honoured when the profile looked and ignored when
+// the tool did, and the panel could report a container the sandbox would not use.
 let _dockerOk: boolean | null = null
-function dockerAvailable(): Promise<boolean> {
-  if (_dockerOk !== null) return Promise.resolve(_dockerOk)
-  return new Promise<boolean>((res) => {
-    const c = spawn("docker", ["info", "--format", "{{.OSType}}"])
-    let out = ""
-    const t = setTimeout(() => { try { c.kill() } catch {} ; res((_dockerOk = false)) }, 8000)
-    c.stdout.on("data", (d) => { out += d.toString() })
-    c.on("close", () => { clearTimeout(t); res((_dockerOk = out.trim().toLowerCase() === "linux")) })
-    c.on("error", () => { clearTimeout(t); res((_dockerOk = false)) })
-  })
+async function dockerAvailable(): Promise<boolean> {
+  if (_dockerOk !== null) return _dockerOk
+  const { containerReading } = await import("./lib/platform/profile")
+  return (_dockerOk = containerReading().available)
 }
 
 // Optional page summarization via the aux model (graceful: returns original on failure).
@@ -801,11 +801,11 @@ export const FabulaTools: Plugin = async () => {
             const dargs = buildDockerRun({ image: SANDBOX_IMAGES[lang], hostDir: dir, inner: interpreterCmd(lang, file) })
             dargs.splice(1, 0, "--name", name) // inject after "run"
             return await new Promise((resolve) => {
-              const child = spawn("docker", dargs)
+              const child = spawn(containerBin(), dargs)
               let out = "", killed = false; const cap = 100_000
               const cleanup = () => { fs.rm(dir, { recursive: true, force: true }).catch(() => {}) }
-              const timer = setTimeout(() => { killed = true; spawn("docker", ["kill", name]); child.kill("SIGKILL") }, 60_000)
-              const onAbort = () => { killed = true; spawn("docker", ["kill", name]); child.kill("SIGKILL") }
+              const timer = setTimeout(() => { killed = true; spawn(containerBin(), ["kill", name]); child.kill("SIGKILL") }, 60_000)
+              const onAbort = () => { killed = true; spawn(containerBin(), ["kill", name]); child.kill("SIGKILL") }
               ctx.abort?.addEventListener?.("abort", onAbort)
               child.stdout.on("data", (d) => { out = takeCapped(out, d, cap) })
               child.stderr.on("data", (d) => { out = takeCapped(out, d, cap) })

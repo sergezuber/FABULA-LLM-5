@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.171.0"
+export const FABULA_VERSION = "0.172.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.172.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Про изолирующую среду спрашивают одним способом и зовут её одним именем. Реализаций было две, и они уже разошлись: одна слушала настройку, которой можно подставить другую среду, вторая нет — поэтому подставленная среда одобрялась при одном взгляде и игнорировалась при другом, а запускалась и вовсе третья. Здоровая служба, выдающая образы не того рода, по-прежнему считается непригодной и говорит, какого именно.",
+        en: "The isolation runtime is asked one way and named one way. There were two implementations and they had already parted company: one honoured the setting that points at a stand-in runtime and the other did not, so a stand-in was approved on one look and ignored on the next, while a third was what actually ran. A healthy service serving the wrong kind of images still counts as unusable and says which kind it serves.",
+      },
+    ],
+  },
   {
     version: "0.171.0",
     date: "2026-08-06",

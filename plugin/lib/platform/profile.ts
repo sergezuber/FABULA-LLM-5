@@ -77,12 +77,23 @@ export function readMachineProfile(
   return { ...profile, fingerprint: fingerprintOf(profile) }
 }
 
+/**
+ * The container runtime's program name, in ONE place.
+ *
+ * The probe honoured `FABULA_DOCKER_BIN` and the code that actually RUNS a container did not, so a
+ * stand-in could be approved and the real runtime invoked — an approval about one program and a run
+ * against another.
+ */
+export function containerBin(env: NodeJS.ProcessEnv = process.env): string {
+  return env.FABULA_DOCKER_BIN || "docker"
+}
+
 /** Whether a container runtime can run the images the sandbox uses — the same question the tool asks. */
 export function containerReading(
   env: NodeJS.ProcessEnv = process.env,
   run: (cmd: string, args: string[]) => string | null = defaultRun,
 ): { available: boolean; detail: string } {
-  const out = run(env.FABULA_DOCKER_BIN || "docker", ["info", "--format", "{{.OSType}}"])
+  const out = run(containerBin(env), ["info", "--format", "{{.OSType}}"])
   if (out === null) return { available: false, detail: "no container runtime answered" }
   const kind = out.trim().toLowerCase()
   if (kind === "linux") return { available: true, detail: "container runtime serving linux images" }

@@ -20,6 +20,7 @@ import {
   profilePath,
   describeProfile,
   type MachineProfile,
+  containerBin,
 } from "./profile"
 
 /** A stand-in for the vendor tools, so a machine's own hardware never decides the answer. */
@@ -249,5 +250,52 @@ describe("every accelerator is visible to the thing that sizes the window", () =
     expect(src).toContain("return g.totalBytes > 0 ? { total: g.totalBytes, used: g.usedBytes } : null")
     const prof = await Bun.file(new URL("./profile.ts", import.meta.url)).text()
     expect(prof).not.toMatch(/^\s*(export\s+)?function gpuReading/m)
+  })
+})
+
+// ── The container runtime is ONE question and ONE program name ─────────────────────────────────────
+//
+// Two implementations asked whether a container runtime could run the sandbox images: this reading, and
+// the tool's own spawn. They had already parted company — the tool ignored `FABULA_DOCKER_BIN`, so a
+// stand-in was honoured when the profile looked and ignored when the tool did, and the capacity report
+// could name a runtime the sandbox would never use. Worse, the code that RUNS a container also ignored it:
+// an approval about one program, a run against another.
+describe("the container runtime is asked once, and named once", () => {
+  const answers = (map: Record<string, string>) => (cmd: string) => {
+    for (const [k, v] of Object.entries(map)) if (cmd.includes(k)) return v
+    return null
+  }
+
+  test("the name follows the environment, and defaults when it is unset", () => {
+    expect(containerBin({})).toBe("docker")
+    expect(containerBin({ FABULA_DOCKER_BIN: "/opt/podman" })).toBe("/opt/podman")
+  })
+
+  test("a runtime serving linux images is available", () => {
+    expect(containerReading({}, answers({ docker: "linux\n" })).available).toBe(true)
+  })
+
+  // The measured Windows case: a healthy daemon in windows-container mode, where every sandbox image is a
+  // linux image and none can start. "the daemon answered" is the wrong question.
+  test("a healthy daemon serving the wrong images is NOT available, and says which", () => {
+    const r = containerReading({}, answers({ docker: "windows\n" }))
+    expect(r.available).toBe(false)
+    expect(r.detail).toContain("windows")
+  })
+
+  test("the named runtime is the one asked", () => {
+    const asked: string[] = []
+    containerReading({ FABULA_DOCKER_BIN: "/opt/podman" }, (cmd) => {
+      asked.push(cmd)
+      return "linux\n"
+    })
+    expect(asked).toEqual(["/opt/podman"])
+  })
+
+  // The binding: the tool must not carry its own probe or its own program name.
+  test("the tool asks through this module rather than spawning its own", async () => {
+    const src = await Bun.file(new URL("../../fabula-tools.ts", import.meta.url)).text()
+    expect(src).not.toMatch(/spawn\(\s*"docker"/)
+    expect(src).toContain("containerReading().available")
   })
 })

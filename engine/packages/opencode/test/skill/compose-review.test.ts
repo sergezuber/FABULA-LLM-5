@@ -112,11 +112,13 @@ describe("compose spec-anchored review contract", () => {
     })
   })
 
-  describe("dispatch vocabulary uses mimocode's actor tool, not Claude Code's", () => {
+  describe("dispatch vocabulary uses this engine's actor tool, not another agent's", () => {
     const allContent = () =>
       Object.values(bundle).flatMap((files) => Object.values(files))
 
-    test("no bundle file uses Claude Code's 'Task tool' / 'general-purpose' phrasing", () => {
+    // The phrasing another coding agent uses for the same idea. A template written in its vocabulary
+    // produces calls this engine has no tool for, so the words themselves are what must not appear.
+    test("no bundle file uses the other agent's 'Task tool' / 'general-purpose' phrasing", () => {
       const offenders = Object.entries(bundle).flatMap(([skill, files]) =>
         Object.entries(files)
           .filter(([, content]) => /Task tool|Task Tool|general-purpose|general_purpose/.test(content))

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.190.0"
+export const FABULA_VERSION = "0.191.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.191.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Проверки, заявляющие «путь ВНЕ проекта», строят свои каталоги действительно вне рабочей копии. Прежде они брали временные каталоги из корня, лежащего внутри репозитория, — и тогда рабочим деревом проекта оказывался сам репозиторий, соседний каталог был ВНУТРИ него, разрешение спрашивать было не о чем, а проверка измеряла, где случайно расположились её собственные фикстуры. Программа всё это время вела себя верно; замерено на ряду: «внешний» каталог не внешний, рабочее дерево — выгрузка.",
+        en: "Checks that claim \"this path is OUTSIDE the project\" now build their directories genuinely outside a working copy. They took temporary directories from a root that sits inside the repository, which made the project's worktree the repository itself, a sibling directory INSIDE it, and no permission due — so the check measured where its own fixtures happened to live. The program was right the whole time; measured on a runner: the \"outside\" directory was not outside, and the worktree was the checkout.",
+      },
+    ],
+  },
   {
     version: "0.190.0",
     date: "2026-08-06",

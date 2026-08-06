@@ -156,7 +156,10 @@ describe("tool.assertExternalDirectory", () => {
     test("normalizes Windows path variants to one glob", async () => {
       const { requests, ctx } = makeCtx()
 
+      // OUTSIDE any checkout: the project below makes its own worktree, but this "outer" directory must
+      // not sit inside the SAME repository the fixtures default to, or it is not outside anything.
       await using outerTmp = await tmpdir({
+        outsideGit: true,
         init: async (dir) => {
           await Bun.write(path.join(dir, "outside.txt"), "x")
         },

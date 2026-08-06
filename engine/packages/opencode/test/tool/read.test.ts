@@ -147,10 +147,11 @@ describe("tool.read external_directory permission", () => {
 
         const { items, next } = asks()
         const target = path.join(dir, "test.txt")
-        const alt = target
-          .replace(/^[A-Za-z]:/, "")
-          .replaceAll("\\", "/")
-          .toLowerCase()
+        // The drive letter is KEPT. Stripped, a path becomes one whose first segment is a single letter,
+        // and a leading slash-letter-slash is the Git Bash spelling of a DRIVE — the product reads it as a
+        // different drive, correctly by that convention, and the check then reports a defect against an
+        // ambiguity the fixture invented. Lowercasing and the separator are what a variant means here.
+        const alt = target.replaceAll("\\", "/").toLowerCase()
 
         yield* exec(dir, { file_path: alt }, next)
         const read = items.find((item) => item.permission === "read")

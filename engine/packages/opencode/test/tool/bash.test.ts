@@ -195,7 +195,7 @@ describe("tool.bash", () => {
 
 describe("tool.bash permissions", () => {
   each("asks for bash permission with correct pattern", async () => {
-    await using tmp = await tmpdir()
+    await using tmp = await tmpdir({ outsideGit: true })
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
@@ -218,7 +218,7 @@ describe("tool.bash permissions", () => {
   })
 
   each("asks for bash permission with multiple commands", async () => {
-    await using tmp = await tmpdir()
+    await using tmp = await tmpdir({ outsideGit: true })
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
@@ -420,7 +420,7 @@ describe("tool.bash permissions", () => {
       test(
         `asks for external_directory permission for drive-relative PowerShell paths [${item.label}]`,
         withShell(item, async () => {
-          await using tmp = await tmpdir()
+          await using tmp = await tmpdir({ outsideGit: true })
           await Instance.provide({
             directory: tmp.path,
             fn: async () => {
@@ -513,8 +513,8 @@ describe("tool.bash permissions", () => {
       test(
         `asks for external_directory permission for a plain absolute PowerShell path [${item.label}]`,
         withShell(item, async () => {
-          await using outer = await tmpdir()
-          await using tmp = await tmpdir()
+          await using outer = await tmpdir({ outsideGit: true })
+          await using tmp = await tmpdir({ outsideGit: true })
           await Instance.provide({
             directory: tmp.path,
             fn: async () => {
@@ -552,7 +552,7 @@ describe("tool.bash permissions", () => {
       test(
         `asks for external_directory permission for $PWD PowerShell paths [${item.label}]`,
         withShell(item, async () => {
-          await using tmp = await tmpdir()
+          await using tmp = await tmpdir({ outsideGit: true })
           await Instance.provide({
             directory: tmp.path,
             fn: async () => {
@@ -881,7 +881,7 @@ describe("tool.bash permissions", () => {
   })
 
   each("asks for external_directory permission when workdir is outside project", async () => {
-    await using tmp = await tmpdir()
+    await using tmp = await tmpdir({ outsideGit: true })
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
@@ -911,8 +911,8 @@ describe("tool.bash permissions", () => {
   if (process.platform === "win32") {
     test("normalizes external_directory workdir variants on Windows", async () => {
       const err = new Error("stop after permission")
-      await using outerTmp = await tmpdir()
-      await using tmp = await tmpdir()
+      await using outerTmp = await tmpdir({ outsideGit: true })
+      await using tmp = await tmpdir({ outsideGit: true })
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
@@ -1073,7 +1073,7 @@ describe("tool.bash permissions", () => {
   })
 
   each("includes always patterns for auto-approval", async () => {
-    await using tmp = await tmpdir()
+    await using tmp = await tmpdir({ outsideGit: true })
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
@@ -1096,7 +1096,7 @@ describe("tool.bash permissions", () => {
   })
 
   each("does not ask for bash permission when command is cd only", async () => {
-    await using tmp = await tmpdir()
+    await using tmp = await tmpdir({ outsideGit: true })
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
@@ -1118,7 +1118,7 @@ describe("tool.bash permissions", () => {
   })
 
   each("matches redirects in permission pattern", async () => {
-    await using tmp = await tmpdir()
+    await using tmp = await tmpdir({ outsideGit: true })
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
@@ -1141,7 +1141,7 @@ describe("tool.bash permissions", () => {
   })
 
   each("always pattern has space before wildcard to not include different commands", async () => {
-    await using tmp = await tmpdir()
+    await using tmp = await tmpdir({ outsideGit: true })
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {

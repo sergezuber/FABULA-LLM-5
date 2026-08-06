@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.194.0"
+export const FABULA_VERSION = "0.195.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.195.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Завершающая уборка ограничена ВРЕМЕНЕМ, а не числом попыток. Число здесь — предел не той величины: каждая попытка стоит принудительной сборки мусора и паузы, поэтому поднятое ради упрямого описателя число вывело всю уборку за собственный срок набора — а истёкшая уборка валит прогон так же громко, как брошенная ошибка, только читать в ней нечего. Обе цели теперь укладываются в срок с запасом.",
+        en: "The final sweep is bounded by TIME, not by a number of attempts. A count is a bound on the wrong quantity: each attempt costs a forced garbage collection and a pause, so raising it to outlast a stubborn handle pushed the sweep past the suite's own budget — and a sweep that times out fails the run as loudly as one that throws, with nothing to read. Both targets now fit inside the budget with room to spare.",
+      },
+    ],
+  },
   {
     version: "0.194.0",
     date: "2026-08-06",

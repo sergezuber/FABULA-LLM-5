@@ -39,12 +39,24 @@ afterAll(async () => {
   // whole green suite was going RED here, under no test name at all, because the last thing it did was
   // tidy up and the tidying was refused. Where a busy directory means something the run started is still
   // ALIVE, that is worth failing on — but that is the per-fixture cleanup's question, and it asks it.
+  // Bounded by the CLOCK, not by a retry count. A count is a bound on the wrong quantity here: each
+  // attempt costs a forced GC plus its pause, so raising it to outlast a stubborn handle pushed the whole
+  // hook past the suite's own per-test budget — and a sweep that TIMES OUT fails the run just as loudly as
+  // one that throws, only with nothing to read. Two targets inside one budget, with room to spare.
+  const SWEEP_MS = 8_000
   const sweep = async (target: string) => {
-    try {
-      await rm(target, process.platform === "win32" ? 120 : 30)
-    } catch (error) {
-      if (process.platform !== "win32" || !busy(error)) throw error
-      console.log(`deferred final cleanup of ${target} to the system: ${(error as Error).message}`)
+    const deadline = Date.now() + SWEEP_MS
+    for (;;) {
+      try {
+        await rm(target, 1)
+        return
+      } catch (error) {
+        if (process.platform !== "win32" || !busy(error)) throw error
+        if (Date.now() >= deadline) {
+          console.log(`deferred final cleanup of ${target} to the system: ${(error as Error).message}`)
+          return
+        }
+      }
     }
   }
   await sweep(dir)

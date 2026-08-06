@@ -22,7 +22,7 @@ import os from "os"
 // error-toasts on every Home load (observed live with CLI test runs under /private/tmp).
 // The two bases are canonicalized ONCE. They are local paths (the launch cwd and $HOME itself), so
 // their realpath is safe; caching also keeps this predicate free of syscalls per call.
-let allowedBases: { cwd: string; home: string } | undefined
+let allowedBases: { cwd: string; home: string; cwdRaw: string; homeRaw: string } | undefined
 
 export function instanceDirectoryAllowed(directory: string): boolean {
   if (Flag.MIMOCODE_SERVER_PASSWORD) return true
@@ -44,7 +44,21 @@ export function instanceDirectoryAllowed(directory: string): boolean {
     // user's directory elsewhere the home base silently became the launch cwd, and every project under
     // the user's own profile was refused with a 403 by a guard that was supposed to allow exactly those.
     const home = process.env["HOME"] || os.homedir()
-    allowedBases = { cwd, home: home ? Filesystem.resolve(home) : cwd }
+    // BOTH spellings of each base, because only the BASE may be canonicalised. Resolving the CANDIDATE is
+    // what froze the server on an iCloud-managed folder, so it stays lexical — which leaves the two sides
+    // in different spellings wherever a filesystem has more than one for a directory (a short 8.3 name, a
+    // differing case). MEASURED: a project under the user's own profile answered "not allowed" because
+    // the base said `runneradmin` and the candidate said `RUNNER~1`.
+    //
+    // Keeping the PRE-canonical spelling beside the canonical one is lexical, costs one comparison, and is
+    // exactly what the /var → /private/var twin below already does for the other platform.
+    const homeRaw = home ? normalizeLexical(home) : ""
+    allowedBases = {
+      cwd,
+      home: home ? Filesystem.resolve(home) : cwd,
+      cwdRaw: normalizeLexical(process.cwd()),
+      homeRaw: homeRaw || cwd,
+    }
   }
   const raw = normalizeLexical(directory)
   const twins =
@@ -53,11 +67,15 @@ export function instanceDirectoryAllowed(directory: string): boolean {
       : raw === "/private/var" || raw.startsWith("/private/var/")
         ? [raw, raw.slice("/private".length)]
         : [raw]
+  const bases = allowedBases!
   return twins.some(
     (dir) =>
-      Filesystem.contains(allowedBases!.cwd, dir) ||
-      Filesystem.contains(allowedBases!.home, dir) ||
-      Filesystem.contains(dir, allowedBases!.home),
+      Filesystem.contains(bases.cwd, dir) ||
+      Filesystem.contains(bases.cwdRaw, dir) ||
+      Filesystem.contains(bases.home, dir) ||
+      Filesystem.contains(bases.homeRaw, dir) ||
+      Filesystem.contains(dir, bases.home) ||
+      Filesystem.contains(dir, bases.homeRaw),
   )
 }
 

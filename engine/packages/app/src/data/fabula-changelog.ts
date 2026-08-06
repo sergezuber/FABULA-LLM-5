@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.182.0"
+export const FABULA_VERSION = "0.183.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.183.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Каталог, из которого запущена программа, и домашний каталог узнаются В ТОМ НАПИСАНИИ, В КАКОМ ИХ ДАЛИ, а не только в приведённом. Приводить разрешено только их — проверяемый путь не трогается намеренно, потому что обращение к файловой системе за ним однажды заморозило весь сервер на облачной папке. Из-за этого на файловой системе, у которой для одного каталога есть несколько написаний, база и кандидат описывали одно место разными словами: проект в собственном профиле пользователя получал ответ «не разрешено». Хранить второе написание рядом с первым — это одно сравнение и никакого обращения к диску.",
+        en: "The launch directory and the home directory are recognised IN THE SPELLING THEY WERE GIVEN, not only in the canonical one. Only they may be canonicalised — the path being checked is deliberately left alone, because asking the filesystem about it once froze the whole server on a cloud-managed folder. So on a filesystem with more than one spelling for a directory, the base and the candidate described the same place in different words, and a project inside the user's own profile was answered \"not allowed\". Keeping the second spelling beside the first is one comparison and no disk access.",
+      },
+    ],
+  },
   {
     version: "0.182.0",
     date: "2026-08-06",

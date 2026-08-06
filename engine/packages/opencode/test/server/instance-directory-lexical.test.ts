@@ -9,6 +9,7 @@ import { describe, expect, test, beforeAll, spyOn } from "bun:test"
 import * as fs from "node:fs"
 import { dirname as pathDirname } from "node:path"
 import { instanceDirectoryAllowed } from "../../src/server/routes/instance/middleware"
+import os from "os"
 
 const HOME = process.env.HOME || "/Users/nobody"
 

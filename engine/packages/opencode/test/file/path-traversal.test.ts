@@ -6,6 +6,7 @@ import { Filesystem } from "../../src/util"
 import { File } from "../../src/file"
 import { Instance } from "../../src/project/instance"
 import { provideInstance, tmpdir, withTmpdirOutsideGit } from "../fixture/fixture"
+import os from "os"
 
 const run = <A, E>(eff: Effect.Effect<A, E, File.Service>) =>
   Effect.runPromise(provideInstance(Instance.directory)(eff.pipe(Effect.provide(File.defaultLayer))))
@@ -223,7 +224,13 @@ describe("Instance.provide directory safety", () => {
   // Windows names its own in the environment, so they are read rather than written down — a machine with
   // Windows on another drive, or a localized Program Files, is covered by the same rule.
   test("refuses a directory that belongs to the operating system", async () => {
-    const posixPaths = ["/etc", "/etc/nginx", "/etc/shadow", "/proc", "/sys", "/dev", "/root", "/boot"]
+    // The running user's OWN home is deliberately absent from the guard — see `protectedPrefixes`. On a
+    // machine where that home IS one of these (a container running as root), asserting it here would be
+    // asserting that the application refuses the very directory the person is working in.
+    const own = os.homedir()
+    const posixPaths = ["/etc", "/etc/nginx", "/etc/shadow", "/proc", "/sys", "/dev", "/root", "/boot"].filter(
+      (p) => p !== own && !own.startsWith(`${p}/`),
+    )
     const windowsPaths = [process.env["SystemRoot"], process.env["ProgramFiles"], process.env["ProgramData"]]
       .filter((v): v is string => !!v)
       .flatMap((v) => [v, path.join(v, "sub")])
@@ -258,5 +265,22 @@ describe("Instance.provide directory safety", () => {
     await expect(
       Instance.provide({ directory: sub, fn: () => Instance.directory }),
     ).resolves.toBe(sub)
+  })
+})
+
+// ── The running user's own home is not "the operating system's" ───────────────────────────────────
+//
+// Found by launching the application, not by a check: the window opened on Linux and the page said
+// "Access denied: target is a protected system directory". In a container the user IS root, so the guard
+// had refused them their own home. Every automated check passed — none of them runs as a user whose home
+// is on that list, which is exactly why a live launch is a different instrument.
+describe("Instance.provide and the running user's home", () => {
+  test("the home of whoever is running is never refused as a system directory", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await expect(Instance.provide({ directory: tmp.path, fn: () => Instance.directory })).resolves.toBe(tmp.path)
+    // …and the machine's own directories still are, whoever is running.
+    for (const dir of ["/etc", "/proc"].filter((p) => p !== os.homedir())) {
+      await expect(Instance.provide({ directory: dir, fn: () => {} })).rejects.toThrow("Access denied")
+    }
   })
 })

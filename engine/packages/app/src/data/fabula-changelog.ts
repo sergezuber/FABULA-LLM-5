@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.181.0"
+export const FABULA_VERSION = "0.182.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,24 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.182.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Собственный домашний каталог того, кто запустил программу, больше не отклоняется как «системный». Домашний каталог суперпользователя стоит в списке защищённых, чтобы на него не мог указать ДРУГОЙ пользователь, — но когда он и есть дом запустившего, это не каталог операционной системы, а место, где лежит работа человека. Найдено запуском: окно открылось, и страница сказала «доступ запрещён» — программа отказала пользователю в его собственном доме. Ни одна автоматическая проверка этого не видела: ни одна из них не выполняется под пользователем, чей дом в том списке.",
+        en: "The home directory of whoever is running is no longer refused as a system one. The superuser's home is on the protected list so that ANOTHER user cannot point at it — but when it is the home of the person running, it is not the operating system's, it is where their work lives. Found by launching: the window opened and the page said access denied — the application had refused the user their own home. No automated check saw it: none of them runs as a user whose home is on that list.",
+      },
+      {
+        ru: "Приветствие называет машину, а не одну платформу: «модели работают на этой машине». Прежний текст говорил про Mac — на других системах это просто неверно.",
+        en: "The welcome text names the machine rather than one platform: models run on this machine. The old wording named a Mac, which on other systems is simply untrue.",
+      },
+      {
+        ru: "Сторож записи в служебное дерево снова сравнивает пути как СТРОКИ и не трогает файловую систему — так его можно спрашивать о путях, которых на этой машине нет. Приведение к написанию этой машины переехало туда, где обе стороны о ней и говорят.",
+        en: "The bookkeeping write guard compares paths as STRINGS again and does not touch the filesystem — so it can be asked about paths that are not on this machine at all. Bringing both sides into this machine's spelling moved to the place where both sides are about this machine.",
+      },
+    ],
+  },
   {
     version: "0.181.0",
     date: "2026-08-06",

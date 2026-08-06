@@ -436,10 +436,16 @@ describe("WorkflowTool run", () => {
       Effect.fnUntraced(function* ({ dir }) {
         const def = yield* Tool.init(yield* WorkflowTool)
         const session = yield* Session.Service
-        const parent = yield* session.create({
-          title: "wf tool ws",
-          permission: [{ permission: "*", pattern: "*", action: "allow" }],
-        })
+        const parent = yield* session
+          .create({ title: "wf tool ws", permission: [{ permission: "*", pattern: "*", action: "allow" }] })
+          .pipe(
+            Effect.timeout("20 seconds"),
+            Effect.catch(() =>
+              Effect.sync<never>(() => {
+                throw new Error("creating the session did not return within 20s")
+              }),
+            ),
+          )
         const { mkdirSync } = yield* Effect.promise(() => import("fs"))
         const path = yield* Effect.promise(() => import("path"))
         const sub = path.join(dir, "scratch")
@@ -494,12 +500,16 @@ describe("WorkflowTool run", () => {
       }),
       { git: true, config: providerCfg },
     ),
-    // The same headroom its neighbour above was given, and for the same reason: this starts a real
-    // workflow runtime, and the first one in a process pays for warming the layer. It had no budget of its
-    // own, so it ran on the default — enough when the suite runs this file alone, and not when the whole
-    // suite is competing for the machine. It was the only check left failing a full run, in a file whose
-    // sibling already carries the note explaining why.
-    60000,
+    // LARGER THAN THE SUM OF THE BOUNDS INSIDE IT (20s to create the session + 30s to launch + 45s to
+    // finish). An outer budget below that sum wins every race and reports only the clock — which is what
+    // happened twice: the inner bounds exist so a hang names its step, and the outer one kept firing first
+    // and saying nothing. A backstop has to sit BEHIND the things it is backing.
+    //
+    // What remains outside every bound is the fixture — it starts a real server before the body runs. In
+    // isolation this check finishes in about a second; inside a run of 366 files competing for the machine
+    // it has exceeded two minutes. That is the price of what it starts, not a fault it found, and the
+    // inner bounds are what keep a real hang from hiding behind this number.
+    180000,
   )
 })
 

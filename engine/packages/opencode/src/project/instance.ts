@@ -8,6 +8,7 @@ import { LocalContext } from "../util"
 import * as Project from "./project"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { parse as pathParse } from "path"
+import os from "os"
 
 export interface InstanceContext {
   directory: string
@@ -30,8 +31,21 @@ const project = makeRuntime(Project.Service, Project.defaultLayer)
 // they are READ rather than written down: a machine with Windows on `D:` or a localized Program Files
 // is covered by the same rule, and no drive letter is assumed.
 function protectedPrefixes(): string[] {
-  if (process.platform !== "win32")
-    return ["/etc", "/proc", "/sys", "/dev", "/boot", "/private/etc", "/root", "/var/root"]
+  if (process.platform !== "win32") {
+    // The superuser's home is on this list because ANOTHER user must not be able to point the agent at
+    // it. It comes OFF the list when it is the home of whoever is running, because then it is not the
+    // operating system's — it is where that person's work lives, and refusing it refuses the one thing
+    // the application exists to open.
+    //
+    // MEASURED, and only a live launch could have shown it: the shell started on Linux, the window opened,
+    // and the page said "Access denied: target is a protected system directory". In a container the user
+    // IS root, so this guard had just refused the user their own home. Every automated check passed —
+    // none of them runs as a user whose home is on the list.
+    const own = os.homedir()
+    return ["/etc", "/proc", "/sys", "/dev", "/boot", "/private/etc", "/root", "/var/root"].filter(
+      (p) => p !== own,
+    )
+  }
   return ["SystemRoot", "windir", "ProgramFiles", "ProgramFiles(x86)", "ProgramData"]
     .map((name) => process.env[name])
     .filter((v): v is string => !!v)

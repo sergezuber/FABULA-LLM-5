@@ -21,6 +21,10 @@ import { SessionID } from "./schema"
  *
  * Both sides in one spelling, from one place. READ AT CALL TIME: the data directory moves with
  * `MIMOCODE_HOME`, and a value captured at import is a snapshot of where it used to be.
+ *
+ * Used for COMPARISONS only. The path builders below stay as they were: what they return is opened, and
+ * canonicalising them was a guess rather than a measured need — it changes the spelling every caller and
+ * every expectation already agrees on, for no fault anybody had observed.
  */
 export function memoryRoot(): string {
   return AppFileSystem.normalizePath(path.join(Global.Path.data, "memory"))
@@ -31,7 +35,7 @@ export function memoryRoot(): string {
  * other per-session memory files under `<data>/memory/sessions/<sid>/`.
  */
 export function metaDir(sessionID: SessionID): string {
-  return path.join(memoryRoot(), "sessions", sessionID)
+  return path.join(Global.Path.data, "memory", "sessions", sessionID)
 }
 
 /**
@@ -45,7 +49,7 @@ export function checkpointPath(sessionID: SessionID): string {
  * v5 per-project memory file at `<data>/memory/projects/<pid>/MEMORY.md`.
  */
 export function memoryPath(projectID: ProjectID): string {
-  return path.join(memoryRoot(), "projects", projectID, "MEMORY.md")
+  return path.join(Global.Path.data, "memory", "projects", projectID, "MEMORY.md")
 }
 
 /**
@@ -53,7 +57,7 @@ export function memoryPath(projectID: ProjectID): string {
  * cross-project preferences. Read-only from the agent side; no auto-create.
  */
 export function globalMemoryPath(): string {
-  return path.join(memoryRoot(), "global", "MEMORY.md")
+  return path.join(Global.Path.data, "memory", "global", "MEMORY.md")
 }
 
 /**

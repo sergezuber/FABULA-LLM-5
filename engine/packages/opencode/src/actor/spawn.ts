@@ -702,10 +702,21 @@ export const layer = Layer.effect(
           concurrency: "unbounded",
           discard: true,
         })
+          // RECORD THE DECISION FIRST, then wait for the child to notice. `state.cancelActor` waits for a
+          // child to reach a point where it CAN notice, and a child waiting on the model does not reach one
+          // until the model answers — so a caller that rightly stops waiting (a workflow being torn down
+          // bounds that wait, because Stop must stop) left the child with NO recorded outcome at all. That
+          // is an orphan, and it is exactly what the reclaim check exists to catch.
+          //
+          // MEASURED TWICE, and the first measurement was worthless: on this developer's machine the
+          // outcomes are identical with and without this order, because `cancelActor` returns fast enough
+          // there for the stamp to land either way. I concluded it changed nothing and reverted it; a Linux
+          // runner produced the orphan on the very next run. A race measured only where it does not occur
+          // has not been measured.
+          yield* actorReg
+            .updateStatus(sessionID, actorID, { status: "idle", lastOutcome: "cancelled" })
+            .pipe(Effect.ignore)
           yield* state.cancelActor(sessionID, actorID)
-        yield* actorReg
-          .updateStatus(sessionID, actorID, { status: "idle", lastOutcome: "cancelled" })
-          .pipe(Effect.ignore)
         yield* Effect.sync(() => forkContexts.delete(actorID))
       })
 

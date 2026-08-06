@@ -96,7 +96,12 @@ export const assertWriteAllowed = Effect.fn("Tool.assertWriteAllowed")(function*
   })()
 
   assertMemoryWriteAllowed({
-    target,
+    // Both sides in ONE spelling, brought together HERE because this is where both describe THIS machine.
+    // The root is canonical and the target arrived as the caller wrote it, so a filesystem with more than
+    // one spelling for a path had the guard compare two of them, decide the write was not in the memory
+    // tree, and hand it to the permission ask this guard exists to take over from. The guard itself stays
+    // purely lexical, so it can still be asked about paths that are not on this machine.
+    target: process.platform === "win32" ? AppFileSystem.normalizePath(target) : target,
     agentName: ctx.agent,
     memoryRoot: memoryRoot(),
     projectID,

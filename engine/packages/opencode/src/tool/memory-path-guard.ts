@@ -101,12 +101,14 @@ export function assertMemoryWriteAllowed(input: {
   sessionID: SessionID
   taskId?: string
 }): void {
-  const { agentName, memoryRoot, projectID, sessionID } = input
-  // Both sides in ONE spelling. The root arrives canonical and the target arrived as the caller wrote it,
-  // so on a filesystem that has more than one spelling for a path the guard compared two of them, decided
-  // the write was not in the memory tree at all, and returned — handing the write to the permission ask
-  // that this guard exists to take over from.
-  const target = AppFileSystem.normalizePath(input.target)
+  // CONTRACT: `target` and `memoryRoot` arrive in the SAME spelling. This function compares them as
+  // strings and does not touch the filesystem — deliberately, so it can be asked about paths that are not
+  // on this machine at all. Canonicalising the target HERE resolved it against this machine and broke
+  // exactly that: a caller asking about `/data/memory/...` on a system that spells paths differently got
+  // a target on some drive and a root that was not, so the guard decided the write was outside the memory
+  // tree and let it past. Bringing both into one spelling is the CALLER's job, and `assertWriteAllowed`
+  // does it — see the note there.
+  const { target, agentName, memoryRoot, projectID, sessionID } = input
   const memoryFile = path.join(memoryRoot, "projects", projectID, "MEMORY.md")
   const notesFile = path.join(memoryRoot, "sessions", sessionID, "notes.md")
   const checkpointFile = path.join(memoryRoot, "sessions", sessionID, "checkpoint.md")

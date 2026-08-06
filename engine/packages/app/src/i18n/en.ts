@@ -1148,7 +1148,7 @@ export const dict = {
   "session.git.copied": "Copied",
   "onboarding.welcome.title": "Welcome to FABULA",
   "onboarding.welcome.body":
-    "A local-first AI workstation: models run on your Mac through your own engine — your code and chats never leave this device.",
+    "A local-first AI workstation: models run on this machine through your own engine — your code and chats never leave this device.",
   "onboarding.project.title": "Open a project",
   "onboarding.project.body": "Pick a folder to work in. You can always switch projects from the Home screen.",
   "onboarding.models.title": "Models",

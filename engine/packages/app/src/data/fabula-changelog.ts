@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.174.0"
+export const FABULA_VERSION = "0.175.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.175.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Приведение пути к каноническому написанию больше не зависит от того, СУЩЕСТВУЕТ ли последняя часть. Прежде оно спрашивало систему только о существующем пути, а для всего прочего возвращало просто разобранную строку — и каталог с файлом внутри него получали РАЗНЫЕ написания ровно тогда, когда каталог уже есть, а файл ещё нет. Всякий сторож, проверяющий «лежит ли это внутри того», сравнивал два написания одного и того же места и отвечал «нет»: запись в служебное дерево обвязки читалась как запись вне его. Теперь приводится самая длинная существующая часть, остальное дописывается как есть.",
+        en: "Canonicalising a path no longer depends on whether its last component EXISTS. It used to ask the system only about a path that was there and fall back to the merely-resolved string for anything else — so a directory and a file inside it came back in DIFFERENT spellings exactly when the directory was there and the file was not yet. Every guard asking \"is this inside that\" then compared two spellings of one place and answered no: a write into the harness's own bookkeeping read as a write outside it. The longest existing prefix is canonicalised now, and the rest appended unchanged.",
+      },
+      {
+        ru: "Проверки, которым нужен настоящий временной каталог, спрашивают его у системы. Вписанный «/tmp» — настоящий каталог на одних системах и путь на случайном диске на других: файл-метка туда не писался, и каждая такая проверка сообщала, что хук ни разу не сработал.",
+        en: "Checks that need a real temporary directory ask the system for one. A literal \"/tmp\" is a real directory on some systems and a path on whatever drive is current on others: the marker file was never written there, and each such check reported that the hook had never fired.",
+      },
+    ],
+  },
   {
     version: "0.174.0",
     date: "2026-08-06",

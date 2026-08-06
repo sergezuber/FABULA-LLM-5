@@ -471,6 +471,12 @@ describe("WorkflowTool run", () => {
       }),
       { git: true, config: providerCfg },
     ),
+    // The same headroom its neighbour above was given, and for the same reason: this starts a real
+    // workflow runtime, and the first one in a process pays for warming the layer. It had no budget of its
+    // own, so it ran on the default — enough when the suite runs this file alone, and not when the whole
+    // suite is competing for the machine. It was the only check left failing a full run, in a file whose
+    // sibling already carries the note explaining why.
+    60000,
   )
 })
 

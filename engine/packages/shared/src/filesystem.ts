@@ -186,13 +186,41 @@ export namespace AppFileSystem {
     return lookup(p) || "application/octet-stream"
   }
 
+  /**
+   * The canonical spelling of a path on a filesystem that has more than one spelling for it.
+   *
+   * `realpathSync.native` answers only about a path that EXISTS — it resolves the true case, the long form
+   * of a short 8.3 name, and any link along the way. For anything else it throws, and the fallback was the
+   * merely-resolved string. That made the answer depend on EXISTENCE, which is the wrong axis: a directory
+   * and a file inside it came back in DIFFERENT spellings whenever the directory was there and the file
+   * was not yet — so a guard comparing "is this path inside that root" compared two spellings of the same
+   * place and said no. Measured: a write to the harness's own memory tree read as outside it, on a machine
+   * where the root existed and the file was about to be created.
+   *
+   * So the longest EXISTING prefix is canonicalised and the remainder is appended unchanged. A path whose
+   * parents exist now answers the same way whether or not its last component does, which is what every
+   * caller assumed all along.
+   */
   export function normalizePath(p: string): string {
     if (process.platform !== "win32") return p
     const resolved = pathResolve(windowsPath(p))
     try {
       return realpathSync.native(resolved)
     } catch {
-      return resolved
+      /* fall through: canonicalise what exists, keep the rest */
+    }
+    const tail: string[] = []
+    let head = resolved
+    for (;;) {
+      const parent = dirname(head)
+      if (parent === head) return resolved // reached a root that does not resolve — nothing to canonicalise
+      tail.unshift(head.slice(parent.length).replace(/^[\\/]+/, ""))
+      head = parent
+      try {
+        return join(realpathSync.native(head), ...tail)
+      } catch {
+        /* keep walking up */
+      }
     }
   }
 

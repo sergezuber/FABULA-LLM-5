@@ -51,6 +51,7 @@ import { provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { TestLLMServer } from "../lib/llm-server"
 import { Inbox } from "../../src/inbox"
+import os from "os"
 
 afterEach(async () => {
   await Instance.disposeAll()
@@ -280,7 +281,9 @@ describe("Tool whitelist (Task 14)", () => {
         })
 
         // Turn 1: model emits a bash tool call. Turn 2: model wraps up.
-        yield* llm.tool("bash", { command: "echo hello", description: "echo", workdir: "/tmp" })
+        // A working directory that exists on THIS system. What this test is about is the whitelist, and a
+        // directory the platform does not have makes the run fail for a reason it never meant to measure.
+        yield* llm.tool("bash", { command: "echo hello", description: "echo", workdir: os.tmpdir() })
         yield* llm.text("done")
 
         yield* prompt.prompt({

@@ -12,6 +12,10 @@ import { Bus } from "../../src/bus"
 import { AppRuntime } from "../../src/effect/app-runtime"
 import { Actor } from "../../src/actor/spawn"
 import { startScriptedLLMServer, textStopResponse } from "../lib/scripted-llm-server"
+// The platform's own temp root. A literal "/tmp" is a real directory on one family of systems and, on
+// the other, a path on whatever drive is current — the marker file these tests read back was never
+// written there, so each read an empty string and reported the hook as never having fired.
+import os from "os"
 
 void Log.init({ print: false })
 
@@ -459,7 +463,7 @@ describe("actor.preStop ReAct loop", () => {
 describe("actor.postStop ReAct loop", () => {
   test("postStop runs after delivery; caller's outcome.finalText is delivery snapshot", async () => {
     // Use a marker file so the test plugin can record postStop completion.
-    const markerPath = path.join("/tmp", `marker-${Date.now()}-${Math.random()}`)
+    const markerPath = path.join(os.tmpdir(), `marker-${Date.now()}-${Math.random()}`)
 
     const server = startScriptedLLMServer([
       { lines: textStopResponse("first") },   // turn 1 (delivery)
@@ -728,7 +732,7 @@ describe("actor.postStop ReAct loop", () => {
 
 describe("actor.preStop matcher behaviour (integration)", () => {
   test("default-excluded built-in: explore subagent does not trigger hook", async () => {
-    const markerPath = path.join("/tmp", `matcher-builtin-${Date.now()}-${Math.random()}`)
+    const markerPath = path.join(os.tmpdir(), `matcher-builtin-${Date.now()}-${Math.random()}`)
     const server = startScriptedLLMServer([
       { lines: textStopResponse("done") },
     ])
@@ -804,7 +808,7 @@ describe("actor.preStop matcher behaviour (integration)", () => {
   })
 
   test("explicit array include for built-in: hook fires when agentType array names it", async () => {
-    const markerPath = path.join("/tmp", `matcher-include-${Date.now()}-${Math.random()}`)
+    const markerPath = path.join(os.tmpdir(), `matcher-include-${Date.now()}-${Math.random()}`)
     const server = startScriptedLLMServer([
       { lines: textStopResponse("explore done") },
     ])
@@ -883,7 +887,7 @@ describe("actor.preStop matcher behaviour (integration)", () => {
   })
 
   test("regex agentType matches non-builtin but excludes builtin", async () => {
-    const markerPath = path.join("/tmp", `matcher-regex-${Date.now()}-${Math.random()}`)
+    const markerPath = path.join(os.tmpdir(), `matcher-regex-${Date.now()}-${Math.random()}`)
     const server = startScriptedLLMServer([
       { lines: textStopResponse("done builtin") },
       { lines: textStopResponse("done custom") },
@@ -983,7 +987,7 @@ describe("actor.preStop matcher behaviour (integration)", () => {
   })
 
   test("mode: subagent filter excludes peer spawns", async () => {
-    const markerPath = path.join("/tmp", `matcher-mode-${Date.now()}-${Math.random()}`)
+    const markerPath = path.join(os.tmpdir(), `matcher-mode-${Date.now()}-${Math.random()}`)
     const server = startScriptedLLMServer([
       { lines: textStopResponse("peer done") },
       { lines: textStopResponse("subagent done") },
@@ -1088,7 +1092,7 @@ describe("actor.postStop spawning child actors", () => {
     // Approach A: test body simulates both spawns; postStop hook records which
     // agentType fired. Demonstrates that two related actors (outer + progress-maintainer)
     // each run postStop exactly once — total LLM calls is bounded at 2.
-    const markerPath = path.join("/tmp", `recursion-${Date.now()}-${Math.random()}`)
+    const markerPath = path.join(os.tmpdir(), `recursion-${Date.now()}-${Math.random()}`)
 
     const server = startScriptedLLMServer([
       { lines: textStopResponse("first done") },      // outer subagent

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { loadComposeBundle } from "../../src/skill/compose/bundle.macro"
 import { ConfigCompose } from "../../src/config"
+import path from "path"
 
 const bundle = loadComposeBundle()
 
@@ -142,7 +143,10 @@ describe("compose spec-anchored review contract", () => {
 })
 
 describe("compose docs dir resolution", () => {
-  const worktree = "/repo/root"
+  // A worktree is an absolute path on the system this runs on. Written with a leading slash it is one on
+  // a POSIX machine and a drive-relative path on the other, where every expectation below then compared a
+  // correct answer against a spelling that machine does not use.
+  const worktree = path.resolve(path.sep + "repo", "root")
 
   test("relative docs is passed through verbatim by default", () => {
     expect(ConfigCompose.resolveDocsDir(worktree, { docs: "docs/compose" })).toBe("docs/compose")
@@ -150,13 +154,21 @@ describe("compose docs dir resolution", () => {
 
   test("relative docs is anchored to worktree when docs_absolute is true", () => {
     expect(ConfigCompose.resolveDocsDir(worktree, { docs: "docs/compose", docs_absolute: true })).toBe(
-      "/repo/root/docs/compose",
+      path.join(worktree, "docs", "compose"),
     )
   })
 
+  // The claim is that an ABSOLUTE docs path is taken as given and the worktree ignored. Asserting the
+  // literal string measured something else: a leading slash is absolute on one family of systems and, on
+  // the other, names a directory on whatever drive is current — so a correct answer read as wrong. The
+  // input is written in this system's dialect and the property is what is checked.
   test("absolute docs ignores worktree regardless of docs_absolute", () => {
-    expect(ConfigCompose.resolveDocsDir(worktree, { docs: "/abs/docs" })).toBe("/abs/docs")
-    expect(ConfigCompose.resolveDocsDir(worktree, { docs: "/abs/docs", docs_absolute: true })).toBe("/abs/docs")
+    const absolute = path.resolve(path.sep + "abs", "docs")
+    for (const cfg of [{ docs: absolute }, { docs: absolute, docs_absolute: true }]) {
+      const resolved = ConfigCompose.resolveDocsDir(worktree, cfg)
+      expect(resolved).toBe(absolute)
+      expect(resolved.startsWith(worktree)).toBe(false)
+    }
   })
 
   test("default docs dir is used when config is absent", () => {

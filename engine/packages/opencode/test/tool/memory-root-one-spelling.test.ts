@@ -41,3 +41,32 @@ describe("the memory root has one spelling, and every comparison uses it", () =>
     expect(offenders).toEqual([])
   })
 })
+
+// ── Canonicalisation must not depend on whether the last component EXISTS ──────────────────────────
+//
+// `realpathSync.native` answers only about a path that is there. The fallback for anything else was the
+// merely-resolved string, so a directory and a file inside it came back in DIFFERENT spellings the moment
+// the directory existed and the file did not — and every guard that compares "is this inside that" then
+// compared two spellings of one place. On POSIX the function is the identity and these hold trivially;
+// on a filesystem with short names or case-insensitive components they are the whole point.
+describe("a path answers the same whether or not its leaf exists yet", () => {
+  test("an existing directory and a not-yet-created file inside it share one prefix", () => {
+    const dir = Global.Path.data
+    const notYet = path.join(dir, "no-such-file-" + process.pid + ".md")
+    const canonicalDir = AppFileSystem.normalizePath(dir)
+    expect(AppFileSystem.normalizePath(notYet).startsWith(canonicalDir)).toBe(true)
+    expect(AppFileSystem.contains(canonicalDir, AppFileSystem.normalizePath(notYet))).toBe(true)
+  })
+
+  test("depth does not change the answer — several missing components still hang off the same root", () => {
+    const deep = path.join(Global.Path.data, "a" + process.pid, "b", "c.md")
+    expect(AppFileSystem.contains(AppFileSystem.normalizePath(Global.Path.data), AppFileSystem.normalizePath(deep))).toBe(
+      true,
+    )
+  })
+
+  test("a path with nothing existing above it is still returned, not lost", () => {
+    const nowhere = path.join(path.sep + "no-root-" + process.pid, "x", "y.md")
+    expect(AppFileSystem.normalizePath(nowhere).length).toBeGreaterThan(0)
+  })
+})

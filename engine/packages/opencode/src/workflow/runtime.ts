@@ -323,6 +323,11 @@ export const layer = Layer.effect(
       )
     }
 
+    // How long a terminal transition will WAIT for children to acknowledge a graceful cancel before
+    // letting them finish on their own. Declared, not tuned: it is long enough that a child which is
+    // merely busy is still waited for, and short enough that a person pressing Stop sees it happen.
+    const RECLAIM_CHILD_CANCEL_WINDOW = "5 seconds"
+
     // Best-effort cleanup for a NON-SUCCESS terminal (cancel, deadline, script
     // failure): graceful-cancel any in-flight child agents and remove every
     // worktree the run still owns, then clear the set. NEVER throws — a reclaim
@@ -332,10 +337,26 @@ export const layer = Layer.effect(
       Effect.gen(function* () {
         const actor = spawnRef.current
         if (actor) {
+          // A GRACEFUL cancel asks a child to stop at its next opportunity, and a child waiting on the
+          // model has no next opportunity until the model answers. Awaiting all of them meant that
+          // cancelling a fan-out whose children were stuck at the model NEVER RETURNED — measured: eight
+          // children in flight, cancel still running after twenty seconds, where one or two returned at
+          // once. For the person who pressed Stop, Stop did not stop.
+          //
+          // This whole function is best-effort cleanup, and its own contract already says a failure here
+          // must not mask the terminal cause. Blocking on it is the same fault in a slower disguise: the
+          // run is cancelled either way, and `Fiber.interrupt` below tears the work down regardless. So
+          // the acknowledgements are given a window, and the terminal transition proceeds either way.
           yield* Effect.forEach(
             [...entry.childActorIDs],
             (childID) => actor.cancel(entry.sessionID, childID, "graceful").pipe(Effect.ignore),
             { concurrency: "unbounded", discard: true },
+          ).pipe(
+            Effect.timeout(RECLAIM_CHILD_CANCEL_WINDOW),
+            // On expiry the outstanding ACKNOWLEDGEMENTS are abandoned, not the cancellation: the run is
+            // flipped to cancelled below and `Fiber.interrupt` tears the work down, which is what actually
+            // stops the children. What is given up is waiting to be told so.
+            Effect.catch(() => Effect.void),
           )
         }
         yield* Effect.forEach(

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.178.0"
+export const FABULA_VERSION = "0.179.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,24 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.179.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Остановка рабочего потока действительно останавливает его, даже когда подчинённые вызовы ждут ответа модели. Вежливая отмена просит остановиться при первой возможности, а у того, кто ждёт модель, такой возможности нет, пока модель не ответит, — и отмена ждала подтверждения от каждого. Измерено: восемь подчинённых в полёте, отмена всё ещё идёт через двадцать секунд; один-двое возвращались сразу. Для нажавшего «Стоп» это значило, что стоп не останавливает.",
+        en: "Stopping a workflow actually stops it, even when its subordinate calls are waiting on the model. A graceful cancel asks them to stop at the first opportunity, and one waiting on the model has no opportunity until the model answers — and the cancel awaited an acknowledgement from every one of them. Measured: eight in flight, the cancel still running after twenty seconds, where one or two returned at once. For the person who pressed Stop, Stop did not stop.",
+      },
+      {
+        ru: "Отмена записывается в момент решения, а не в момент подтверждения. Порядок был обратным, поэтому отмеченными числились лишь те, кто успел отозваться, а остальные выглядели как никогда не отменявшиеся — притом что решение об их отмене было принято.",
+        en: "A cancellation is recorded when it is decided, not when it is acknowledged. The order was the other way, so only those that had answered counted as cancelled and the rest looked as though they had never been cancelled at all — though the decision about them had been made.",
+      },
+      {
+        ru: "Каталоги пользователя перестали получать отказ там, где система записывает домашний каталог не в той переменной, что читалась. Сторож брал только одну и молча подменял дом рабочим каталогом, отвергая ровно те проекты, ради которых существует.",
+        en: "The user's own directories are no longer refused on a system that records the home directory in a variable other than the one being read. The guard read only that one and silently substituted the launch directory, refusing exactly the projects it exists to allow.",
+      },
+    ],
+  },
   {
     version: "0.178.0",
     date: "2026-08-06",

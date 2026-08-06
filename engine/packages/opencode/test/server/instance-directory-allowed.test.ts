@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import fs from "fs"
 import path from "path"
 import { instanceDirectoryAllowed } from "../../src/server/routes/instance/middleware"
+import os from "os"
 
 // The single access predicate shared by the instance middleware (403 gate) and the global
 // fabula routes (hide sessions the app can never open). Live case 2026-07-10: CLI test runs
@@ -10,7 +11,9 @@ import { instanceDirectoryAllowed } from "../../src/server/routes/instance/middl
 describe("instanceDirectoryAllowed", () => {
   // Same source the predicate reads. The test preload remaps HOME to an isolated tmp dir,
   // so os.homedir() (the REAL home) would disagree with it.
-  const home = process.env.HOME!
+  // The same rule the predicate uses: the named HOME when there is one, the platform's answer
+  // otherwise. Reading only the variable made this compare against a home the guard never had.
+  const home = process.env["HOME"] || os.homedir()
 
   test("allows directories inside $HOME", () => {
     // Must exist: canonicalization (symlinked /var → /private/var on the isolated test HOME)

@@ -355,9 +355,24 @@ describe("WorkflowRuntime cancel cascade", () => {
           return [] as string[]
         })
         expect(inFlight.length).toBeGreaterThan(0)
-        yield* runtime.cancel({ runID })
+        // Each step bounded and NAMED. This check has now expired twice at a budget it was given —
+        // twenty seconds, then sixty — while passing on its own and beside its own directory, and a bare
+        // "timed out after N" cannot say WHICH of cancel, status, or the registry read was the one that
+        // never returned. Raising the number a third time would be guessing; reporting the step turns the
+        // next failure into a fact. Every bound here is far above what the operation costs when it works.
+        const step = <A,>(name: string, eff: Effect.Effect<A, never, never>) =>
+          eff.pipe(
+            Effect.timeout("20 seconds"),
+            Effect.catch(() =>
+              Effect.sync<A>(() => {
+                throw new Error(`"${name}" did not return within 20s with ${inFlight.length} child(ren) in flight`)
+              }),
+            ),
+          )
 
-        const s = yield* runtime.status({ runID })
+        yield* step("cancel", runtime.cancel({ runID }))
+
+        const s = yield* step("status", runtime.status({ runID }))
         expect(s.status).toBe("cancelled")
 
         // The claim is about the children that were IN FLIGHT when cancel ran — those are the ones reclaim
@@ -365,7 +380,7 @@ describe("WorkflowRuntime cancel cascade", () => {
         // assertion time asks a different question: a child that registers in the gap between cancel and
         // this read was never in flight at cancel, and counting it makes the outcome depend on how quickly
         // the machine got here.
-        const after = yield* registry.listBySession(parent.id)
+        const after = yield* step("listBySession", registry.listBySession(parent.id))
         const reclaimed = after.filter((a) => inFlight.includes(a.actorID))
         expect(reclaimed.length).toBe(inFlight.length)
         expect(reclaimed.filter((a) => a.lastOutcome !== "cancelled")).toEqual([])

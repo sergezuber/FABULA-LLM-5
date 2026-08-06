@@ -33,7 +33,7 @@ describe("a spawn into a removed working directory blames the command", () => {
     const msg = String(r.error?.message ?? "")
     expect(msg).toContain("ENOENT")
     // …and this is the trap: the message carries the COMMAND, not the missing directory.
-    expect(msg).toContain("echo")
+    expect(msg).toContain(COMMAND_NAME)
     expect(msg).not.toContain(gone)
   })
 

@@ -8,6 +8,7 @@ import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { WorkspaceID } from "@/control-plane/schema"
 import { Flag } from "@/flag/flag"
 import { Filesystem } from "@/util"
+import os from "os"
 
 // FABLE: a local desktop app legitimately opens projects across the whole $HOME tree
 // (~/ChessAI, ~/GitHub, ~/Downloads/Projects), not just the launch cwd (~/FABLE). Allow any
@@ -38,7 +39,12 @@ export function instanceDirectoryAllowed(directory: string): boolean {
   // — never by asking the filesystem.
   if (!allowedBases) {
     const cwd = Filesystem.resolve(process.cwd())
-    allowedBases = { cwd, home: process.env.HOME ? Filesystem.resolve(process.env.HOME) : cwd }
+    // `HOME` when it is NAMED — the tests set it, and a POSIX user may override it deliberately —
+    // otherwise the platform's own answer. Reading only `HOME` meant that on a system which records the
+    // user's directory elsewhere the home base silently became the launch cwd, and every project under
+    // the user's own profile was refused with a 403 by a guard that was supposed to allow exactly those.
+    const home = process.env["HOME"] || os.homedir()
+    allowedBases = { cwd, home: home ? Filesystem.resolve(home) : cwd }
   }
   const raw = normalizeLexical(directory)
   const twins =

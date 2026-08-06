@@ -257,6 +257,70 @@ jobs:
           strings -a -el "$exe" | grep -qF "$v" || { echo "::error::the PE version resource does not carry $v"; exit 1; }
           echo "built $(basename "$inst") carrying $v"
 
+  shell-windows:
+    name: The application starts on a clean Windows machine
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install dependencies
+        shell: bash
+        run: |
+          for i in 1 2 3; do
+            (cd engine && bun install) && exit 0
+            echo "install attempt $i did not succeed; retrying"
+            sleep $((i * 10))
+          done
+          echo "dependencies could not be installed after three attempts"
+          exit 1
+      - name: Stamp the declared version into the shell manifests
+        run: bun scripts/stamp-shell-version.ts
+      - name: Build the engine and the shell for THIS machine
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd engine/packages/opencode && bun run script/build.ts --only=windows-x64)
+          mkdir -p bin
+          cp engine/packages/opencode/dist/mimocode-windows-x64/bin/mimo.exe bin/fabula.exe
+          (cd shell && cargo build --release)
+        env:
+          MIMOCODE_CHANNEL: prod
+      # The claim is a WINDOW, so a window is what is asserted — and whether a runner can show one is a
+      # question to MEASURE, not to declare impossible. This image ships the WebView2 runtime and the
+      # runner holds a window station, so a GUI process can be started and asked for its main window.
+      # If it turns out it cannot, this row says so in its own words rather than leaving a gap that reads
+      # like coverage.
+      - name: Start it and require a window
+        shell: pwsh
+        run: |
+          $exe = "shell/target/release/fabula-shell.exe"
+          if (-not (Test-Path $exe)) { Write-Output "::error::no shell executable at $exe"; exit 1 }
+          $p = Start-Process -FilePath $exe -PassThru
+          # Wait for the CONDITION — a main window — not for a duration.
+          $deadline = (Get-Date).AddSeconds(120)
+          while ((Get-Date) -lt $deadline) {
+            $p.Refresh()
+            if ($p.HasExited) { break }
+            if ($p.MainWindowHandle -ne 0) { break }
+            Start-Sleep -Seconds 2
+          }
+          $p.Refresh()
+          Write-Output "-- the process --"
+          if ($p.HasExited) { Write-Output "it exited with $($p.ExitCode)" } else { Write-Output "still running, pid $($p.Id)" }
+          Write-Output "main window handle: $($p.MainWindowHandle)"
+          Write-Output "main window title : $($p.MainWindowTitle)"
+          Write-Output "-- the engine --"
+          try {
+            $r = Invoke-WebRequest -Uri "http://127.0.0.1:4096/global/health" -TimeoutSec 5 -UseBasicParsing
+            Write-Output "GET /global/health -> $($r.StatusCode)"
+          } catch { Write-Output "the engine did not answer: $($_.Exception.Message)" }
+          $ok = (-not $p.HasExited) -and ($p.MainWindowHandle -ne 0)
+          if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+          if (-not $ok) { Write-Output "::error::the application produced no window on a clean Windows machine"; exit 1 }
+
   deploy-guard-windows:
     name: Deploy guard runs where bash is optional
     runs-on: windows-latest

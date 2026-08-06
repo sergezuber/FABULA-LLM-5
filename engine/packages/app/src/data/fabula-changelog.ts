@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.200.0"
+export const FABULA_VERSION = "0.201.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.201.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Приложение запускается и на чистой машине Windows — и это ИЗМЕРЯЕТСЯ. Утверждение здесь — окно, поэтому окно и проверяется: ряд собирает движок и оболочку прямо на той машине, запускает её и ждёт ПОЯВЛЕНИЯ главного окна у процесса, а не отрезка времени. Может ли исполнитель показать окно — вопрос к замеру, а не повод объявить невозможным; если окажется, что не может, ряд скажет это своими словами, а не оставит пробел, который читается как покрытие.",
+        en: "The application starts on a clean Windows machine too — and it is MEASURED. The claim here is a window, so a window is what is asserted: the row builds the engine and the shell on that machine, starts it, and waits for the process to HAVE a main window rather than for a stretch of time. Whether a runner can show a window is a question to measure, not grounds to declare it impossible; and if it turns out it cannot, the row says so in its own words rather than leaving a gap that reads like coverage.",
+      },
+    ],
+  },
   {
     version: "0.200.0",
     date: "2026-08-06",

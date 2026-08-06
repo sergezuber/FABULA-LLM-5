@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.179.0"
+export const FABULA_VERSION = "0.180.0"
 
 export type ChangelogEntry = {
   version: string
@@ -11,6 +11,20 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.180.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Все пути служебного дерева строятся от ОДНОГО приведённого корня, и сторож записи приводит цель к тому же написанию. Корень приходил приведённым, а цель — как её написал вызывающий, поэтому сторож решал, что запись вообще не в этом дереве, и передавал её тому запросу разрешения, который сам же и должен был заменить.",
+        en: "Every path in the bookkeeping tree is built from ONE canonical root, and the write guard brings its target into that same spelling. The root arrived canonical and the target as the caller wrote it, so the guard decided the write was not in that tree at all and handed it to the very permission request it exists to take over from.",
+      },
+      {
+        ru: "Проверки разрешений на команды оболочки называют, что было запрошено на самом деле. «Ожидалось одно, получено другое» говорит лишь, какой запрос оказался первым, — но не был ли путь вовсе не распознан, распознан и сочтён внутренним, или запрошен в другом порядке. Это три разные неисправности с тремя разными исправлениями, и теперь вся последовательность едет в сообщении.",
+        en: "The shell-command permission checks name what was actually asked. \"Expected one, received another\" says only which request came first — not whether the path was never recognised, was recognised and judged internal, or was asked for in a different order. Those are three different faults with three different fixes, and the whole sequence now travels in the message.",
+      },
+    ],
+  },
+  {
     version: "0.179.0",
     date: "2026-08-06",
     items: [
@@ -19,8 +33,8 @@ export const CHANGELOG: ChangelogEntry[] = [
         en: "Stopping a workflow actually stops it, even when its subordinate calls are waiting on the model. A graceful cancel asks them to stop at the first opportunity, and one waiting on the model has no opportunity until the model answers — and the cancel awaited an acknowledgement from every one of them. Measured: eight in flight, the cancel still running after twenty seconds, where one or two returned at once. For the person who pressed Stop, Stop did not stop.",
       },
       {
-        ru: "Отмена записывается в момент решения, а не в момент подтверждения. Порядок был обратным, поэтому отмеченными числились лишь те, кто успел отозваться, а остальные выглядели как никогда не отменявшиеся — притом что решение об их отмене было принято.",
-        en: "A cancellation is recorded when it is decided, not when it is acknowledged. The order was the other way, so only those that had answered counted as cancelled and the rest looked as though they had never been cancelled at all — though the decision about them had been made.",
+        ru: "Поправка к предыдущей записи этой же волны: перестановка порядка записи отмены была объявлена второй половиной исправления, а затем измерена — исходы совпадают с ней и без неё, потому что при ограниченном ожидании отметка успевает лечь в любом случае. Перестановка отменена; чинит только окно ожидания.",
+        en: "A correction to the entry above, from this same wave: reordering when a cancellation is recorded was announced as the second half of the fix and then measured — the outcomes are identical with and without it, because once the wait is bounded the mark lands in time either way. The reorder was reverted; the window is the whole fix.",
       },
       {
         ru: "Каталоги пользователя перестали получать отказ там, где система записывает домашний каталог не в той переменной, что читалась. Сторож брал только одну и молча подменял дом рабочим каталогом, отвергая ровно те проекты, ради которых существует.",

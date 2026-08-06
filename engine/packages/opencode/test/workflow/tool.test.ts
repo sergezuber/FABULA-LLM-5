@@ -459,7 +459,17 @@ describe("WorkflowTool run", () => {
           metadata: () => Effect.void,
           ask: () => Effect.void,
         }
-        const res = yield* def.execute({ operation: "run", script, workspace: sub, async: true }, ctx as any)
+        // Bounded and NAMED, like the wait below. The 45s wait never reported anything, which means the
+        // step that did not return is this one — starting the run — and a bare "timed out after 60000ms"
+        // cannot distinguish "the launch hung" from "the run never finished". Each step says which it was.
+        const res = yield* def.execute({ operation: "run", script, workspace: sub, async: true }, ctx as any).pipe(
+          Effect.timeout("30 seconds"),
+          Effect.catch(() =>
+            Effect.sync<never>(() => {
+              throw new Error("starting the run did not return within 30s")
+            }),
+          ),
+        )
         expect(res.metadata.runID).toBeDefined()
         // Wait for completion + assert the file landed under the chosen workspace (sub), not the worktree root.
         const runtime = yield* WorkflowRuntime.Service

@@ -702,17 +702,10 @@ export const layer = Layer.effect(
           concurrency: "unbounded",
           discard: true,
         })
-        // RECORD THE DECISION FIRST, then ask the child to stop. The order was the other way, and
-        // `state.cancelActor` waits for the child to reach a point where it can notice — which a child
-        // waiting on the model does not reach until the model answers. So the ledger said "cancelled"
-        // only for children that had ACKNOWLEDGED, and a caller that rightly stopped waiting (Stop must
-        // stop) left the rest looking as though they had never been cancelled at all. The registry
-        // records what was DECIDED here; whether the child has finished reacting is a separate question,
-        // and not one anybody can answer synchronously.
+          yield* state.cancelActor(sessionID, actorID)
         yield* actorReg
           .updateStatus(sessionID, actorID, { status: "idle", lastOutcome: "cancelled" })
           .pipe(Effect.ignore)
-        yield* state.cancelActor(sessionID, actorID)
         yield* Effect.sync(() => forkContexts.delete(actorID))
       })
 

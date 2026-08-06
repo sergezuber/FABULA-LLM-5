@@ -31,7 +31,7 @@ export function memoryRoot(): string {
  * other per-session memory files under `<data>/memory/sessions/<sid>/`.
  */
 export function metaDir(sessionID: SessionID): string {
-  return path.join(Global.Path.data, "memory", "sessions", sessionID)
+  return path.join(memoryRoot(), "sessions", sessionID)
 }
 
 /**
@@ -45,7 +45,7 @@ export function checkpointPath(sessionID: SessionID): string {
  * v5 per-project memory file at `<data>/memory/projects/<pid>/MEMORY.md`.
  */
 export function memoryPath(projectID: ProjectID): string {
-  return path.join(Global.Path.data, "memory", "projects", projectID, "MEMORY.md")
+  return path.join(memoryRoot(), "projects", projectID, "MEMORY.md")
 }
 
 /**
@@ -53,7 +53,7 @@ export function memoryPath(projectID: ProjectID): string {
  * cross-project preferences. Read-only from the agent side; no auto-create.
  */
 export function globalMemoryPath(): string {
-  return path.join(Global.Path.data, "memory", "global", "MEMORY.md")
+  return path.join(memoryRoot(), "global", "MEMORY.md")
 }
 
 /**

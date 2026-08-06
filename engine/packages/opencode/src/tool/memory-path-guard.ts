@@ -1,6 +1,7 @@
 import * as path from "path"
 import type { ProjectID } from "../project/schema"
 import type { SessionID } from "../session/schema"
+import { AppFileSystem } from "@mimo-ai/shared/filesystem"
 
 const VALID_SCOPES = ["global", "projects", "sessions"] as const
 
@@ -100,7 +101,12 @@ export function assertMemoryWriteAllowed(input: {
   sessionID: SessionID
   taskId?: string
 }): void {
-  const { target, agentName, memoryRoot, projectID, sessionID } = input
+  const { agentName, memoryRoot, projectID, sessionID } = input
+  // Both sides in ONE spelling. The root arrives canonical and the target arrived as the caller wrote it,
+  // so on a filesystem that has more than one spelling for a path the guard compared two of them, decided
+  // the write was not in the memory tree at all, and returned — handing the write to the permission ask
+  // that this guard exists to take over from.
+  const target = AppFileSystem.normalizePath(input.target)
   const memoryFile = path.join(memoryRoot, "projects", projectID, "MEMORY.md")
   const notesFile = path.join(memoryRoot, "sessions", sessionID, "notes.md")
   const checkpointFile = path.join(memoryRoot, "sessions", sessionID, "checkpoint.md")

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.175.0"
+export const FABULA_VERSION = "0.176.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.176.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Проверка отправки уведомления не выдаёт чужой простой за нашу поломку. Она бьёт по настоящей внешней службе: когда та отвечает — утверждение настоящее, наш запрос ею принимается; когда не отвечает — измерена чужая доступность, и об этом говорится прямо, с названной причиной. Ответ по существу, но с отказом, по-прежнему считается провалом — ради этого проверка и существует.",
+        en: "The notification check no longer reports somebody else's downtime as our defect. It posts to a real external service: when that service answers, the assertion is the real thing — the request we build is one it accepts; when it does not answer, what was measured is its availability, and the check says so with the reason named. A service that answers and refuses us is still a failure, which is what the check is for.",
+      },
+    ],
+  },
   {
     version: "0.175.0",
     date: "2026-08-06",

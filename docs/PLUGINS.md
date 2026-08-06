@@ -14,7 +14,11 @@ timeline **are** the plugins — same names everywhere: in `list_plugins`, in **
 Web fetch with clean extraction (HTML→Markdown, PDFs included), private web & image search, shell, sandboxed code execution, exact-match file editing, a real Chromium it can drive, image analysis, text-to-speech, transcription, weather, places, scheduled jobs, durable hand-off notes between sessions, and a workflow graph that runs independent sub-steps in parallel.
 
 ### It doesn't break
-A loop-guard hard-stops the repeated no-progress calls any model in the socket can fall into — including near-duplicate web/MCP search queries (paraphrased re-searches are blocked at the second occurrence, and a per-turn budget of distinct searches forces synthesis); malformed tool arguments are repaired on the fly, and exact-match edits fall back through a full unicode-drift matcher (smart quotes, any dash, non-breaking/ideographic spaces, BOM) so a near-miss still lands on the right bytes; the bundled `:1235` adapter normalizes reasoning-model quirks, watches the prefix cache and flags silent context-overflow. An optional coding tool belt masks the tools a coding task never uses, and every command's output is capped and spilled to a file with a cursor — so a giant test log can't blow the context window.
+
+- **Loops are cut, not tolerated.** Byte-identical calls are hard-stopped; a paraphrased re-search is blocked at the second occurrence, and a per-turn budget of distinct searches forces synthesis.
+- **Near-miss edits still land.** Malformed tool arguments are repaired on the fly, and exact-match edits fall through a unicode-drift matcher — smart quotes, any dash, non-breaking spaces, BOM.
+- **The transport is guarded.** The bundled `:1235` adapter normalizes reasoning-model quirks, watches the prefix cache, and flags silent context-overflow.
+- **Output can't blow the window.** Every command's output is capped and spilled to a file with a continuation cursor, so a giant test log stays a log.
 
 ### It doesn't leak
 SSRF guards on every outbound fetch, secret redaction in tool output, prompt-injection defense (untrusted web content is wrapped and isolated), command/approval guards on the shell.
@@ -29,17 +33,17 @@ Deleting a chat purges all of its artifacts; web caches are wiped on quit; no te
 
 | Tag | What it does |
 |---|---|
-| `verify` | **The heart of the harness.** `reproduce-gate` validates the reproduction test against the pre-patch tree — a test that passes with *and* without the change is fake, and a fix that breaks a sibling is a regression; either keeps the build *not done*. `change_quiz` grades the agent against its own diff before "done" stands. Both fire themselves. The `attest` gate carries the same idea to **non-code** deliverables (an analysis, a plan, a research summary): it decomposes the written result into typed claims and grounds each against its cited source — a quote must grep-match the *right* source, a number must appear in it — flagging fabrications with a typed fix, silent on chat turns. Validated on a planted-defect bench and a live run; on by default and fail-open (it never falsely rejects grounded work), spending a few aux-calls per deliverable task. *(`fabula-reproduce-gate`, `fabula-change-quiz`, `fabula-attest`)* |
-| `go-audit` | **Go projects only — silent everywhere else.** **A deterministic floor under the model.** When a Go change goes green, `goaudit` runs the module's own analysers once — `govulncheck`, `gosec`, `staticcheck`, NilAway, `go vet`, `golangci-lint` — and if they are not clean it takes *done* back and hands their findings over with file and line. A known vulnerability blocks only when it is **REACHABLE**: the vulnerable symbol is actually called, not merely present in `go.mod`, so an advisory about an unused dependency never stops you. On top of that `go_audit_criteria` checks the ~30 review criteria no Go linter can decide — reading through the pool inside a transaction, goroutine leaks, silently skipped branches, unbounded queries, Kafka offsets committed too early, `sync.Pool` objects reused without `Reset` — while everything a linter already catches is declared out of scope, and every reported finding must cite a `file:line` from the diff. The same evidence is handed to the cross-model witness, because static-analysis cross-referencing is the strongest measured defence for an AI reviewer (96.9% detection, +47% of its baseline misses recovered — arXiv:2602.16741, 9,366 review trials over 8 models) and the gain is *largest* for a weaker model in the socket. **What it needs:** the Go toolchain (`go`) — without it nothing runs; then the analysers you want: `brew install go golangci-lint` and `go install golang.org/x/vuln/cmd/govulncheck@latest`, `.../gosec/v2/cmd/gosec@latest`, `honnef.co/go/tools/cmd/staticcheck@latest`, `go.uber.org/nilaway/cmd/nilaway@latest`. They install into `$GOPATH/bin` (usually `~/go/bin`); the plugin adds that directory to its own PATH, so an app launched from Finder finds them too. Every analyser is optional and every absence is NAMED in the report — a thin floor never reads as a clean one. Only `govulncheck` reports reachability, so without it there is no CVE check at all. In a repository with no `go.mod` the whole plugin is inert and costs nothing. *(`fabula-goaudit`)* |
+| `verify` | **The heart of the harness.** `reproduce-gate` runs the new test against the *pre-patch* tree — a test that passes with **and** without the change is fake, and a change that breaks a sibling is a regression; either keeps the build *not done*. `change_quiz` grades the agent against its own diff before "done" stands. The `attest` gate carries the same idea to **written** deliverables — an analysis, a plan, a research summary. All three fire themselves. [Details ↓](#the-attest-gate) *(`fabula-reproduce-gate`, `fabula-change-quiz`, `fabula-attest`)* |
+| `go-audit` | **Go projects only, silent everywhere else.** On a green Go change six analysers run over the module; if they are not clean, *done* is taken back with each finding's file and line. A vulnerability blocks only when it is **reachable** — actually called, not merely in `go.mod`. [Details ↓](#the-go-security-floor) *(`fabula-goaudit`)* |
 | `receipt` | Mints the Proof-of-Done receipt on a fully-gated green verify — model, gates, diff, verification, replay command, and the run's full context identity ([open spec draft](spec/verified-autonomy-receipt-v0.2.md)): prompt-prefix fingerprint, hash of the user's request text, the serving model's descriptor (honestly labeled *not a weights hash*), and — with `FABULA_WEIGHTS_DIGEST=1` — a real digest of the weight files on disk. *(`fabula-receipt`)* |
-| `graph` | **Plans and parallelizes.** `workflow_graph` breaks a request into up to 5 isolated sub-steps — each small enough for any model to hold — and runs independent ones in parallel. The edge between steps is a contract: a step that produced nothing arrives as an ABSENCE (never as text that reads like a result), a cut on the edge says how much it removed, and a step whose output is unusable is retried once and then marked empty so the final merge is told where the holes are. Every step opens with the same block, so the serving cache reuses it instead of re-reading the request. Opt-in router (`FABULA_ROUTER=1`) can escalate one heavy step to a cloud model: one step, never your codebase. For genuinely multi-agent work the engine's own `workflow` tool is stronger — it runs a deterministic script with `parallel`/`pipeline`, per-node models and schemas, and worktree isolation. *(`fabula-graph`)* |
+| `graph` | **Plans and parallelizes.** `workflow_graph` breaks a request into up to 5 isolated sub-steps and runs independent ones in parallel. The edge between steps is a contract: a step that produced nothing arrives as an *absence*, never as text that reads like a result; a truncation says how much it removed; an unusable output is retried once, then marked empty so the merge knows where the holes are. For genuinely multi-agent work the engine's own `workflow` tool is the full orchestrator. *(`fabula-graph`)* |
 | `unknowns` | **Closes the prompt↔codebase gap before coding.** `reference_hunt` reads working code as the spec; `surface_unknowns` lists what your ask doesn't say; `interview_me` asks the one decision only you can make; `brainstorm_prototypes` gives divergent options. *(`fabula-unknowns`, `fabula-interview`, `fabula-brainstorm`)* |
 | `code` / `files` | **Executes, doesn't guess.** Guarded shell, sandboxed Python/JS, whole-file reads, exact-match `str_replace` edits that refuse to apply on a mismatch — no silent corruption. *(`fabula-tools`)* |
 | `web` | Clean web fetch (HTML→Markdown, PDFs), private SearXNG search, live weather/places — no keys required. *(`fabula-tools`)* |
 | `browser` | 13 tools drive real Chromium: navigate, click, type, screenshot, console, raw CDP. *(`fabula-browser`)* |
 | `memory` / `handoff` | Curated memory injected at session start; structured, threat-scanned hand-off notes survive between sessions. *(`fabula-context`, `fabula-handoff`)* |
-| `offload` | **Material lives outside the context; the context holds a handle to it.** When a tool brings back more than the turn can still hold, the text is kept whole outside the conversation and a short block takes its place — what it is, how big it is, how it starts, how to reach the rest. `handle_query` then asks a question of *all* of it: the body is read in window-sized slices by separate sub-calls and their answers merged, so nothing is truncated and none of the raw material enters the context. `handle_peek` reads any passage verbatim; `handle_list` names what is held. **The decision never reads your request** — it compares the size of the result against the window the model is actually loaded with, so it answers the same in any language, for any phrasing. Ordinary results are untouched, so normal work pays nothing. *(`fabula-handle`)* |
-| `corpus` | **A whole book does not have to fit in one context.** Covering a corpus, the harness takes the work over and runs it as a map-reduce: it finds the corpus itself (any `.md`/`.txt` set, any size — nothing hardcodes a volume or a filename), reads it in batches sized to the model's real window so a long chapter is never cut, summarizes each batch in an isolated call so the raw text never piles up in a single context, writes each summary to disk as it goes — an interruption resumes instead of restarting — and synthesizes one report from the summaries. Without this the same ask degenerates: the context fills, the summarizer starts continuing the analysis instead of condensing it, and the model re-reads from the beginning because nothing recorded what it had already read. **What starts it is the shape of the work, not the wording of the ask**: file after file out of one folder, past the measured window, with more still unread. The pipeline runs detached, so it outlives the turn that started it, and the model's own turn is ended so one answer reaches you rather than two. Ordinary tasks are never touched. *(`fabula-corpus`)* |
+| `offload` | **Material lives outside the context; the context holds a handle to it.** A result too large for the turn is kept whole outside the conversation, and a short block takes its place. `handle_query` then asks a question of *all* of it — read in window-sized slices by separate sub-calls, answers merged — so nothing is truncated and no raw material enters the context. `handle_peek` reads any passage verbatim. The decision compares size against the model's real window; it never reads your wording. *(`fabula-handle`)* |
+| `corpus` | **A whole book does not have to fit in one context.** Covering a corpus, the harness takes the work over as a map-reduce: batches sized to the model's real window, each summarized in an isolated call, every summary written to disk as it goes — an interruption resumes instead of restarting — then one report synthesized from them. What starts it is the *shape of the work* (file after file out of one folder, past the window, more still unread), never the wording of the ask. *(`fabula-corpus`)* |
 | `window` | **The context window is computed, never typed.** On a model change the harness reads the model's own passport and this machine's memory, works out the widest window that actually fits, loads the model at it, and corrects the figure every later decision is computed from. A number nobody measured is never trusted. *(`fabula-window`)* |
 | `context-budget` | Keeps a single turn from outgrowing the window it is served with. Near the ceiling it makes the agent consolidate what it has read and stop holding raw text; on an unbounded "read everything" ask it steers toward bounded batches with a running summary. Inert below the high-water mark, so an ordinary turn is left byte-identical and pays nothing. *(`fabula-ctxguard`)* |
 | `checkpoint` | Snapshots every file before the agent edits it, into a private git store — undo the agent even in a non-git project. *(`fabula-checkpoint`)* |
@@ -49,13 +53,59 @@ Deleting a chat purges all of its artifacts; web caches are wiped on quit; no te
 | `voice` / `vision` | TTS (with zero-install macOS fallback), local Whisper transcription, image analysis with VLM auto-detection. *(`fabula-multimodal`, `fabula-vision`)* |
 | `ops` | Real `launchd` scheduled jobs with an overdue-run ledger and native notifications. `list_scheduled` asks **launchd** what is loaded rather than trusting the files on disk, so a leftover plist launchd has never heard of is shown as `NOT LOADED` instead of as an armed job. *(`fabula-ops`)* |
 | `reliability` | Loop-guard hard-stop and on-the-fly tool-call repair. (The `:1235` adapter is a separate bundled component: [`proxy/lmstudio-adapter.py`](../proxy/lmstudio-adapter.py).) *(`fabula-reliability`)* |
-| `security` | SSRF filtering, secret redaction, injection-safe wrapping of untrusted text, and write/fetch guards on **three doors**: the tools, the shell (`lib/shelltargets.ts` reads what a command writes to and dials, then asks the *same* rules — never a second copy of them in another syntax), and code (`execute_code` without Docker runs under the macOS kernel profile, because a path a program *computes* is invisible to anything that reads arguments). An `allow_command` request made from inside a run is **recorded but not honoured** — skipping a guard is an owner decision, made in Settings ▸ Permissions. An explicit `sandbox: true` is refused when isolation is unavailable rather than quietly downgraded to the host. *(`fabula-security`)* |
+| `security` | SSRF filtering, secret redaction, injection-safe wrapping of untrusted text, and shell guards — around every tool call. The same rules cover **three doors**: the tool, the shell, and code the model writes itself, which runs under the OS kernel profile. *(`fabula-security`)* |
 | `shipnotes` / `learn` | Auto-captured edit trail + deviation notes packaged into a reviewer-ready pitch; a nudge to distill verified wins into reusable skills. *(`fabula-shipnotes`, `fabula-learn`)* |
 | `self-extend` | **The model grows its own tool belt.** `create_plugin` lets the model author a new tool when a capability is missing; the harness scaffolds it and enforces the one-plugin-per-file contract before writing — a self-authored plugin can never break loading. *(`fabula-selfextend`)* |
 | `tool-router` | **The right tools, not all the tools.** On every real user message it deterministically classifies the task into a closed profile (coding / web-research / full) and only that profile's tool schemas reach the model — tool schemas are the dominant fixed prefill cost of every request — while the set stays byte-stable within a task so the KV-cache survives. A masked tool called by name still executes through a shadow dispatch: a router miss costs one roundtrip, never a blocked task. *(`fabula-toolrouter`)* |
 | `manage` + housekeeping | Enable/disable plugins with dependency health; a capacity report naming what THIS machine is (memory kind and size, cores, accelerator, kernel confinement, containers) and what was derived from it — the window policy and how many calls may reach the model at once, each with where that number came from; whole-file read floors; a guard that blocks the auto self-improvement passes (distill and dream memory consolidation) on uncensored models; full purge of deleted chats. *(`fabula-manage`, `fabula-readfloor`, `fabula-distill-guard`, `fabula-purge-hook`)* |
 
 On/off state lives outside the repo (`~/.config/fabula/fabula-state.json` — the engine config dir; override with `FABULA_PLUGIN_STATE`, or use `FABULA_DISABLE=browser,ops`); a server restart applies changes.
+
+## Two gates in detail
+
+### The `attest` gate
+
+`verify` and `reproduce` decide whether *code* is done. `attest` carries the same standard to a written
+deliverable — an analysis, a plan, a research summary — where there is no test to run.
+
+It decomposes the text into typed claims and re-derives each one:
+
+- a **quote** must appear verbatim in the source it cites (a real line pinned to the wrong section is caught as mis-attribution);
+- a **number** must be present in the source;
+- a **process** claim like "read all N files" is checked against the run's own read log.
+
+Only the claims that fail the free deterministic check reach a quarantined model that separates a faithful
+paraphrase from a fabrication. It is silent on chat turns and fail-open, so it never rejects grounded work.
+Validated on a planted-defect bench (every planted fabrication caught, zero false positives) and a live run.
+
+### The Go security floor
+
+When a Go change goes green, the module's own analysers run once — `govulncheck`, `gosec`, `staticcheck`,
+NilAway, `go vet`, `golangci-lint`. If they are not clean, *done* is taken back with each finding's file
+and line.
+
+**Reachability is the precision lever.** A known vulnerability blocks only when the vulnerable symbol is
+actually called — not merely present in `go.mod` — so four advisories about an unused dependency never
+stop you while the one real call path does.
+
+On top of the linters, `go_audit_criteria` checks the ~30 review criteria no Go linter can decide: reading
+through the pool inside a transaction, goroutine leaks, silently skipped branches, unbounded queries, Kafka
+offsets committed too early, `sync.Pool` objects reused without `Reset`. Everything a linter already catches
+is declared out of scope, and every finding must cite a `file:line` from the diff.
+
+**Install what you want checked:**
+
+```bash
+brew install go golangci-lint
+go install golang.org/x/vuln/cmd/govulncheck@latest
+go install github.com/securego/gosec/v2/cmd/gosec@latest
+go install honnef.co/go/tools/cmd/staticcheck@latest
+go install go.uber.org/nilaway/cmd/nilaway@latest
+```
+
+Every analyser is optional, and **every absence is named in the report** — a thin floor never reads as a
+clean one. Only `govulncheck` reports reachability, so without it there is no CVE check at all. In a
+repository with no `go.mod` the plugin is inert and costs nothing.
 
 ## The disrupt layer — turning a Proof-of-Done into a proof economy (experimental, off by default)
 

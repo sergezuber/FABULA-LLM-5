@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.193.0"
+export const FABULA_VERSION = "0.194.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.194.0",
+    date: "2026-08-03",
+    items: [
+      {
+        ru: "Витрина проекта выровнена по лучшим открытым репозиториям. Первой картинкой теперь само приложение — настоящий снимок с чистыми данными, а не диаграмма; установка поднята в первую половину страницы и у каждой платформы есть команда запуска; добавлен раздел сообщества. Таблица плагинов перестала быть эссе в сетке: самая длинная ячейка ужалась с двух тысяч символов до обычного абзаца, а подробности двух главных гейтов вынесены в отдельные секции со ссылками из таблицы. У обзора архитектуры появилось кликабельное оглавление.",
+        en: "The project storefront was aligned with the best open repositories. The first image is now the app itself — a real capture with clean data, not a diagram; installation moved into the first half of the page and every platform states its launch command; a community section was added. The plugin table stopped being an essay in a grid: the longest cell shrank from two thousand characters to an ordinary paragraph, with the two main gates' details moved to their own linked sections. The architecture overview gained a clickable table of contents.",
+      },
+    ],
+  },
   {
     version: "0.193.0",
     date: "2026-08-06",

@@ -6,9 +6,12 @@ code-generation, research, and automation workloads against **local models** by 
 Everything is packaged as a native `.app` so it looks and behaves like a first-class
 desktop application rather than a browser tab.
 
-This document describes the system's layers, the LM Studio compatibility adapter, the
-plugin model, the workflow-graph orchestrator, and the cross-cutting reliability,
-security, and ops concerns.
+1. [The layers](#1-the-layers) — app, engine, adapter, plugins
+2. [The engine plugin model](#2-the-engine-plugin-model) — hooks, and the one-export rule
+3. [The plugins](#3-the-plugins) — what each core plugin owns
+4. [The workflow-graph orchestrator](#4-the-workflow-graph-orchestrator) — planning and parallel steps
+5. [Cross-cutting concerns](#5-cross-cutting-concerns) — reliability, security, ops
+6. [Configuration & requirements](#6-configuration--requirements)
 
 ---
 

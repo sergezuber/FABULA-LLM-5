@@ -14,7 +14,7 @@ Frontier models sell confidence. FABULA ships proof.
 
 </div>
 
-![Prove it](docs/assets/prove-it.jpg)
+![The FABULA desktop app](docs/assets/app.png)
 
 ## What is FABULA?
 
@@ -53,6 +53,8 @@ This one cuts them. Per-step cost dropped **45%, measured on the wire**: the req
 
 ## Don't trust it. Replay it.
 
+![Prove it](docs/assets/prove-it.jpg)
+
 Every fully-gated green run mints a **Proof-of-Done receipt**: the diff, the verify command, the model that sat in the socket, and a sha256 fingerprint of the exact context that produced the work — prompt prefix, tool schemas, router profile, request text, serving-model descriptor, optionally a real digest of the weight files on disk. No other shipped agent publishes this artifact as an open, replayable spec — if you know one that does, open an issue.
 
 A real captured run is committed verbatim — replay it:
@@ -78,30 +80,6 @@ The unedited artifacts behind it:
 
 The receipt format is an open specification any agent can implement — [verified-autonomy receipt v0.2](docs/spec/verified-autonomy-receipt-v0.2.md): JSON schema, field-by-field honesty rules, and a replay protocol. FABULA is its reference implementation: [`docs/GREENPAPER.md`](docs/GREENPAPER.md).
 
-## What's inside
-
-| Gate | What it refuses |
-|---|---|
-| **verify** | "Done" without a green run of the project's own tests — the engine presses the run back into verification by itself. |
-| **reproduce** | A fix whose new test also passes on the pre-patch code (fake repro), or breaks a sibling (regression). |
-| **quiz** | A change the agent cannot explain — graded against its own diff before done stands. |
-| **attest** | A written deliverable that asserts more than its sources support — quotes re-found verbatim, numbers re-checked, "read all N files" checked against the run's own read log. |
-| **judge** | A turn that ends before the request is fulfilled — with a hard veto when the measured trajectory contradicts the model's "done". |
-| **rewind** | Digging the hole deeper — repeated reds roll the files back to the last green checkpoint, atomically. |
-| **go floor** | A Go change whose own analysers were never asked — six of them run once on green, and a *reachable* vulnerability blocks while mere inventory does not. |
-| **re-checking** | A receipt asserting more than its verification checks — every identity claim lands in exactly one named state: re-verified here, not checkable here, or mismatch. |
-| **provenance** | Work of unknown origin — every receipt fingerprints the exact context that produced it. |
-| **escalate** | Looping on a dead end — when measured evidence says another local attempt is not worth its cost, the harness itself fetches one cloud second opinion; the local model keeps driving. |
-| **memory** | Memory you trust instead of check — a memory is bound to the code it came from and re-verified against your real tree before it is ever served back. Ships off by default; its decisions start in shadow until you have read them. |
-
-Around the gates: web research, shell, sandboxed code execution, drift-tolerant file edits, browser automation, durable hand-offs, checkpoints and undo, and SSRF / redaction / injection defense.
-
-Those guards cover **three doors, not one**: a rule that stops a tool also stops the same thing through the shell, and code without a container runs under the OS kernel profile. An agent asked to install a startup item will reach for all three — not to attack anything, but to finish its task.
-
-The full map — 40 plugins, 89 tools: [`docs/PLUGINS.md`](docs/PLUGINS.md).
-
-An optional **proof economy** builds on the receipt — publish to a content-addressed registry, cross-model witness attestation, a proof tree for team work. Off by default: [the disrupt layer](docs/PLUGINS.md#the-disrupt-layer--turning-a-proof-of-done-into-a-proof-economy-experimental-off-by-default).
-
 ## Install
 
 **You need:** [LM Studio](https://lmstudio.ai) with a tool-calling model (or any OpenAI-compatible
@@ -124,23 +102,24 @@ open FABULA-LLM-5.app
 
 ### Linux
 
-The engine, every plugin and the desktop window run here; `setup.sh` builds all of it and packages
-the window as a `.deb`.
-
 ```bash
 git clone https://github.com/sergezuber/FABULA-LLM-5 && cd FABULA-LLM-5
 ./setup.sh
+bin/fabula serve --port 4096      # then open http://127.0.0.1:4096
 ```
+
+The engine and every plugin run here. The desktop window builds separately and packages as a `.deb`:
+`bash shell/build.sh`.
 
 ### Windows
 
-`setup.ps1` is the same setup done the Windows way. Install **Git for Windows** first — the harness
-runs every command through one POSIX shell on every platform, so the safety rules have a single grammar
-to parse.
+Install **Git for Windows** first — the harness runs every command through one POSIX shell on every
+platform, so the safety rules have a single grammar to parse.
 
 ```powershell
 git clone https://github.com/sergezuber/FABULA-LLM-5; cd FABULA-LLM-5
 .\setup.ps1
+bin\fabula.exe serve --port 4096   # then open http://127.0.0.1:4096
 ```
 
 Re-run `setup.sh` (or `setup.ps1`) any time — after a `git pull`, after installing a dependency. It never overwrites your `.env` or `fabula.config.json`.
@@ -188,12 +167,42 @@ A bug is planted in [`demo/`](demo/), and every test there is green anyway.
 
 You will see it write a test, watch that test fail on the old code, and only then call the work done — on your machine, with your model.
 
+## What's inside
+
+| Gate | What it refuses |
+|---|---|
+| **verify** | "Done" without a green run of the project's own tests — the engine presses the run back into verification by itself. |
+| **reproduce** | A fix whose new test also passes on the pre-patch code (fake repro), or breaks a sibling (regression). |
+| **quiz** | A change the agent cannot explain — graded against its own diff before done stands. |
+| **attest** | A written deliverable that asserts more than its sources support — quotes re-found verbatim, numbers re-checked, "read all N files" checked against the run's own read log. |
+| **judge** | A turn that ends before the request is fulfilled — with a hard veto when the measured trajectory contradicts the model's "done". |
+| **rewind** | Digging the hole deeper — repeated reds roll the files back to the last green checkpoint, atomically. |
+| **go floor** | A Go change whose own analysers were never asked — six of them run once on green, and a *reachable* vulnerability blocks while mere inventory does not. |
+| **re-checking** | A receipt asserting more than its verification checks — every identity claim lands in exactly one named state: re-verified here, not checkable here, or mismatch. |
+| **provenance** | Work of unknown origin — every receipt fingerprints the exact context that produced it. |
+| **escalate** | Looping on a dead end — when measured evidence says another local attempt is not worth its cost, the harness itself fetches one cloud second opinion; the local model keeps driving. |
+| **memory** | Memory you trust instead of check — a memory is bound to the code it came from and re-verified against your real tree before it is ever served back. Ships off by default; its decisions start in shadow until you have read them. |
+
+Around the gates: web research, shell, sandboxed code execution, drift-tolerant file edits, browser automation, durable hand-offs, checkpoints and undo, and SSRF / redaction / injection defense.
+
+Those guards cover **three doors, not one**: a rule that stops a tool also stops the same thing through the shell, and code without a container runs under the OS kernel profile. An agent asked to install a startup item will reach for all three — not to attack anything, but to finish its task.
+
+The full map — 40 plugins, 89 tools: [`docs/PLUGINS.md`](docs/PLUGINS.md).
+
+An optional **proof economy** builds on the receipt — publish to a content-addressed registry, cross-model witness attestation, a proof tree for team work. Off by default: [the disrupt layer](docs/PLUGINS.md#the-disrupt-layer--turning-a-proof-of-done-into-a-proof-economy-experimental-off-by-default).
+
 ## Privacy
 
 - Local models mean local data: nothing leaves the machine unless *you* configure a cloud provider.
 - Deleting a chat purges its messages, artifacts, and caches — nothing is retained by the app.
 - The app wipes WebKit caches on quit; secrets live only in gitignored `.env` / `*.key` files.
 - No telemetry, no account, no phone-home.
+
+## Community
+
+- **Bugs and questions** — [GitHub Issues](https://github.com/sergezuber/FABULA-LLM-5/issues)
+- **Security reports** — privately, per [SECURITY.md](SECURITY.md)
+- **Know another agent that mints replayable receipts?** Open an issue — the receipt spec is meant to be implemented widely.
 
 ## Docs
 

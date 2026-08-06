@@ -57,6 +57,8 @@ import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { MockLLM, textReply, textWithToolReply } from "../lib/mock-llm"
 import { Inbox } from "../../src/inbox"
+import os from "os"
+import path from "path"
 
 void Log.init({ print: true })
 
@@ -334,8 +336,11 @@ describe("text loop detection (integration, MockLLM)", () => {
           const result = yield* prompt.loop({ sessionID: session.id })
 
           // === DUMP TRAJECTORY TO FILE ===
-          mockLLM.dumpTrajectory("/tmp/text-loop-trajectory.json")
-          console.log(`[text-loop] Trajectory dumped to /tmp/text-loop-trajectory.json`)
+          // The platform's own temp root: a literal "/tmp" is a real directory on one family of systems
+          // and a path on whatever drive is current on the other, where the write threw and took this
+          // check down with it — over a file that exists only to be read by a human afterwards.
+          mockLLM.dumpTrajectory(path.join(os.tmpdir(), "text-loop-trajectory.json"))
+          console.log(`[text-loop] Trajectory dumped to ${path.join(os.tmpdir(), "text-loop-trajectory.json")}`)
 
           // === FULL TRAJECTORY DUMP ===
           const allMsgs = yield* sessions.messages({ sessionID: session.id })
@@ -470,7 +475,7 @@ describe("text loop detection (integration, MockLLM)", () => {
           const result = yield* prompt.loop({ sessionID: session.id })
 
           // Dump trajectory
-          mockLLM.dumpTrajectory("/tmp/text-loop-7-repeats.json")
+          mockLLM.dumpTrajectory(path.join(os.tmpdir(), "text-loop-7-repeats.json"))
           console.log(`\n[7-repeats] Trajectory: /tmp/text-loop-7-repeats.json`)
           console.log(`[7-repeats] MockLLM calls: ${mockLLM.calls}`)
 

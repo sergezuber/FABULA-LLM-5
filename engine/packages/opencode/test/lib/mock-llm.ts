@@ -10,11 +10,13 @@
  *   mock.enqueue(textWithToolReply("thinking", "check", {q: 1}))
  *   const layer = mock.layer()
  *   // after test:
- *   mock.dumpTrajectory("/tmp/traj.json")
+ *   mock.dumpTrajectory(path.join(os.tmpdir(), "traj.json"))
  */
 import { Effect, Layer, Stream } from "effect"
 import { LLM } from "../../src/session/llm"
 import fs from "fs"
+import os from "os"
+import path from "path"
 
 // Minimal event shapes that satisfy the processor's switch cases
 type MockEvent =
@@ -109,9 +111,19 @@ export class MockLLM {
     this.#trajectory = []
   }
 
-  /** Dump trajectory to a JSON file */
+  /** Dump trajectory to a JSON file.
+   *
+   *  A DIAGNOSTIC, so it must never decide a verdict: it writes down what happened for a human to read
+   *  afterwards, and a check that passed does not become a check that failed because that file could not
+   *  be written. It did — the callers named a literal `/tmp`, a real directory on one family of systems
+   *  and a path on whatever drive is current on the other, and the throw took the check down with it.
+   */
   dumpTrajectory(filePath: string) {
-    fs.writeFileSync(filePath, JSON.stringify(this.#trajectory, null, 2), "utf-8")
+    try {
+      fs.writeFileSync(filePath, JSON.stringify(this.#trajectory, null, 2), "utf-8")
+    } catch (e) {
+      console.log(`(trajectory not written to ${filePath}: ${(e as Error).message})`)
+    }
   }
 
   /** Build a Layer<LLM.Service> that uses this mock */

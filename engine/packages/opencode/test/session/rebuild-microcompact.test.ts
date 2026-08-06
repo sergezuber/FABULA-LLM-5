@@ -17,6 +17,7 @@ import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { Log } from "../../src/util"
 import type { MessageV2 } from "../../src/session/message-v2"
+import path from "path"
 
 void Log.init({ print: false })
 
@@ -102,10 +103,10 @@ describe("rebuild microcompact", () => {
         // Seed checkpoint.md so renderRebuildContext returns non-empty (else
         // insertRebuildBoundary short-circuits and microcompact never runs).
         yield* Effect.promise(async () => {
-          await fs.mkdir(
-            checkpointPath(info.id).replace(/\/[^/]+$/, ""),
-            { recursive: true },
-          )
+          // The DIRECTORY of a path, asked of the path module rather than cut off with a forward-slash
+            // regex. Where paths use the other separator that pattern matches nothing, so the whole FILE
+            // path was created as a directory and the write that followed had nowhere to land.
+            await fs.mkdir(path.dirname(checkpointPath(info.id)), { recursive: true })
           await Bun.write(checkpointPath(info.id), "## §1 Active intent\n\nrebuild microcompact test\n")
         })
 

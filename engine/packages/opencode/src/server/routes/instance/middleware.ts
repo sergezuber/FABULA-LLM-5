@@ -67,6 +67,12 @@ export function instanceDirectoryAllowed(directory: string): boolean {
       : raw === "/private/var" || raw.startsWith("/private/var/")
         ? [raw, raw.slice("/private".length)]
         : [raw]
+  // A FILESYSTEM ROOT is always listable. The picker walks down from the top, and on a machine with more
+  // than one root there is no single top: `/` resolves to the root of the CURRENT drive, which does not
+  // contain a home that lives on another one — so the ancestor chain the picker needs simply ended. This
+  // permits LISTING, not opening: `assertSafeDirectory` refuses a root as a project directory outright,
+  // and that is the guard which decides whether work may happen there.
+  if (AppFileSystem.isFilesystemRoot(raw)) return true
   const bases = allowedBases!
   return twins.some(
     (dir) =>

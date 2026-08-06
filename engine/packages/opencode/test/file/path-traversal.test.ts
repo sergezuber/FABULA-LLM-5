@@ -278,8 +278,14 @@ describe("Instance.provide and the running user's home", () => {
   test("the home of whoever is running is never refused as a system directory", async () => {
     await using tmp = await tmpdir({ git: true })
     await expect(Instance.provide({ directory: tmp.path, fn: () => Instance.directory })).resolves.toBe(tmp.path)
-    // …and the machine's own directories still are, whoever is running.
-    for (const dir of ["/etc", "/proc"].filter((p) => p !== os.homedir())) {
+    // …and the machine's own directories still are, whoever is running. Which directories those ARE is
+    // per-platform — the same reason the list itself is — so the ones named here come from the platform
+    // rather than from one family's spelling.
+    const systemDirs =
+      process.platform === "win32"
+        ? [process.env["SystemRoot"], process.env["ProgramData"]].filter((v): v is string => !!v)
+        : ["/etc", "/proc"]
+    for (const dir of systemDirs.filter((p) => p !== os.homedir())) {
       await expect(Instance.provide({ directory: dir, fn: () => {} })).rejects.toThrow("Access denied")
     }
   })

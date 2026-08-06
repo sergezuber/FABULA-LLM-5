@@ -71,3 +71,26 @@ describe("a base is recognised in the spelling it was given, as well as the cano
     expect(instanceDirectoryAllowed(away)).toBe(false)
   })
 })
+
+// ── A filesystem root is listable, in every spelling a root has ────────────────────────────────────
+//
+// The picker walks down from the top, and on a machine with more than one root there is no single top:
+// "/" resolves to the root of the CURRENT one, which does not contain a home living on another. The
+// ancestor chain the picker needs simply ended there. This permits LISTING, never opening — a root as a
+// project directory is refused outright by the guard that decides whether work may happen.
+// STATED LIMIT: where there is exactly ONE root, the ancestor chain already reaches it and these pass
+// whether or not the rule exists — a mutation removing it cannot be killed here. The machine with more
+// than one root is the instrument.
+describe("a filesystem root is a navigation step, not a project", () => {
+  test("every spelling of a root is listable", () => {
+    expect(instanceDirectoryAllowed(path.parse(process.cwd()).root)).toBe(true)
+    expect(instanceDirectoryAllowed(path.parse(os.homedir()).root)).toBe(true)
+  })
+
+  test("and opening one as a project is still refused, by the guard whose job that is", async () => {
+    const { Instance } = await import("../../src/project/instance")
+    await expect(
+      Instance.provide({ directory: path.parse(process.cwd()).root, fn: () => {} }),
+    ).rejects.toThrow("Access denied")
+  })
+})

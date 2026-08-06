@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.184.0"
+export const FABULA_VERSION = "0.185.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,24 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.185.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Корень файловой системы снова можно ПРОСМОТРЕТЬ в выборщике папок. Выборщик идёт сверху вниз, а там, где корней несколько, единого верха нет: «/» разрешается в корень текущего носителя и не содержит домашний каталог, лежащий на другом, — цепочка предков просто обрывалась. Это разрешение СМОТРЕТЬ, а не открывать: корень как рабочий каталог по-прежнему отклоняется тем сторожем, чья это забота.",
+        en: "A filesystem root can be BROWSED in the folder picker again. The picker walks down from the top, and where there is more than one root there is no single top: \"/\" resolves to the root of the current volume and does not contain a home living on another — the ancestor chain simply ended. This permits LOOKING, not opening: a root as a working directory is still refused by the guard whose job that is.",
+      },
+      {
+        ru: "Каталог берётся у модуля путей, а не отрезается выражением по одной косой черте: там, где путь написан другой, выражение не совпадало, и каталогом создавался ПОЛНЫЙ путь файла — записывать после этого было некуда.",
+        en: "A directory is asked of the path module rather than cut off by an expression matching one kind of slash: where a path is written with the other kind the expression matched nothing, and the whole FILE path was created as a directory, leaving the write that followed nowhere to land.",
+      },
+      {
+        ru: "Запись хода для последующего чтения человеком больше не решает вердикт проверки: не удалось записать — так и сказано в выводе, а проверка судит о том, о чём она.",
+        en: "Writing down a trajectory for a human to read afterwards no longer decides a check's verdict: if it could not be written, the output says so, and the check judges what it is about.",
+      },
+    ],
+  },
   {
     version: "0.184.0",
     date: "2026-08-06",

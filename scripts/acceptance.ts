@@ -47,8 +47,15 @@ function run(argv: string[], opts: { cwd?: string; timeout?: number } = {}) {
     cwd: opts.cwd ?? ROOT,
     encoding: "utf8",
     timeout: opts.timeout ?? 600_000,
+    env: { ...process.env, NO_COLOR: "1", FORCE_COLOR: "0" },
   })
-  return { code: r.status ?? 1, out: `${r.stdout ?? ""}${r.stderr ?? ""}` }
+  // Colour is STRIPPED before anything reads this. A programme writing to a pipe may still colour its
+  // output, and then its numbers are not adjacent to the words beside them: `2719 pass` arrives with an
+  // escape sequence between the digits and the word, every pattern looking for one reads zero, and a
+  // green suite of 2794 tests was reported as a suite that had vanished. Measured on a real runner —
+  // the criterion said "0 pass / 0 fail" while the run it had just made said "2719 pass, 0 fail, exit 0".
+  const plain = `${r.stdout ?? ""}${r.stderr ?? ""}`.replace(/\u001b\[[0-9;]*[A-Za-z]/g, "")
+  return { code: r.status ?? 1, out: plain }
 }
 const sh = (cmd: string, opts?: { cwd?: string; timeout?: number }) => run(shellArgv(cmd), opts)
 

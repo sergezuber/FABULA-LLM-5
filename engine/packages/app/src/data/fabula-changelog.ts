@@ -15,6 +15,16 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-08-06",
     items: [
       {
+        ru: "Цвет снимается с вывода до того, как его кто-либо читает. Программа, пишущая в канал, всё равно может раскрасить вывод — и тогда её числа не примыкают к словам рядом: «2719 пройдено» приходит с управляющей последовательностью между цифрами и словом, любой поиск читает ноль, и зелёный набор из 2794 проверок объявляется исчезнувшим. Замерено на настоящем исполнителе: критерий сказал «0 пройдено / 0 упало», тогда как сделанный им же прогон сказал «2719 пройдено, 0 упало, код 0».",
+        en: "Colour is stripped from output before anything reads it. A programme writing to a pipe may colour its output anyway, and then its numbers are not adjacent to the words beside them: \"2719 pass\" arrives with an escape sequence between the digits and the word, every pattern reads zero, and a green suite of 2794 checks is reported as one that vanished. Measured on a real runner: the criterion said \"0 pass / 0 fail\" while the run it had just made said \"2719 pass, 0 fail, exit 0\".",
+      },
+    ],
+  },
+  {
+    version: "0.198.0",
+    date: "2026-08-06",
+    items: [
+      {
         ru: "Витринный кадр на главной странице показывает продукт за работой, а не пустой запуск. В кадре — сама суть: жёсткий гейт, отказавшийся засчитать зелёные тесты без доказанного воспроизведения бага, вердикт с реальным счётом тестов и отчеканенный чек с командой перепроверки. Каждый факт в кадре взят из настоящего прогона на локальной модели; снято с живого интерфейса.",
         en: "The showcase frame on the front page shows the product at work rather than an empty launch. The frame carries the essence itself: the hard gate that refused to count green tests without a proven reproduction of the bug, the verdict with the real test score, and the minted receipt with its re-verification command. Every fact in the frame comes from a real run on a local model; captured from the live interface.",
       },

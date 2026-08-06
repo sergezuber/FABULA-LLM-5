@@ -53,10 +53,9 @@ harness, graded by the benchmark's hidden acceptance suite: **100% of fail_to_pa
 [`bash replay.sh`](receipts/swe-bench-pro-e64622cd/replay.sh) (Docker; the artifact, the tests and the verdict
 are all yours to re-run).
 
-**An honest note on the capstone above:** the `479aa075` run predates automatic receipt minting, and its patch
-was overwritten by a later batch run — so it stays a run note, not a replayable receipt.
-That loss is exactly the argument for receipts: evidence not minted at the moment of green is evidence you
-eventually lose. Every green run now mints one automatically.
+**Why the capstone above has no receipt here:** the `479aa075` run predates automatic minting, and a later
+batch run overwrote its patch — which is precisely why minting is automatic now. Evidence not minted at the
+moment of green is evidence you eventually lose; every green run mints one.
 
 ## Roadmap for this page
 

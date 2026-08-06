@@ -10,7 +10,7 @@ Frontier models sell confidence. FABULA ships proof.
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-black)](#try-it)
 [![Release](https://img.shields.io/github/v/release/sergezuber/FABULA-LLM-5)](https://github.com/sergezuber/FABULA-LLM-5/releases)
 
-[Docs](#docs) · [Receipt spec](docs/spec/verified-autonomy-receipt-v0.2.md) · [Plugins](docs/PLUGINS.md) · [Evals](docs/EVALS.md) · [Contributing](CONTRIBUTING.md)
+[**Install**](#install) · [Docs](#docs) · [Receipt spec](docs/spec/verified-autonomy-receipt-v0.2.md) · [Plugins](docs/PLUGINS.md) · [Evals](docs/EVALS.md) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -49,7 +49,7 @@ Byte-identical calls and near-duplicate queries are cut by the engine after a me
 The window belongs to one call — not to the conversation. Checkpoints carry the state across the ceiling, oversized material is held outside the context and read back in bounded slices, and the session outlives the window.
 
 **"Agent harnesses burn 4× the tokens."**
-This one cuts them. Per-step cost dropped **45%, measured on the wire**: the request prefix went from 72.3k tokens to under 40k (39.8k on a live app turn, 2026-08-01), and it stays byte-stable within a task so the model's KV-cache survives across steps. That is why a small local model keeps up on a laptop.
+This one cuts them. Per-step cost dropped **45%, measured on the wire**: the request prefix went from 72.3k tokens to under 40k, and it stays byte-stable within a task so the model's KV-cache survives across steps. That is why a small local model keeps up on a laptop.
 
 ## Don't trust it. Replay it.
 
@@ -70,7 +70,11 @@ The harder one is public too: a real [SWE-bench Pro](https://github.com/scaleapi
 
 The model didn't get smarter. The system around it refused to let "done" happen without proof.
 
-Raw, unedited artifacts behind the scheme: the live recording of the refusal ([`docs/assets/refusal.cast`](docs/assets/refusal.cast), plays with asciinema), its beat-by-beat render ([`docs/assets/captured-run.svg`](docs/assets/captured-run.svg)), and the worst-day walkthrough — repeated reds, an automatic rewind, a steered second opinion: [`docs/HARDEST-JOURNEY.md`](docs/HARDEST-JOURNEY.md).
+The unedited artifacts behind it:
+
+- [`refusal.cast`](docs/assets/refusal.cast) — the live terminal recording of the refusal (plays with asciinema)
+- [`captured-run.svg`](docs/assets/captured-run.svg) — the same run rendered beat by beat
+- [`HARDEST-JOURNEY.md`](docs/HARDEST-JOURNEY.md) — the worst day: repeated reds, an automatic rewind, a steered second opinion
 
 The receipt format is an open specification any agent can implement — [verified-autonomy receipt v0.2](docs/spec/verified-autonomy-receipt-v0.2.md): JSON schema, field-by-field honesty rules, and a replay protocol. FABULA is its reference implementation: [`docs/GREENPAPER.md`](docs/GREENPAPER.md).
 
@@ -92,11 +96,17 @@ The receipt format is an open specification any agent can implement — [verifie
 
 Around the gates: web research, shell, sandboxed code execution, drift-tolerant file edits, browser automation, durable hand-offs, checkpoints and undo, and SSRF / redaction / injection defense.
 
-Those last guards cover **three doors, not one**. A rule that stops a tool also stops the same thing done through the shell, and code run without a container runs under the OS kernel profile — because a path a *program* computes is invisible to anything that reads arguments. That is not theory: with the tool guards closed, a local model asked to install a startup item did it anyway through the shell, then through code it wrote itself, and reported both plainly. It was not attacking anything — it was finishing its task, which is exactly the behaviour a guard has to survive. The full map — 40 plugins, 89 tools: [`docs/PLUGINS.md`](docs/PLUGINS.md).
+Those guards cover **three doors, not one**: a rule that stops a tool also stops the same thing through the shell, and code without a container runs under the OS kernel profile. An agent asked to install a startup item will reach for all three — not to attack anything, but to finish its task.
+
+The full map — 40 plugins, 89 tools: [`docs/PLUGINS.md`](docs/PLUGINS.md).
 
 An optional **proof economy** builds on the receipt — publish to a content-addressed registry, cross-model witness attestation, a proof tree for team work. Off by default: [the disrupt layer](docs/PLUGINS.md#the-disrupt-layer--turning-a-proof-of-done-into-a-proof-economy-experimental-off-by-default).
 
-## Try it
+## Install
+
+**You need:** [LM Studio](https://lmstudio.ai) with a tool-calling model (or any OpenAI-compatible
+endpoint), and `git`. Everything else — the engine, Bun, the localhost adapter, the plugin
+dependencies — `setup.sh` installs for you.
 
 ### macOS — the desktop app
 
@@ -114,9 +124,8 @@ open FABULA-LLM-5.app
 
 ### Linux
 
-The engine and every plugin run here, and the desktop window builds and packages as a `.deb`. `setup.sh`
-handles both; where the native window is not built it tells you the one command to serve the interface in
-a browser instead — which is the whole product minus its own frame.
+The engine, every plugin and the desktop window run here; `setup.sh` builds all of it and packages
+the window as a `.deb`.
 
 ```bash
 git clone https://github.com/sergezuber/FABULA-LLM-5 && cd FABULA-LLM-5
@@ -125,26 +134,20 @@ git clone https://github.com/sergezuber/FABULA-LLM-5 && cd FABULA-LLM-5
 
 ### Windows
 
-`setup.ps1` is the same six steps done the Windows way. It needs **Git for Windows** and checks for it
-before anything else needs it: the harness runs every command through one POSIX shell on every platform,
-because the rules that decide what a command writes to and dials out to are written to parse that grammar,
-and a second grammar would mean a second copy of every safety rule.
+`setup.ps1` is the same setup done the Windows way. Install **Git for Windows** first — the harness
+runs every command through one POSIX shell on every platform, so the safety rules have a single grammar
+to parse.
 
 ```powershell
 git clone https://github.com/sergezuber/FABULA-LLM-5; cd FABULA-LLM-5
 .\setup.ps1
 ```
 
-**Said plainly, because a README that overstates is worse than one that says less.** Linux is verified by
-running: the engine serves, the suites pass, the kernel floor is enforced by the kernel, the package
-installs. Windows artifacts are built and checked — the application is a real PE carrying its version, the
-installer is produced, the deploy guard runs — but the assembled product has not yet been opened on a
-Windows desktop. `bun scripts/acceptance.ts` is the ten-criterion acceptance as a program: run it there and
-it will tell you, without anyone having to interpret prose.
+Re-run `setup.sh` (or `setup.ps1`) any time — after a `git pull`, after installing a dependency. It never overwrites your `.env` or `fabula.config.json`.
 
-`./setup.sh` is idempotent — re-run it any time; it never overwrites your `.env` / `fabula.config.json`.
+### Point it at a model
 
-**Local model (default):** install [LM Studio](https://lmstudio.ai), load a tool-calling model — setup already installed the localhost adapter the config points at. Nothing else to do.
+**Local (default):** open LM Studio, load a tool-calling model, start its server. `setup.sh` already installed the localhost adapter the config points at — nothing else to do.
 
 <details>
 <summary><b>Any OpenAI-compatible endpoint</b> — a cloud provider or a corporate gateway</summary>
@@ -175,13 +178,15 @@ The model must support **tool calling**, and `limit` needs both `context` and `o
 
 </details>
 
-### The two-minute proof
+### First run — the two-minute proof
 
-A planted bug is waiting in [`demo/`](demo/) — every test is green anyway. Open `demo/` as the project and paste:
+A bug is planted in [`demo/`](demo/), and every test there is green anyway.
 
-> Fix the export bug: the nightly export silently drops rows dated exactly on the end date. Prove it.
+1. Open `demo/` as the project.
+2. Paste: *Fix the export bug: the nightly export silently drops rows dated exactly on the end date. Prove it.*
+3. Watch the machine refuse to finish until the proof exists.
 
-Then watch the machine refuse to finish until the proof exists — on your machine, with your model.
+You will see it write a test, watch that test fail on the old code, and only then call the work done — on your machine, with your model.
 
 ## Privacy
 

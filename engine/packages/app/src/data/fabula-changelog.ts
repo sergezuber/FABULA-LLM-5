@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.192.0"
+export const FABULA_VERSION = "0.193.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.193.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Установка зависимостей в непрерывной проверке повторяется, а не объявляет дерево сломанным с первой неудачной загрузки. Замерено: 2608 пакетов встали, один не скачался — и весь ряд платформы прочитался как красный код, хотя о самом коде сказано не было ничего. Отказ при этом по-прежнему громкий: заглушенная установка всплывает позже в виде, который читать куда труднее.",
+        en: "Dependency installation in the continuous check retries instead of declaring the tree broken at the first failed download. Measured: 2608 packages installed, one refused — and a whole platform's row read as failing code, though nothing had been said about the code. The failure is still loud: a swallowed install resurfaces later in a form far harder to read.",
+      },
+    ],
+  },
   {
     version: "0.192.0",
     date: "2026-08-06",

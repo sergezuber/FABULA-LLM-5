@@ -8,7 +8,7 @@ import { Instance } from "../project/instance"
 import { ProjectID } from "../project/schema"
 import { assertMemoryWriteAllowed } from "./memory-path-guard"
 import { AppFileSystem } from "@mimo-ai/shared/filesystem"
-import { memoryRoot } from "@/session/checkpoint-paths"
+import { memoryRoot, memoryTarget } from "@/session/checkpoint-paths"
 
 type Kind = "file" | "directory"
 
@@ -101,7 +101,7 @@ export const assertWriteAllowed = Effect.fn("Tool.assertWriteAllowed")(function*
     // one spelling for a path had the guard compare two of them, decide the write was not in the memory
     // tree, and hand it to the permission ask this guard exists to take over from. The guard itself stays
     // purely lexical, so it can still be asked about paths that are not on this machine.
-    target: process.platform === "win32" ? AppFileSystem.normalizePath(target) : target,
+    target: memoryTarget(target),
     agentName: ctx.agent,
     memoryRoot: memoryRoot(),
     projectID,

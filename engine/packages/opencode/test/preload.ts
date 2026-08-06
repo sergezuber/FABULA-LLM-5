@@ -32,8 +32,23 @@ afterAll(async () => {
 
   // Windows can keep SQLite WAL handles alive until GC finalizers run, so we
   // force GC and retry teardown to avoid flaky EBUSY in test cleanup.
-  await rm(dir, 30)
-  await rm(fixtureRoot, 30)
+  //
+  // AND THE SWEEP DOES NOT DECIDE THE RUN. This is the very end: every check has already reported, there
+  // is no later test for a leftover directory to disturb, and the process is about to exit — after which
+  // the system releases the handles and the operating system's own temp housekeeping takes the rest. A
+  // whole green suite was going RED here, under no test name at all, because the last thing it did was
+  // tidy up and the tidying was refused. Where a busy directory means something the run started is still
+  // ALIVE, that is worth failing on — but that is the per-fixture cleanup's question, and it asks it.
+  const sweep = async (target: string) => {
+    try {
+      await rm(target, process.platform === "win32" ? 120 : 30)
+    } catch (error) {
+      if (process.platform !== "win32" || !busy(error)) throw error
+      console.log(`deferred final cleanup of ${target} to the system: ${(error as Error).message}`)
+    }
+  }
+  await sweep(dir)
+  await sweep(fixtureRoot)
 })
 
 process.env["XDG_DATA_HOME"] = path.join(dir, "share")

@@ -31,6 +31,18 @@ export function memoryRoot(): string {
 }
 
 /**
+ * A path brought into the SAME spelling `memoryRoot()` is written in.
+ *
+ * ONE definition, beside the root itself, because every site that compares against that root needs it and
+ * three of them had already written their own. A no-op where a directory has a single spelling; where it
+ * has more than one, it is the difference between "this write is inside the harness's own bookkeeping"
+ * and handing that write to a permission request the memory guard exists to take over from.
+ */
+export function memoryTarget(p: string): string {
+  return process.platform === "win32" ? AppFileSystem.normalizePath(p) : p
+}
+
+/**
  * Session memory root. Houses checkpoint artifacts, task narratives, and
  * other per-session memory files under `<data>/memory/sessions/<sid>/`.
  */

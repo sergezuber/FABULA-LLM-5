@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.187.0"
+export const FABULA_VERSION = "0.188.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.188.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Приведение пути к написанию служебного корня имеет ОДНО определение, рядом с самим корнем. Мест, которым оно нужно, четыре, и три из них уже написали своё. Там, где у каталога одно написание, это ничего не меняет; где несколько — это разница между «запись внутри собственной бухгалтерии обвязки» и передачей её тому запросу разрешения, который сторож памяти и должен был заменить.",
+        en: "Bringing a path into the bookkeeping root's spelling has ONE definition, beside that root. Four places need it and three had already written their own. Where a directory has one spelling this changes nothing; where it has several it is the difference between \"this write is inside the harness's own bookkeeping\" and handing it to the very permission request the memory guard exists to take over from.",
+      },
+      {
+        ru: "Завершающая уборка не решает исход прогона. Она идёт в самом конце: все проверки уже отчитались, помешать оставшийся каталог больше некому, а система отпускает описатели сразу после выхода. Целый зелёный набор краснел здесь — под пустым именем, потому что уборка не тест. Там, где занятость означает, что запущенное прогоном ещё живо, ошибка по-прежнему поднимается — но это вопрос уборки за каждой отдельной проверкой, и она его задаёт.",
+        en: "The final sweep does not decide the run. It happens at the very end: every check has reported, there is no later test for a leftover directory to disturb, and the system releases the handles as soon as the process exits. A whole green suite was going red here, under no test name at all, because tidying up is not a test. Where a busy directory means something the run started is still alive, it is still raised — but that is the per-check cleanup's question, and it asks it.",
+      },
+    ],
+  },
   {
     version: "0.187.0",
     date: "2026-08-06",

@@ -16,11 +16,12 @@ import DESCRIPTION from "./apply_patch.txt"
 import { File } from "../file"
 import { Format } from "../format"
 import { Global } from "../global"
-import { memoryRoot } from "@/session/checkpoint-paths"
+import { memoryRoot, memoryTarget } from "@/session/checkpoint-paths"
 
 const PatchParams = z.object({
   patch_text: z.string().describe("The full patch text that describes all changes to be made"),
 })
+
 
 export const ApplyPatchTool = Tool.define(
   "apply_patch",
@@ -191,7 +192,11 @@ export const ApplyPatchTool = Tool.define(
 
       // Check permissions if needed
       const permissionChanges = fileChanges.filter(
-        (change) => !AppFileSystem.contains(memoryRoot(), change.movePath ?? change.filePath),
+        // Both sides in ONE spelling. The root is canonical and a path out of a patch is as its author
+          // wrote it, so on a filesystem with more than one spelling for a directory the comparison said
+          // "not in the memory tree" about a path that is, and the write went to the permission ask that
+          // the memory guard exists to take over from.
+          (change) => !AppFileSystem.contains(memoryRoot(), memoryTarget(change.movePath ?? change.filePath)),
       )
       // NOTE: permissionChanges already excludes memory-tree paths (filtered at
       // the `permissionChanges` definition above), so this ask never fires for
@@ -207,7 +212,7 @@ export const ApplyPatchTool = Tool.define(
             filepath: relativePaths.join(", "),
             diff: permissionChanges.map((change) => change.diff).join("\n") + "\n",
             files: files.filter(
-              (file) => !AppFileSystem.contains(memoryRoot(), file.movePath ?? file.filePath),
+              (file) => !AppFileSystem.contains(memoryRoot(), memoryTarget(file.movePath ?? file.filePath)),
             ),
           },
         })

@@ -14,7 +14,7 @@ Frontier models sell confidence. FABULA ships proof.
 
 </div>
 
-![The FABULA desktop app](docs/assets/app.png)
+![FABULA refusing to accept a fix without proof — the reproduce-first gate, the green verify, and the minted Proof-of-Done receipt](docs/assets/showcase.png)
 
 ## What is FABULA?
 

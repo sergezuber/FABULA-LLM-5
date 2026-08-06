@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.169.0"
+export const FABULA_VERSION = "0.170.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,28 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.170.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Вопрос «лежит ли этот путь внутри того каталога» имеет теперь один ответ на всю программу. Их было два, в разных местах и с разной начинкой: один спрашивают тридцать девять файлов, включая проверку, можно ли вообще открыть проект; другой — шесть, включая сторож, который пропускает или отклоняет каждое обращение к каталогу. Исправление, написанное в один из них, оставляло другой решать наоборот — и так каталог за пределами проекта прочитался как внутри него. Правило переехало туда, где его зовут, второе определение убрано, а имя осталось прежним для всех, кто им пользовался.",
+        en: "The question \"is this path inside that directory\" now has one answer for the whole program. There were two, in different places with different insides: one is asked by thirty-nine files, among them the check deciding whether a project may be opened at all; the other by six, among them the guard that admits or refuses every request naming a directory. A correction written into one left the other deciding the opposite — which is how a directory outside the project came to read as inside it. The rule moved to where it is called, the second definition is gone, and the name stayed for everyone who used it.",
+      },
+      {
+        ru: "Корень файловой системы узнаётся в любом написании, а не только в одном. Проект без системы контроля версий записывает корень как свой рабочий каталог, и сторож, знавший лишь одно написание, для всех прочих объявлял «внутри проекта» весь диск целиком — то есть разрешение на выход за пределы проекта не спрашивалось никогда.",
+        en: "A filesystem root is recognised in every spelling it has, not just one. A project with no version control records the root as its worktree, and a guard that knew a single spelling answered \"inside the project\" for an entire drive in every other case — so the permission that exists to ask before reaching outside the project was never requested.",
+      },
+      {
+        ru: "Каталог с именем, начинающимся с двух точек, снова читается как лежащий внутри проекта. Прежняя проверка смотрела на первые два знака, а не на то, ведёт ли путь наружу.",
+        en: "A directory whose name begins with two dots reads as inside the project again. The older check looked at the first two characters rather than at whether the path leads outward.",
+      },
+      {
+        ru: "Каталоги, принадлежащие операционной системе, отклоняются на КАЖДОЙ платформе. Список был только для одной из них и отключался на остальных целиком — там не защищалось ничего. Теперь каждая платформа называет свои: домашний каталог суперпользователя добавлен, а системные каталоги Windows читаются из среды, поэтому иное расположение системы или иной язык покрыты тем же правилом.",
+        en: "Directories belonging to the operating system are refused on EVERY platform. The list covered one of them and was switched off entirely on the others, where nothing was protected at all. Each platform now names its own: the superuser's home is added, and the Windows system directories are read from the environment, so a different install location or a different language is covered by the same rule.",
+      },
+    ],
+  },
   {
     version: "0.169.0",
     date: "2026-08-06",

@@ -67,16 +67,22 @@ describe("File.read path traversal protection", () => {
       })
     }))
 
+  // The fixture directory must sit OUTSIDE any git worktree for this to test anything. Created inside
+  // the repository — where the default fixture root lives — the project's worktree is the repository
+  // root, seven levels of `..` land back INSIDE it, and the guard correctly answers "contained": the
+  // assertion then measures how deep the fixture happens to sit, not whether traversal is refused.
   test("rejects deeply nested traversal", async () => {
-    await using tmp = await tmpdir()
+    await withTmpdirOutsideGit(async () => {
+      await using tmp = await tmpdir()
 
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        await expect(read("src/nested/../../../../../../../etc/passwd")).rejects.toThrow(
-          "Access denied: path escapes project directory",
-        )
-      },
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          await expect(read("src/nested/../../../../../../../etc/passwd")).rejects.toThrow(
+            "Access denied: path escapes project directory",
+          )
+        },
+      })
     })
   })
 
@@ -210,13 +216,26 @@ describe("Instance.containsPath", () => {
 })
 
 describe("Instance.provide directory safety", () => {
-  test("rejects system paths containing secrets", async () => {
-    const systemPaths = ["/etc", "/etc/nginx", "/etc/shadow", "/proc", "/sys", "/dev", "/root", "/boot"]
-    for (const dir of systemPaths) {
-      await expect(
-        Instance.provide({ directory: dir, fn: () => {} }),
-      ).rejects.toThrow("Access denied")
+  // The list this asserts is per-platform, because the directories are: `/root` is the superuser's home
+  // on Linux and was missing, so it was accepted as a project; and the whole list was gated behind
+  // "not Windows", so on Windows nothing was protected at all and `C:\\Windows` opened as a project.
+  //
+  // Windows names its own in the environment, so they are read rather than written down — a machine with
+  // Windows on another drive, or a localized Program Files, is covered by the same rule.
+  test("refuses a directory that belongs to the operating system", async () => {
+    const posixPaths = ["/etc", "/etc/nginx", "/etc/shadow", "/proc", "/sys", "/dev", "/root", "/boot"]
+    const windowsPaths = [process.env["SystemRoot"], process.env["ProgramFiles"], process.env["ProgramData"]]
+      .filter((v): v is string => !!v)
+      .flatMap((v) => [v, path.join(v, "sub")])
+    for (const dir of process.platform === "win32" ? windowsPaths : posixPaths) {
+      await expect(Instance.provide({ directory: dir, fn: () => {} })).rejects.toThrow("Access denied")
     }
+  })
+
+  // A near-miss must NOT be refused: a prefix without a separator after it is a different directory.
+  test("a directory whose name merely starts with a protected one is allowed", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await expect(Instance.provide({ directory: tmp.path, fn: () => Instance.directory })).resolves.toBe(tmp.path)
   })
 
   test("rejects filesystem root", async () => {

@@ -5,6 +5,7 @@ import { dirname, join, posix, relative, resolve as pathResolve, win32 } from "p
 import { Readable } from "stream"
 import { pipeline } from "stream/promises"
 import { Glob } from "@mimo-ai/shared/util/glob"
+import { AppFileSystem } from "@mimo-ai/shared/filesystem"
 
 // Fast sync version for metadata checks
 export async function exists(p: string): Promise<boolean> {
@@ -161,40 +162,7 @@ export function overlaps(a: string, b: string) {
   return !relA || !relA.startsWith("..") || !relB || !relB.startsWith("..")
 }
 
-/**
- * Is `child` inside `parent` — decided from the relative path BETWEEN them.
- *
- * A relative path that climbs (`..`) means outside, and that was the whole test. It is not enough where
- * a filesystem has more than one root: between two of them there is no relative path at all, so the
- * platform hands back an ABSOLUTE one — no leading `..`, and the old rule read that as "inside".
- *
- * MEASURED, and the consequence was not cosmetic: with a project on one drive, every path on another
- * read as inside the project, so nothing was ever external, so the permission that exists to ask before
- * touching anything outside was never requested — the guard present, and silent. Found by asking a
- * failing check what it HAD been asked for and getting an empty list back.
- *
- * `isAbsolute` on the relative answer is the missing half. Same path is inside itself.
- */
-export function contains(parent: string, child: string) {
-  const rel = relative(parent, child)
-  return isContainedRelative(rel)
-}
 
-/**
- * The decision, separated from the platform so it can be checked on any of them.
- *
- * A filesystem with a single root cannot produce the cross-root case at all, which is precisely why the
- * defect survived: the machines it was tested on could not express it.
- */
-export function isContainedRelative(rel: string): boolean {
-  if (rel === "") return true // the same path is inside itself
-  if (rel === ".." || rel.startsWith("../") || rel.startsWith("..\\")) return false
-  // Absoluteness is asked in BOTH dialects, not in the one this machine happens to speak. The answer
-  // being judged was produced by a filesystem that may have several roots, and a drive-lettered answer
-  // is absolute there whatever the machine reading it thinks — which also lets the case be checked on a
-  // machine that cannot produce it.
-  return !posix.isAbsolute(rel) && !win32.isAbsolute(rel)
-}
 
 export async function findUp(
   target: string,
@@ -272,3 +240,17 @@ export async function globUp(pattern: string, start: string, stop?: string) {
   }
   return result
 }
+
+// ── Path containment has ONE definition, and it is not here ───────────────────────────────────────
+//
+// Two namespaces answer "is this path inside that directory": `AppFileSystem` (thirty-nine callers,
+// among them the check that decides whether a project may be opened at all) and this `Filesystem`
+// (six callers, among them the allowlist that guards every instance route). They were separate
+// implementations of one rule, so a correction written into either left the other deciding the
+// opposite — and a correction was: the cross-dialect repair landed here while `Instance.containsPath`
+// went on calling the other one, which is how an external directory read as inside the project.
+//
+// The name stays, since six call sites use it; the rule comes from one place.
+export const contains = AppFileSystem.contains
+export const isContainedRelative = AppFileSystem.isContainedRelative
+export const isFilesystemRoot = AppFileSystem.isFilesystemRoot

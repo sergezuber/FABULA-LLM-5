@@ -228,7 +228,7 @@ export const layer = Layer.effect(
       const ctx = yield* InstanceState.context
       if (
         !AppFileSystem.contains(ctx.directory, file) &&
-        (ctx.worktree === "/" || !AppFileSystem.contains(ctx.worktree, file))
+        (AppFileSystem.isFilesystemRoot(ctx.worktree) || !AppFileSystem.contains(ctx.worktree, file))
       ) {
         return [] as LSPClient.Info[]
       }

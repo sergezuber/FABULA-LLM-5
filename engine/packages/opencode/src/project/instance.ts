@@ -19,25 +19,36 @@ const context = LocalContext.create<InstanceContext>("instance")
 const cache = new Map<string, Promise<InstanceContext>>()
 const project = makeRuntime(Project.Service, Project.defaultLayer)
 
-const FORBIDDEN_PREFIXES = [
-  "/etc",
-  "/proc",
-  "/sys",
-  "/dev",
-  "/boot",
-  "/private/etc",
-] as const
+// Directories that are not projects and never will be: the machine's own configuration, its devices,
+// and the superuser's home. Opening one as a project points every read, every write and every snapshot
+// at the operating system.
+//
+// The list is per-platform because the directories are. A POSIX list applied to Windows names nothing
+// that exists there, which is how `C:\Windows` came to be an acceptable project directory — the guard
+// ran, found no match among six paths none of which that machine has, and allowed it. Windows spells
+// its own protected directories in the environment (`SystemRoot`, `ProgramFiles`, `ProgramData`), so
+// they are READ rather than written down: a machine with Windows on `D:` or a localized Program Files
+// is covered by the same rule, and no drive letter is assumed.
+function protectedPrefixes(): string[] {
+  if (process.platform !== "win32")
+    return ["/etc", "/proc", "/sys", "/dev", "/boot", "/private/etc", "/root", "/var/root"]
+  return ["SystemRoot", "windir", "ProgramFiles", "ProgramFiles(x86)", "ProgramData"]
+    .map((name) => process.env[name])
+    .filter((v): v is string => !!v)
+    .map((v) => AppFileSystem.normalizePath(v).replace(/[\\/]+$/, ""))
+}
 
 function assertSafeDirectory(directory: string): void {
   const resolved = AppFileSystem.resolve(directory)
   if (resolved === pathParse(resolved).root) {
     throw new Error("Access denied: filesystem root is not a valid project directory")
   }
-  if (process.platform !== "win32") {
-    for (const prefix of FORBIDDEN_PREFIXES) {
-      if (resolved === prefix || resolved.startsWith(`${prefix}/`)) {
-        throw new Error("Access denied: target is a protected system directory")
-      }
+  const target = process.platform === "win32" ? resolved.toLowerCase() : resolved
+  for (const prefix of protectedPrefixes()) {
+    const p = process.platform === "win32" ? prefix.toLowerCase() : prefix
+    // A separator is required after the prefix, or `/etcetera` matches `/etc`.
+    if (target === p || target.startsWith(`${p}/`) || target.startsWith(`${p}\\`)) {
+      throw new Error("Access denied: target is a protected system directory")
     }
   }
 }
@@ -119,9 +130,15 @@ export const Instance = {
   containsPath(filepath: string, ctx?: InstanceContext) {
     const instance = ctx ?? Instance
     if (AppFileSystem.contains(instance.directory, filepath)) return true
-    // Non-git projects set worktree to "/" which would match ANY absolute path.
-    // Skip worktree check in this case to preserve external_directory permissions.
-    if (instance.worktree === "/") return false
+    // A project with no version control has its worktree set to the filesystem ROOT, which contains every
+    // absolute path there is — so consulting it would answer "inside the project" for the whole machine
+    // and no path could ever be external. The guard for that recognised only the POSIX spelling of a root.
+    //
+    // MEASURED on a Windows runner: `C:\Windows` came back as inside the project, so the permission that
+    // exists to ask before touching anything outside was never requested — sixty-seven checks red for one
+    // root written the other way. Asked as a QUESTION about the path now ("is this its own root?"), which
+    // is true of `/`, of `C:\`, and of a network share alike.
+    if (AppFileSystem.isFilesystemRoot(instance.worktree)) return false
     return AppFileSystem.contains(instance.worktree, filepath)
   },
   /**

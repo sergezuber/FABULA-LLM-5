@@ -273,6 +273,20 @@ export namespace AppFileSystem {
    * others as ordinary directories, and a "does the project contain this path" check anchored at a root it
    * did not recognise answers yes for the entire machine.
    */
+  /**
+   * Whether a relative answer names something strictly BELOW the directory it was measured from —
+   * containment, minus the directory itself.
+   *
+   * Five call sites spelled this inline as `rel !== "" && !rel.startsWith("..") && !isAbsolute(rel)`,
+   * and every one of them carried the defect that reading drags along: it asks whether the answer
+   * begins with two dots rather than whether it climbs, so a directory genuinely named `..cache` was
+   * excluded. `isAbsolute` also answers in the host's dialect only, which is the wrong question for a
+   * path that may have been recorded elsewhere.
+   */
+  export function isBelowRelative(rel: string): boolean {
+    return rel !== "" && isContainedRelative(rel)
+  }
+
   export function isFilesystemRoot(p: string): boolean {
     if (!p) return false
     const norm = p.replace(/[\\/]+$/, "") || p

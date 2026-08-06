@@ -46,7 +46,14 @@ jobs:
         run: bun install
       - name: Run engine tests
         working-directory: engine/packages/opencode
-        run: bun test test/session test/task test/tool
+        # `bun run test`, not `bun test`: the package declares the per-test budget (--timeout 30000) and
+        # calling the binary directly bypasses it. On a runner where spawning a process costs several times
+        # what it costs here, ten checks were reported as failures for finishing later than a budget nobody
+        # had told them about — a check that gives up sooner than the work it asked for is not a check.
+        #
+        # And the whole suite, not three directories of forty-five. The narrow list is why two failures in
+        # test/file went unseen since the fork: a directory nothing runs is a directory nothing guards.
+        run: bun run test test/
 
   adapter-tests:
     name: Adapter tests (${{ matrix.os }})

@@ -96,3 +96,42 @@ describe("containment delegates to the rule instead of re-deciding", () => {
     expect(contains("/project", "/elsewhere")).toBe(false)
   })
 })
+
+// ── "strictly below" is one rule, and no call site may carry its own copy ──────────────────────────
+describe("strictly below", () => {
+  test("the directory itself is not below itself", () => {
+    expect(AppFileSystem.isBelowRelative("")).toBe(false)
+  })
+
+  test("a name beginning with two dots is below, a climb is not", () => {
+    expect(AppFileSystem.isBelowRelative("..cache")).toBe(true)
+    expect(AppFileSystem.isBelowRelative("..cache/x")).toBe(true)
+    expect(AppFileSystem.isBelowRelative("..")).toBe(false)
+    expect(AppFileSystem.isBelowRelative("../sibling")).toBe(false)
+    expect(AppFileSystem.isBelowRelative("..\\sibling")).toBe(false)
+  })
+
+  test("an absolute answer is not below, in EITHER dialect", () => {
+    expect(AppFileSystem.isBelowRelative("/elsewhere")).toBe(false)
+    expect(AppFileSystem.isBelowRelative("D:\\elsewhere")).toBe(false)
+    expect(AppFileSystem.isBelowRelative("\\\\server\\share\\x")).toBe(false)
+  })
+
+  // The five call sites that used to spell this inline are what made the rule drift, so the property
+  // guarded here is that none of them — nor a sixth — writes its own version again. A decision about
+  // containment recognisable by its shape: asking whether a RELATIVE answer starts with two dots.
+  test("no source file decides containment by the first two characters", async () => {
+    const { Glob } = await import("bun")
+    const offenders: string[] = []
+    for await (const file of new Glob("src/**/*.{ts,tsx}").scan({ cwd: process.cwd() })) {
+      const text = await Bun.file(file).text()
+      for (const [i, line] of text.split("\n").entries()) {
+        if (line.trimStart().startsWith("//") || line.trimStart().startsWith("*")) continue
+        if (/\brel(ative)?\b[^\n]*\.startsWith\(\s*["']\.\.["']\s*\)/.test(line)) {
+          offenders.push(`${file}:${i + 1}`)
+        }
+      }
+    }
+    expect(offenders).toEqual([])
+  })
+})

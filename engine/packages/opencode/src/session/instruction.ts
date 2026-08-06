@@ -267,7 +267,7 @@ export function loaded(messages: MessageV2.WithParts[]) {
 // otherwise the absolute path.
 export function display(filepath: string, worktree: string) {
   const rel = path.relative(worktree, filepath)
-  if (rel && !rel.startsWith("..") && !path.isAbsolute(rel)) return rel
+  if (AppFileSystem.isBelowRelative(rel)) return rel
   const home = os.homedir()
   if (filepath === home || filepath.startsWith(home + path.sep)) return path.join("~", path.relative(home, filepath))
   return filepath

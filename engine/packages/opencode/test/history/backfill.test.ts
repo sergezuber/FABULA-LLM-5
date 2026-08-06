@@ -97,14 +97,21 @@ function seed(
   })
 }
 
+// The index is one table shared by every test that writes history, so reading ALL of it measures the
+// whole suite rather than this test. Each case owns a session id and reads only its own rows: the claim
+// is unchanged — text and tool parts are indexed, step-start is not — and it no longer depends on running
+// alone. Measured: 171 rows from neighbours under the full suite, 0 in isolation.
+const SES_INDEXES = "ses_backfill_indexes_text_and_tool"
+const SES_REPEAT = "ses_backfill_repeated_run"
+
 describe("History.backfill", () => {
   it.live("indexes existing text and tool parts", () =>
     provideTmpdirInstance(() =>
       Effect.gen(function* () {
         seed([
-          { session_id: "ses_1", message_id: "m1", part_id: "p1", role: "user", type: "text", text: "hello" },
+          { session_id: SES_INDEXES, message_id: "m1", part_id: "p1", role: "user", type: "text", text: "hello" },
           {
-            session_id: "ses_1",
+            session_id: SES_INDEXES,
             message_id: "m2",
             part_id: "p2",
             role: "assistant",
@@ -113,7 +120,7 @@ describe("History.backfill", () => {
             state: { status: "completed", input: { command: "ls" } },
           },
           {
-            session_id: "ses_1",
+            session_id: SES_INDEXES,
             message_id: "m3",
             part_id: "p3",
             role: "assistant",
@@ -123,7 +130,9 @@ describe("History.backfill", () => {
 
         yield* backfillAll()
 
-        const rows = Database.use((db) => db.select().from(HistoryFtsTable).all())
+        const rows = Database.use((db) => db.select().from(HistoryFtsTable).all()).filter(
+          (r) => r.session_id === SES_INDEXES,
+        )
         expect(rows.map((r) => r.part_id).sort()).toEqual(["p1", "p2"])
       }),
     ),
@@ -133,11 +142,11 @@ describe("History.backfill", () => {
     provideTmpdirInstance(() =>
       Effect.gen(function* () {
         seed([
-          { session_id: "ses_x", message_id: "m1", part_id: "p1", role: "user", type: "text", text: "first" },
+          { session_id: SES_REPEAT, message_id: "m1", part_id: "p1", role: "user", type: "text", text: "first" },
         ])
         yield* backfillAll()
         seed([
-          { session_id: "ses_x", message_id: "m2", part_id: "p2", role: "user", type: "text", text: "second" },
+          { session_id: SES_REPEAT, message_id: "m2", part_id: "p2", role: "user", type: "text", text: "second" },
         ])
         yield* backfillAll()
 

@@ -17,6 +17,7 @@ import { Global } from "@/global"
 import { useDialog } from "../../ui/dialog"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiConfig } from "../../context/tui-config"
+import { AppFileSystem } from "@mimo-ai/shared/filesystem"
 
 type PermissionStage = "permission" | "always" | "reject"
 
@@ -29,7 +30,7 @@ function normalizePath(input?: string) {
   const relative = path.relative(cwd, absolute)
 
   if (!relative) return "."
-  if (!relative.startsWith("..")) return relative
+  if (AppFileSystem.isBelowRelative(relative)) return relative
 
   // outside cwd - use ~ or absolute
   if (home && (absolute === home || absolute.startsWith(home + path.sep))) {

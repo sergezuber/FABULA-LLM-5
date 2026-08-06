@@ -196,3 +196,58 @@ describe("the reading is about this machine, and says so in one line", () => {
     expect(line).toContain("no containers")
   })
 })
+
+// ── The planner and the description ask ONE probe ─────────────────────────────────────────────────
+//
+// Sizing the window and describing the machine are the same question about the same hardware, and they
+// were two probes. They had already drifted: the one the planner used asked `nvidia-smi` and nothing
+// else, so a machine with an AMD or Intel card answered "no discrete GPU found" and was sized against
+// SYSTEM memory — a 64 GiB plan for a cache that lives in 12 GiB of VRAM. Over-committing a card is not
+// a slow machine, it is a machine that swaps.
+describe("every accelerator is visible to the thing that sizes the window", () => {
+  const answers = (map: Record<string, string>) => (cmd: string) => {
+    for (const [k, v] of Object.entries(map)) if (cmd.includes(k)) return v
+    return null
+  }
+
+  test("an AMD card is a discrete pool, not 'no GPU found'", () => {
+    const g = gpuReading("linux", {}, answers({ "rocm-smi": "card0, 17163091968, 2000000000\n" }))
+    expect(g.vendor).toBe("amd")
+    expect(g.totalBytes).toBe(17163091968)
+    expect(g.usedBytes).toBe(2000000000)
+  })
+
+  test("what the card already holds is read, so the reserve is measured rather than guessed", () => {
+    const g = gpuReading("linux", {}, answers({ "nvidia-smi": "24576, 2048\n" }))
+    expect(g.vendor).toBe("nvidia")
+    expect(g.totalBytes).toBe(24576 * 1024 * 1024)
+    expect(g.usedBytes).toBe(2048 * 1024 * 1024)
+  })
+
+  test("several cards are one pool, because a runtime given several draws on all of them", () => {
+    const g = gpuReading("linux", {}, answers({ "nvidia-smi": "24576, 1024\n24576, 512\n" }))
+    expect(g.totalBytes).toBe(2 * 24576 * 1024 * 1024)
+    expect(g.usedBytes).toBe(1536 * 1024 * 1024)
+  })
+
+  test("a tool that answers without a total is still a card, not an absence", () => {
+    const g = gpuReading("linux", {}, answers({ "xpu-smi": "Device 0: GPU\n" }))
+    expect(g.vendor).toBe("intel")
+    expect(g.vendor).not.toBe("none")
+  })
+
+  test("no tool answering is a claim of its own, and stays distinguishable", () => {
+    const g = gpuReading("linux", {}, answers({}))
+    expect(g.vendor).toBe("none")
+    expect(g.detail).toContain("no accelerator tool answered")
+  })
+
+  // The binding: the module that SIZES must reach the same probe. Verified by name — `vramBytes` and
+  // `gpuReading` are one module apart and must not become two probes again.
+  test("the pool reader and the machine description are the same probe", async () => {
+    const src = await Bun.file(new URL("./memory.ts", import.meta.url)).text()
+    expect(src).toContain("return g.totalBytes > 0 ? { total: g.totalBytes, used: g.usedBytes } : null")
+    const prof = await Bun.file(new URL("./profile.ts", import.meta.url)).text()
+    expect(prof).not.toMatch(/^\s*(export\s+)?function gpuReading/m)
+  })
+})

@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { planWindow, DEFAULT_POLICY, type WindowPlanInput , policyFor, noPolicyReason, DEVICE_HEADROOM_FRACTION } from "./windowplan"
+import { planWindow, DEFAULT_POLICY, type WindowPlanInput , policyFor, noPolicyReason, DEVICE_HEADROOM_FRACTION,
+  DEVICE_COMMIT_FRACTION,
+} from "./windowplan"
 
 const GIB = 1024 ** 3
 // The owner's real machine, so the cases below are the decision this actually makes today.
@@ -248,5 +250,41 @@ describe("policyFor: the machine gets a policy, or an honest refusal — never s
     })
     expect(plan.tokens).toBeGreaterThan(0)
     expect(plan.tokens).toBeLessThanOrEqual(262144)
+  })
+})
+
+// ── The two pools do not share a commitment ───────────────────────────────────────────────────────
+//
+// The device fraction was the unified one, read from `DEFAULT_POLICY`, which this module's own note says
+// does not transfer: nothing on the machine can give device memory back. Same value today, separate
+// decisions — so re-measuring how a desktop feels cannot silently move every GPU machine's window.
+describe("a device's commitment is its own declared judgement", () => {
+  test("the device branch does not read the unified fraction", () => {
+    const p = policyFor({ kind: "discrete-vram", totalBytes: 24 * 1024 ** 3, usedBytes: 2 * 1024 ** 3 })!
+    expect(p.commitFraction).toBe(DEVICE_COMMIT_FRACTION)
+  })
+
+  test("moving the unified fraction leaves the device fraction where it was", () => {
+    // Read as data rather than mutated: the constants are frozen exports, and what must hold is that the
+    // device branch names its own, which a reader can check and a mutation can break.
+    expect(DEVICE_COMMIT_FRACTION).not.toBe(undefined)
+    const unified = policyFor({ kind: "unified", totalBytes: 48 * 1024 ** 3, usedBytes: 0 })!
+    const device = policyFor({ kind: "discrete-vram", totalBytes: 24 * 1024 ** 3, usedBytes: 0 })!
+    expect(unified.commitFraction).toBe(DEFAULT_POLICY.commitFraction)
+    expect(device.commitFraction).toBe(DEVICE_COMMIT_FRACTION)
+  })
+
+  test("a device reserve is MEASURED — what is held, plus declared headroom", () => {
+    const held = 3 * 1024 ** 3
+    const total = 24 * 1024 ** 3
+    const p = policyFor({ kind: "discrete-vram", totalBytes: total, usedBytes: held })!
+    expect(p.systemReserveBytes).toBe(Math.round(held + total * DEVICE_HEADROOM_FRACTION))
+    // Never the unified machine's 6 GiB desktop allowance, which describes a desktop this pool has not got.
+    expect(p.systemReserveBytes).not.toBe(DEFAULT_POLICY.systemReserveBytes)
+  })
+
+  test("a pool nobody described is refused, not approximated", () => {
+    expect(policyFor({ kind: "unknown", totalBytes: 24 * 1024 ** 3, usedBytes: 0 })).toBeNull()
+    expect(policyFor({ kind: "discrete-vram", totalBytes: 0, usedBytes: 0 })).toBeNull()
   })
 })

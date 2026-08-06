@@ -136,8 +136,14 @@ describe("MIMOCODE_HOME end-to-end", () => {
     })
     expect(result.ok).toBe(true)
     if (!result.ok) return
-    // Paths should reflect XDG layout (ends with "/mimocode"), not MIMOCODE_HOME layout
-    expect(result.paths.config).toBe(path.join(tmp.path, "config", "mimocode"))
-    expect(result.paths.data).toBe(path.join(tmp.path, "data", "mimocode"))
+      // What this test is about is the LAYOUT: with MIMOCODE_HOME empty, the XDG roots are used and the
+      // app's own directory is appended beneath each. The expectation used to NAME that directory, and
+      // named the one from before the rename — so it asserted a path the engine has not used in months
+      // and reported a correct product as broken. The layout is the property under test; the name is the
+      // product's to choose, and repeating it here is a second place for it to disagree with itself.
+      expect(path.dirname(result.paths.config)).toBe(path.join(tmp.path, "config"))
+      expect(path.dirname(result.paths.data)).toBe(path.join(tmp.path, "data"))
+      expect(path.basename(result.paths.config)).toBe(path.basename(result.paths.data))
+      expect(path.basename(result.paths.data)).not.toBe("data")
   })
 })

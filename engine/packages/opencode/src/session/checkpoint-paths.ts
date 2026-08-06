@@ -1,12 +1,30 @@
 import path from "path"
 import fs from "fs/promises"
 import { Global } from "@/global"
+import { AppFileSystem } from "@mimo-ai/shared/filesystem"
 import type { ProjectID } from "@/project/schema"
 import { SessionID } from "./schema"
 
 // ---------------------------------------------------------------------------
 // File helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * The memory tree's root, `<data>/memory` — and the ONE spelling of it that comparisons may use.
+ *
+ * Thirteen places built this by hand, and the ones that COMPARE a path against it were comparing two
+ * different spellings of the same directory: the target is canonicalised first (`normalizePath` resolves
+ * the true case and the long form of every component), while the root was whatever the data directory
+ * happened to be written as. On a filesystem that preserves case without honouring it — or that hands out
+ * a short 8.3 name — the two never matched, so a write INSIDE the memory tree read as outside it and the
+ * external-directory permission was asked for the harness's own bookkeeping.
+ *
+ * Both sides in one spelling, from one place. READ AT CALL TIME: the data directory moves with
+ * `MIMOCODE_HOME`, and a value captured at import is a snapshot of where it used to be.
+ */
+export function memoryRoot(): string {
+  return AppFileSystem.normalizePath(path.join(Global.Path.data, "memory"))
+}
 
 /**
  * Session memory root. Houses checkpoint artifacts, task narratives, and

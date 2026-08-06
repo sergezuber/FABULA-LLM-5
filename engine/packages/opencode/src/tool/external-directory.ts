@@ -8,6 +8,7 @@ import { Instance } from "../project/instance"
 import { ProjectID } from "../project/schema"
 import { assertMemoryWriteAllowed } from "./memory-path-guard"
 import { AppFileSystem } from "@mimo-ai/shared/filesystem"
+import { memoryRoot } from "@/session/checkpoint-paths"
 
 type Kind = "file" | "directory"
 
@@ -34,7 +35,7 @@ export const assertExternalDirectoryEffect = Effect.fn("Tool.assertExternalDirec
   // is redundant and, in headless run mode (no permission replier), deadlocks on a
   // never-resolved Deferred. memory-path-guard allows a task-bound subagent its own
   // tasks/<taskId>/*.md and rejects cross-task / wrong-agent writes.
-  if (AppFileSystem.contains(path.join(Global.Path.data, "memory"), full)) return
+  if (AppFileSystem.contains(memoryRoot(), full)) return
 
   const kind = options?.kind ?? "file"
   const dir = kind === "directory" ? full : path.dirname(full)
@@ -97,7 +98,7 @@ export const assertWriteAllowed = Effect.fn("Tool.assertWriteAllowed")(function*
   assertMemoryWriteAllowed({
     target,
     agentName: ctx.agent,
-    memoryRoot: path.join(Global.Path.data, "memory"),
+    memoryRoot: memoryRoot(),
     projectID,
     sessionID: ctx.sessionID,
     taskId: ctx.taskId,
@@ -122,7 +123,7 @@ export const askEditUnlessMemory = Effect.fn("Tool.askEditUnlessMemory")(functio
   input: { patterns: string[]; diff: string; files?: unknown },
 ) {
   const full = process.platform === "win32" ? AppFileSystem.normalizePath(filepath) : filepath
-  if (AppFileSystem.contains(path.join(Global.Path.data, "memory"), full)) return
+  if (AppFileSystem.contains(memoryRoot(), full)) return
   yield* ctx.ask({
     permission: "edit",
     patterns: input.patterns,

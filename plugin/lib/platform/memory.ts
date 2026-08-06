@@ -18,6 +18,7 @@ import { execFileSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 import { totalmem, freemem } from "node:os"
 import { current, type Platform } from "./index"
+import { whichBin } from "./shell"
 
 /**
  * Where the KV cache is actually allocated on this machine.
@@ -114,35 +115,16 @@ export function totalBytes(p: Platform = current(), env: NodeJS.ProcessEnv = pro
 /**
  * GPU memory, when a discrete GPU is what holds the cache.
  *
- * Returns null when there is no GPU tool to ask — which is a different answer from "zero VRAM" and is
- * treated as such by the caller. `nvidia-smi` ships with the driver on both Windows and Linux;
- * `rocm-smi` with ROCm. Neither is probed for on macOS: an Apple Silicon machine has no discrete VRAM to
- * find, and asking would only add a spawn to every plan.
+ * Returns null when NO accelerator answered — a different statement from "zero VRAM", and the caller
+ * relies on the difference. Every vendor is asked, through the one reading below.
  */
 export function vramBytes(
   p: Platform = current(),
   env: NodeJS.ProcessEnv = process.env,
 ): { total: number; used: number } | null {
   if (p === "darwin") return null
-  const named = env.FABULA_NVIDIA_SMI
-  try {
-    const out = execFileSync(named || "nvidia-smi", [
-      "--query-gpu=memory.total,memory.used",
-      "--format=csv,noheader,nounits",
-    ], { encoding: "utf8", timeout: 4000 })
-    // Sum across devices: a serving runtime given several GPUs draws on all of them.
-    let total = 0
-    let used = 0
-    for (const line of out.trim().split("\n")) {
-      const [t, u] = line.split(",").map((s) => Number(s.trim()))
-      if (!Number.isFinite(t) || !Number.isFinite(u)) continue
-      total += t * 1024 * 1024
-      used += u * 1024 * 1024
-    }
-    return total > 0 ? { total, used } : null
-  } catch {
-    return null
-  }
+  const g = gpuReading(p, env)
+  return g.totalBytes > 0 ? { total: g.totalBytes, used: g.usedBytes } : null
 }
 
 /**
@@ -166,13 +148,15 @@ export function memoryReading(
   }
 
   if (forced !== "cpu-only") {
-    const vram = vramBytes(p, env)
+    // Asked ONCE: the probe spawns a vendor tool, and this runs on the path that sizes every load.
+    const g = p === "darwin" ? null : gpuReading(p, env)
+    const vram = g && g.totalBytes > 0 ? { total: g.totalBytes, used: g.usedBytes } : null
     if (vram) {
       return {
         kind: "discrete-vram",
         total: vram.total,
         used: vram.used,
-        detail: `GPU memory (nvidia-smi): ${(vram.total / 1024 ** 3).toFixed(1)} GiB total`,
+        detail: `GPU memory (${g!.detail}): ${(vram.total / 1024 ** 3).toFixed(1)} GiB total`,
       }
     }
     if (forced === "discrete-vram") {
@@ -184,4 +168,95 @@ export function memoryReading(
   const used = usedBytes(p, env)
   if (!total) return { kind: "unknown", total: 0, used: 0, detail: "could not read system memory" }
   return { kind: "cpu-only", total, used, detail: "system memory (no discrete GPU found)" }
+}
+
+export interface GpuReading {
+  /** Named as the probe found it. `unknown` means an accelerator was seen and not identified — which is
+   *  a different statement from "there is none", and the planner must be able to tell them apart. */
+  vendor: "nvidia" | "amd" | "intel" | "apple" | "unknown" | "none"
+  /** Total device memory in bytes, or 0 when the vendor is known but its memory could not be read. */
+  totalBytes: number
+  /** Device memory already in use, in bytes, when the vendor's tool reports it; 0 otherwise. */
+  usedBytes: number
+  /** How it was learned, in one phrase, for a human reading a refusal. */
+  detail: string
+}
+
+/**
+ * Accelerator, asked of each vendor's own tool.
+ *
+ * Only one vendor was ever asked, so every other machine answered "none" — and "none" is what tells the
+ * planner to size against system memory. A machine with a card it could not name was therefore planned
+ * for as though it had no card at all. Each vendor ships a tool that reports its own devices; the ones
+ * that are not installed simply do not answer, which costs a failed spawn and no correctness.
+ *
+ * `none` and `unknown` are DIFFERENT answers and both are used: `none` is a claim (there is no
+ * accelerator), `unknown` is the absence of one (something is there and this build cannot size it).
+ */
+export function gpuReading(
+  p: Platform = current(),
+  env: NodeJS.ProcessEnv = process.env,
+  run: (cmd: string, args: string[]) => string | null = defaultRun,
+): GpuReading {
+  // Apple silicon has no separate device memory: the accelerator draws on the same pool as everything
+  // else, which is precisely what "unified" means, and asking a vendor tool would invent a second pool.
+  if (p === "darwin") {
+    return { vendor: "apple", totalBytes: 0, usedBytes: 0, detail: "unified memory — the accelerator shares the system pool" }
+  }
+
+  const nv = run(env.FABULA_NVIDIA_SMI || "nvidia-smi", [
+    "--query-gpu=memory.total,memory.used", "--format=csv,noheader,nounits",
+  ])
+  if (nv) {
+    // Summed across devices: a serving runtime given several cards draws on all of them.
+    let total = 0
+    let used = 0
+    for (const line of nv.trim().split("\n")) {
+      const [t, u] = line.split(",").map((s) => Number(s.trim()))
+      if (!Number.isFinite(t)) continue
+      total += t * 1024 * 1024
+      used += (Number.isFinite(u) ? u : 0) * 1024 * 1024
+    }
+    if (total > 0) return { vendor: "nvidia", totalBytes: total, usedBytes: used, detail: "nvidia-smi" }
+  }
+
+  // AMD's tool prints a table; the VRAM total is reported in bytes by `--showmeminfo vram`.
+  const amd = run(env.FABULA_ROCM_SMI || "rocm-smi", ["--showmeminfo", "vram", "--csv"])
+  if (amd) {
+    const m = /(\d{6,})/.exec(amd) // the first large integer on the line is the byte total
+    if (m) return { vendor: "amd", totalBytes: Number(m[1]), usedBytes: usedFromRocm(amd), detail: "rocm-smi" }
+    return { vendor: "amd", totalBytes: 0, usedBytes: 0, detail: "rocm-smi answered but reported no memory total" }
+  }
+
+  // Intel's tool answers to `xpu-smi discovery`; it is present only where such a device is.
+  const intel = run(env.FABULA_XPU_SMI || "xpu-smi", ["discovery"])
+  if (intel && /GPU|Device/i.test(intel)) {
+    return { vendor: "intel", totalBytes: 0, usedBytes: 0, detail: "xpu-smi found a device; its memory total was not read" }
+  }
+
+  return { vendor: "none", totalBytes: 0, usedBytes: 0, detail: "no accelerator tool answered on this machine" }
+}
+/**
+ * Run a probe tool and hand back its output, or null when it is not on this machine.
+ *
+ * Exported because the profile asks the same way; a second copy would be a second decision about what
+ * "the tool did not answer" means.
+ */
+export function defaultRun(cmd: string, args: string[]): string | null {
+  // Resolved before spawning: a missing tool is the ordinary case here, and asking PATH is cheaper and
+  // quieter than a spawn that fails.
+  if (!whichBin(cmd)) return null
+  try {
+    const { execFileSync } = require("node:child_process") as typeof import("node:child_process")
+    return execFileSync(cmd, args, { encoding: "utf8", timeout: 4000, stdio: ["ignore", "pipe", "ignore"] })
+  } catch {
+    return null
+  }
+}
+
+// `--showmeminfo vram --csv` prints the total and then what is already held; the second large integer is
+// the used figure. Absent, the answer is 0 — "nothing known to be in use", never a claim the card is empty.
+function usedFromRocm(text: string): number {
+  const nums = text.match(/\d{6,}/g)
+  return nums && nums.length > 1 ? Number(nums[1]) : 0
 }

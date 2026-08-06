@@ -119,9 +119,29 @@ export interface PolicySource {
   usedBytes: number
 }
 
-/** Headroom above what a device already holds, as a share of the pool. Declared, and the only judgement
- *  in the device branch: a card reporting 23 of 24 GiB free still needs room for the display to grow. */
+/** Headroom above what a device already holds, as a share of the pool. Declared, and one of the two
+ *  judgements in the device branch: a card reporting 23 of 24 GiB free still needs room for the display
+ *  to grow, and the driver's used figure is a snapshot rather than a ceiling. */
 export const DEVICE_HEADROOM_FRACTION = 0.1
+
+/**
+ * How much of what remains a device may be committed to, as its OWN declared judgement.
+ *
+ * It was the unified figure, read straight out of `DEFAULT_POLICY` — which the note above this module
+ * says in as many words does NOT transfer, because nothing on the machine can give device memory back.
+ * A number carried silently across the one boundary its own documentation warns about is the defect this
+ * module exists to prevent, in miniature: re-measuring the desktop's comfort on a Mac would then have
+ * moved every GPU machine's window without anyone deciding to.
+ *
+ * The value is the same today and that is deliberate — inventing a DIFFERENT unmeasured number would be
+ * the same mistake wearing humility. What separates them is that this one is now a decision with an
+ * owner and a way to be settled: load a model at successive fractions on a discrete card and find where
+ * allocation begins to fail or the runtime starts offloading to host memory. Until that measurement
+ * exists, the two move independently and neither drags the other.
+ *
+ * NOT MEASURED ON A DEVICE. No machine with a discrete card has run this.
+ */
+export const DEVICE_COMMIT_FRACTION = 0.9
 
 /**
  * The policy to size THIS machine with, or null when the machine has not been described.
@@ -137,7 +157,10 @@ export function policyFor(source: PolicySource): WindowPolicy | null {
   const held = Number.isFinite(source.usedBytes) && source.usedBytes > 0 ? source.usedBytes : 0
   return {
     systemReserveBytes: Math.round(held + source.totalBytes * DEVICE_HEADROOM_FRACTION),
-    commitFraction: DEFAULT_POLICY.commitFraction,
+    commitFraction: DEVICE_COMMIT_FRACTION,
+    // The floor and the quantum are about WINDOWS, not about memory: below the floor a window buys
+    // nothing worth a reload, and the quantum is coarse enough that memory noise never moves the answer.
+    // Neither claim depends on where the cache lives, so they are shared rather than duplicated.
     floorTokens: DEFAULT_POLICY.floorTokens,
     quantumTokens: DEFAULT_POLICY.quantumTokens,
   }

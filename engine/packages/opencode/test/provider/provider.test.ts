@@ -53,6 +53,14 @@ async function defaultModel() {
   return run((provider) => provider.defaultModel())
 }
 
+async function providerIDs() {
+  return run((provider) => provider.list()).then((r) => Object.keys(r))
+}
+
+// Read from the case above rather than written again: what these two tests need is A provider that a
+// single environment key makes available, not any particular vendor.
+const FALLBACK_TEST_KEY = "ANTHROPIC_API_KEY"
+
 test("provider loaded from env variable", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
@@ -470,16 +478,13 @@ test("parseModel handles model IDs with slashes", () => {
   expect(String(result.providerID)).toBe("openrouter")
   expect(String(result.modelID)).toBe("anthropic/claude-3-opus")
 })
-
-test("defaultModel returns first available model when no config set", async () => {
+// An EMPTY provider block is the absence of a preference, not a preference for nothing. Written out as
+// its own case because the fallback above only reaches this state by accident of the fixture; here it is
+// the subject.
+test("an empty provider block is the same as no provider block", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "mimocode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-        }),
-      )
+      await Bun.write(path.join(dir, "mimocode.json"), JSON.stringify({ provider: {} }))
     },
   })
   await Instance.provide({
@@ -488,9 +493,35 @@ test("defaultModel returns first available model when no config set", async () =
       set("ANTHROPIC_API_KEY", "test-api-key")
     },
     fn: async () => {
+      const available = await providerIDs()
+      expect(available.length).toBeGreaterThan(0)
+      const model = await defaultModel()
+      expect(available).toContain(String(model.providerID))
+    },
+  })
+})
+
+// An empty `provider` block means the same as no block: no preference. The older reading tested the block
+// for TRUTH, and `{}` is truthy — so a config whose last provider entry had been removed excluded every
+// provider the environment really had, and a machine with a working key reported none at all.
+test("defaultModel returns first available model when no config set", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(path.join(dir, "mimocode.json"), JSON.stringify({ $schema: "https://opencode.ai/config.json" }))
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      set("ANTHROPIC_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const available = await providerIDs()
+      expect(available.length).toBeGreaterThan(0)
       const model = await defaultModel()
       expect(model.providerID).toBeDefined()
       expect(model.modelID).toBeDefined()
+      expect(available).toContain(String(model.providerID))
     },
   })
 })

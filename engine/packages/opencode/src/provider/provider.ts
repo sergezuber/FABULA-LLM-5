@@ -1721,7 +1721,14 @@ const layer: Layer.Layer<
         return { providerID: mimo.id, modelID: ModelID.make("mimo-auto") }
       }
 
-      const provider = Object.values(s.providers).find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id))
+      // A `provider` block naming somebody is a PREFERENCE, and it is honoured. A block naming NOBODY is
+      // not a preference for nothing — it is the absence of one, and must mean exactly what leaving the
+      // block out means. The test was `!cfg.provider`, so an empty object passed it (an object is truthy)
+      // and then matched no id, excluding every provider the environment really had: a machine with a
+      // working key was told it has no providers at all. `"provider": {}` is not an exotic hand-edit —
+      // it is what a config writer leaves behind after the last entry is removed.
+      const preferred = Object.keys(cfg.provider ?? {})
+      const provider = Object.values(s.providers).find((p) => preferred.length === 0 || preferred.includes(p.id))
       if (!provider) throw new Error("no providers found")
       const [model] = sort(Object.values(provider.models))
       if (!model) throw new Error("no models found")

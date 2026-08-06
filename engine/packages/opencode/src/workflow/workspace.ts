@@ -1,6 +1,7 @@
 import path from "path"
 import { Filesystem } from "@/util"
 import { Glob } from "@mimo-ai/shared/util/glob"
+import { AppFileSystem } from "@mimo-ai/shared/filesystem"
 
 // Resolve a guest-supplied relative path against the workspace root, refusing
 // any path that escapes the root by LEXICAL means (parent traversal `..`, or an
@@ -62,7 +63,7 @@ export function makeFileHooks(root: string) {
       // deterministic fan-out order.
       return abs
         .map((p) => path.relative(root, p))
-        .filter((rel) => rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel))
+        .filter((rel) => AppFileSystem.isBelowRelative(rel))
         .sort()
     },
   }

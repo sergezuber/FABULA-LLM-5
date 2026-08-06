@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Effect, Layer, Stream } from "effect"
+import { Effect, Cause, Layer, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { Installation } from "../../src/installation"
@@ -157,20 +157,30 @@ describe("installation", () => {
       expect(result).toBe("1.7.0")
     })
 
-    test("resolves version from GitHub releases redirect for curl method", async () => {
+    // This build has NO upstream release feed: the vendor URL was removed when the foreign branding was,
+    // and nothing replaced it, so the curl path cannot resolve a version and says so. The test fed the old
+    // vendor URL and expected a version back — it was measuring a product that no longer exists, and its
+    // failure was reporting a deliberate removal as a defect.
+    test("reports that there is no release feed to resolve a version from", async () => {
+      const asked: string[] = []
       const layer = testLayer(
         () => jsonResponse({}),
         (cmd, args) => {
-          if (cmd === "curl" && args.includes("https://github.com/XiaomiMiMo/MiMo-Code/releases/latest"))
-            return "HTTP/2 302\r\nlocation: https://github.com/XiaomiMiMo/MiMo-Code/releases/tag/v0.1.1\r\n"
+          asked.push([cmd, ...args].join(" "))
+          // What a real curl answers for a blank target: nothing. Answering with a redirect regardless of
+          // the target would let the assertion pass against a build that still reaches a vendor host.
           return ""
         },
       )
 
-      const result = await Effect.runPromise(
-        Installation.Service.use((svc) => svc.latest("curl")).pipe(Effect.provide(layer)),
+      const outcome = await Effect.runPromise(
+        Effect.exit(Installation.Service.use((svc) => svc.latest("curl")).pipe(Effect.provide(layer))),
       )
-      expect(result).toBe("0.1.1")
+      expect(outcome._tag).toBe("Failure")
+      expect(String(Cause.squash((outcome as any).cause))).toContain("failed to resolve latest version")
+      // And the removal itself: nothing off this machine is contacted to find out.
+      expect(asked.join(" ")).toContain("about:blank")
+      expect(asked.join(" ")).not.toContain("github.com")
     })
 
     test("dies for unsupported channels (brew/choco/scoop/unknown)", async () => {

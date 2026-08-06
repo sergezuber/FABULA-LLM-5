@@ -6,6 +6,7 @@ import { Database } from "../storage"
 import { Config } from "../config"
 import { reconcileMemory } from "./reconcile"
 import { buildFtsQuery } from "./fts-query"
+import { memoryRoot } from "@/session/checkpoint-paths"
 
 type SearchRow = {
   path: string
@@ -36,7 +37,7 @@ export const layer: Layer.Layer<Service, never, Config.Service> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
-    const root = path.join(Global.Path.data, "memory")
+    const root = memoryRoot()
     const ccBase = path.join(os.homedir(), ".claude", "projects")
 
     const rootEff = Effect.fn("Memory.root")(function* () {

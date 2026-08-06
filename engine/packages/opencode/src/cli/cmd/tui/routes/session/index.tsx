@@ -92,6 +92,7 @@ import { TuiPluginRuntime } from "../../plugin"
 import { DialogTokenPlan } from "../../component/dialog-token-plan"
 import { SessionRetry } from "@/session/retry"
 import { getRevertDiffFiles } from "../../util/revert-diff"
+import { AppFileSystem } from "@mimo-ai/shared/filesystem"
 
 addDefaultParsers(parsers.parsers)
 
@@ -2638,7 +2639,7 @@ function normalizePath(input?: string) {
   const relative = path.relative(cwd, absolute)
 
   if (!relative) return "."
-  if (!relative.startsWith("..")) return relative
+  if (AppFileSystem.isBelowRelative(relative)) return relative
 
   // outside cwd - use absolute
   return absolute

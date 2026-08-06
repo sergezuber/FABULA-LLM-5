@@ -24,20 +24,16 @@ import * as os from "node:os"
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import * as path from "node:path"
 import { current, type Platform } from "./index"
-import { memoryReading, type MemoryKind } from "./memory"
+import { memoryReading, gpuReading, defaultRun, type GpuReading, type MemoryKind } from "./memory"
 import { sandboxPlan, untrustedScope } from "./sandbox"
 import { dataDir } from "./paths"
-import { whichBin } from "./shell"
 
-export interface GpuReading {
-  /** Named as the probe found it. `unknown` means an accelerator was seen and not identified — which is
-   *  a different statement from "there is none", and the planner must be able to tell them apart. */
-  vendor: "nvidia" | "amd" | "intel" | "apple" | "unknown" | "none"
-  /** Total device memory in bytes, or 0 when the vendor is known but its memory could not be read. */
-  totalBytes: number
-  /** How it was learned, in one phrase, for a human reading a refusal. */
-  detail: string
-}
+// The accelerator is asked ONCE, in `./memory`, because sizing the window and describing the machine are
+// the same question about the same hardware. They had been two probes and had already drifted: the one
+// the planner used knew a single vendor, so a machine with an AMD or Intel card was sized against system
+// memory as though it had none — the cache then lives somewhere far smaller than what was planned for.
+export { gpuReading, type GpuReading }
+
 
 export interface MachineProfile {
   platform: Platform
@@ -52,64 +48,7 @@ export interface MachineProfile {
   fingerprint: string
 }
 
-/**
- * Accelerator, asked of each vendor's own tool.
- *
- * Only one vendor was ever asked, so every other machine answered "none" — and "none" is what tells the
- * planner to size against system memory. A machine with a card it could not name was therefore planned
- * for as though it had no card at all. Each vendor ships a tool that reports its own devices; the ones
- * that are not installed simply do not answer, which costs a failed spawn and no correctness.
- *
- * `none` and `unknown` are DIFFERENT answers and both are used: `none` is a claim (there is no
- * accelerator), `unknown` is the absence of one (something is there and this build cannot size it).
- */
-export function gpuReading(
-  p: Platform = current(),
-  env: NodeJS.ProcessEnv = process.env,
-  run: (cmd: string, args: string[]) => string | null = defaultRun,
-): GpuReading {
-  // Apple silicon has no separate device memory: the accelerator draws on the same pool as everything
-  // else, which is precisely what "unified" means, and asking a vendor tool would invent a second pool.
-  if (p === "darwin") {
-    return { vendor: "apple", totalBytes: 0, detail: "unified memory — the accelerator shares the system pool" }
-  }
 
-  const nv = run(env.FABULA_NVIDIA_SMI || "nvidia-smi", [
-    "--query-gpu=memory.total", "--format=csv,noheader,nounits",
-  ])
-  if (nv) {
-    const total = nv.trim().split("\n").reduce((a, l) => a + (Number(l.trim()) || 0) * 1024 * 1024, 0)
-    if (total > 0) return { vendor: "nvidia", totalBytes: total, detail: "nvidia-smi" }
-  }
-
-  // AMD's tool prints a table; the VRAM total is reported in bytes by `--showmeminfo vram`.
-  const amd = run(env.FABULA_ROCM_SMI || "rocm-smi", ["--showmeminfo", "vram", "--csv"])
-  if (amd) {
-    const m = /(\d{6,})/.exec(amd) // the first large integer on the line is the byte total
-    if (m) return { vendor: "amd", totalBytes: Number(m[1]), detail: "rocm-smi" }
-    return { vendor: "amd", totalBytes: 0, detail: "rocm-smi answered but reported no memory total" }
-  }
-
-  // Intel's tool answers to `xpu-smi discovery`; it is present only where such a device is.
-  const intel = run(env.FABULA_XPU_SMI || "xpu-smi", ["discovery"])
-  if (intel && /GPU|Device/i.test(intel)) {
-    return { vendor: "intel", totalBytes: 0, detail: "xpu-smi found a device; its memory total was not read" }
-  }
-
-  return { vendor: "none", totalBytes: 0, detail: "no accelerator tool answered on this machine" }
-}
-
-function defaultRun(cmd: string, args: string[]): string | null {
-  // Resolved before spawning: a missing tool is the ordinary case here, and asking PATH is cheaper and
-  // quieter than a spawn that fails.
-  if (!whichBin(cmd)) return null
-  try {
-    const { execFileSync } = require("node:child_process") as typeof import("node:child_process")
-    return execFileSync(cmd, args, { encoding: "utf8", timeout: 4000, stdio: ["ignore", "pipe", "ignore"] })
-  } catch {
-    return null
-  }
-}
 
 /**
  * Everything the planner needs to know about this machine, in one reading.

@@ -16,6 +16,7 @@ import { Config } from "../config"
 import { FileIgnore } from "./ignore"
 import { Protected } from "./protected"
 import { Log } from "../util"
+import { AppFileSystem } from "@mimo-ai/shared/filesystem"
 
 declare const OPENCODE_LIBC: string | undefined
 
@@ -53,7 +54,7 @@ function getBackend() {
 function protecteds(dir: string) {
   return Protected.paths().filter((item) => {
     const rel = path.relative(dir, item)
-    return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel)
+    return AppFileSystem.isBelowRelative(rel)
   })
 }
 

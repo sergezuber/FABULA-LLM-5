@@ -16,6 +16,7 @@ import DESCRIPTION from "./apply_patch.txt"
 import { File } from "../file"
 import { Format } from "../format"
 import { Global } from "../global"
+import { memoryRoot } from "@/session/checkpoint-paths"
 
 const PatchParams = z.object({
   patch_text: z.string().describe("The full patch text that describes all changes to be made"),
@@ -190,7 +191,7 @@ export const ApplyPatchTool = Tool.define(
 
       // Check permissions if needed
       const permissionChanges = fileChanges.filter(
-        (change) => !AppFileSystem.contains(path.join(Global.Path.data, "memory"), change.movePath ?? change.filePath),
+        (change) => !AppFileSystem.contains(memoryRoot(), change.movePath ?? change.filePath),
       )
       // NOTE: permissionChanges already excludes memory-tree paths (filtered at
       // the `permissionChanges` definition above), so this ask never fires for
@@ -206,7 +207,7 @@ export const ApplyPatchTool = Tool.define(
             filepath: relativePaths.join(", "),
             diff: permissionChanges.map((change) => change.diff).join("\n") + "\n",
             files: files.filter(
-              (file) => !AppFileSystem.contains(path.join(Global.Path.data, "memory"), file.movePath ?? file.filePath),
+              (file) => !AppFileSystem.contains(memoryRoot(), file.movePath ?? file.filePath),
             ),
           },
         })

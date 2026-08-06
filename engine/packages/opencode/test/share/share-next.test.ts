@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { beforeEach, describe, expect } from "bun:test"
-import { Effect, Exit, Layer, Option } from "effect"
+import { Effect, Cause, Exit, Layer, Option } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 
 import { AccessToken, AccountID, OrgID, RefreshToken } from "../../src/account/schema"
@@ -108,15 +108,23 @@ describe("ShareNext", () => {
     ),
   )
 
-  it.live("request uses default URL when no enterprise config", () =>
+  // Sharing has no default destination in this build, deliberately: the vendor endpoint was removed and
+  // nothing replaced it, so with no `enterprise.url` there is nowhere a share could go. The test asserted
+  // the vendor host and had simply never been updated after the removal — it was describing a product
+  // that no longer exists rather than measuring the one that does.
+  it.live("refuses to share when no destination is configured", () =>
     provideTmpdirInstance(() =>
       ShareNext.Service.use((svc) =>
         Effect.gen(function* () {
-          const req = yield* svc.request()
-
-          expect(req.baseUrl).toBe("https://opncd.ai")
-          expect(req.api.create).toBe("/api/share")
-          expect(req.headers).toEqual({})
+          // `Effect.exit` rather than a typed catch: the refusal travels as a DEFECT here, and a handler
+          // for the error channel alone would let it through — the outcome must be read whatever channel
+          // carried it, or the assertion measures the handler instead of the behaviour.
+          const outcome = yield* Effect.exit(svc.request())
+          expect(outcome._tag).toBe("Failure")
+          // `Cause.squash` rather than reaching into the cause: the refusal travels as a DEFECT, and the
+          // cause's own shape is an implementation detail of the effect library. Asserting only "it
+          // failed" would pass for any failure at all, including one that means the opposite.
+          expect(String(Cause.squash((outcome as any).cause))).toContain("enterprise.url")
         }),
       ).pipe(Effect.provide(live(none))),
     ),

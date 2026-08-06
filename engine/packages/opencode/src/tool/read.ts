@@ -14,6 +14,7 @@ import { Global } from "@/global"
 import { SessionCwd } from "./session-cwd"
 import { Instruction } from "../session/instruction"
 import { isImageAttachment, isPdfAttachment, sniffAttachmentMime } from "@/util/media"
+import { memoryRoot } from "@/session/checkpoint-paths"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -163,7 +164,7 @@ export const ReadTool = Tool.define(
       assertCheckpointWriterReadAllowed({
         target: filepath,
         agentName: ctx.agent,
-        memoryRoot: () => path.join(Global.Path.data, "memory"),
+        memoryRoot: () => memoryRoot(),
       })
       const title = path.relative(Instance.worktree, filepath)
 

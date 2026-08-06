@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.170.0"
+export const FABULA_VERSION = "0.171.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,28 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.171.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Пустой список поставщиков читался как «перечислено ноль» вместо «не перечислено ничего». Такой список остаётся после удаления последней записи — и тогда отсекались ВСЕ доступные поставщики: машина с рабочим ключом сообщала, что поставщиков у неё нет вовсе.",
+        en: "An empty provider list read as \"zero named\" instead of \"none named\". That list is what remains after the last entry is removed, and it then excluded EVERY provider available — a machine with a working key reported having none at all.",
+      },
+      {
+        ru: "Ускоритель опрашивается одним способом. Опросов было два, и они уже разошлись: тот, по которому считается окно модели, знал одного производителя, поэтому машина с картой AMD или Intel считалась машиной без карты — и окно считалось по системной памяти, тогда как кэш живёт в видеопамяти. Заодно читается и занятая часть, поэтому запас на устройстве измеряется, а не назначается.",
+        en: "The accelerator is asked one way. There were two probes and they had already drifted: the one the window plan uses knew a single vendor, so a machine with an AMD or Intel card counted as a machine with none — and the window was sized against system memory while the cache lives in VRAM. What the card already holds is read too, so a device's reserve is measured rather than assigned.",
+      },
+      {
+        ru: "Доля памяти, отдаваемая под окно на видеокарте, стала собственным решением, а не тем же числом, что для единой памяти. Значение сегодня то же, и это намеренно: выдумать ДРУГОЕ неизмеренное число — та же ошибка, только с виду скромнее. Разница в том, что теперь пересчёт одного не двигает другое молча.",
+        en: "The share of memory a window may take on a discrete card is its own decision rather than the figure measured for unified memory. The value is the same today, deliberately: inventing a DIFFERENT unmeasured number is the same mistake wearing humility. What changed is that re-measuring one no longer moves the other silently.",
+      },
+      {
+        ru: "Корень памяти сравнивается в одном написании с обеих сторон. Цель приводилась к каноническому виду, а корень — нет, поэтому запись ВНУТРИ служебного дерева читалась как снаружи и вызывала запрос разрешения на собственную бухгалтерию обвязки.",
+        en: "The memory root is compared in one spelling on both sides. The target was canonicalised and the root was not, so a write INSIDE the harness's own bookkeeping read as outside it and raised a permission request for it.",
+      },
+    ],
+  },
   {
     version: "0.170.0",
     date: "2026-08-06",

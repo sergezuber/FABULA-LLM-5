@@ -336,19 +336,37 @@ describe("WorkflowRuntime cancel cascade", () => {
           model: ref,
           maxConcurrentAgents: 8,
         })
-        // Let the fan-out register its children, then cancel mid-flight.
-        yield* Effect.sleep("150 millis")
+        // Wait for the CONDITION — children registered — not for a duration. 150ms was a guess about how
+        // long a fan-out takes to reach the registry, and on a loaded runner it is not enough: the cancel
+        // then lands before anything is registered, and the assertion below reports an orphan where there
+        // was simply nothing yet to reclaim. Polling for the state the test needs makes it deterministic
+        // without widening what it accepts: the cancel still lands MID-flight, with children registered
+        // and the fan-out unfinished, which is the race the orphan bug lives in.
+        const inFlight = yield* Effect.gen(function* () {
+          for (let i = 0; i < 200; i++) {
+            const ids = (yield* registry.listBySession(parent.id))
+              .filter((a) => a.actorID !== "main")
+              .map((a) => a.actorID)
+            if (ids.length > 0) return ids
+            yield* Effect.sleep("25 millis")
+          }
+          return [] as string[]
+        })
+        expect(inFlight.length).toBeGreaterThan(0)
         yield* runtime.cancel({ runID })
 
         const s = yield* runtime.status({ runID })
         expect(s.status).toBe("cancelled")
 
-        // At least one child was actually spawned (else the test proves nothing).
-        const children = (yield* registry.listBySession(parent.id)).filter((a) => a.actorID !== "main")
-        expect(children.length).toBeGreaterThan(0)
-        // Every spawned child was reclaimed: cancel stamped lastOutcome="cancelled"
-        // on each. An orphan (never reclaimed) would have lastOutcome unset here.
-        expect(children.filter((a) => a.lastOutcome !== "cancelled")).toEqual([])
+        // The claim is about the children that were IN FLIGHT when cancel ran — those are the ones reclaim
+        // must reach, and the orphan bug left exactly them unstamped. Reading whatever is registered at
+        // assertion time asks a different question: a child that registers in the gap between cancel and
+        // this read was never in flight at cancel, and counting it makes the outcome depend on how quickly
+        // the machine got here.
+        const after = yield* registry.listBySession(parent.id)
+        const reclaimed = after.filter((a) => inFlight.includes(a.actorID))
+        expect(reclaimed.length).toBe(inFlight.length)
+        expect(reclaimed.filter((a) => a.lastOutcome !== "cancelled")).toEqual([])
       }),
       { git: true, config: providerCfg },
     ),

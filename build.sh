@@ -9,6 +9,11 @@
 #
 # This repo is self-contained: no external checkout is needed.
 set -euo pipefail
+
+# The desktop shell's two manifests are TRACKED and carry the version, so they are stamped on EVERY
+# platform — including this one, where the shell itself is not built. Skipping it here is what let them
+# lag behind the source and fail the deploy check on the platforms that do build it.
+bun "$(cd "$(dirname "$0")" && pwd)/scripts/stamp-shell-version.ts" || true
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 
 echo "== [1/3] engine deps =="

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.172.0"
+export const FABULA_VERSION = "0.173.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.173.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Версия попадает в файлы настольной оболочки при КАЖДОЙ сборке, на любой платформе. Проставлял её только тот шаг, который собирает саму оболочку, — а на этой платформе собирается другая, поэтому два отслеживаемых файла тихо отставали, и собранные из них пакет и установщик честно сообщали, что declared-версии не несут. Отставание теперь ловится ДО сборки, а не после неё.",
+        en: "The version reaches the desktop shell's manifests on EVERY build, on every platform. Only the step that builds that shell used to stamp them, and this platform builds a different one — so two tracked files lagged quietly, and the package and installer built from them reported, correctly, that they did not carry the declared version. A lag is now caught BEFORE the build rather than after it.",
+      },
+      {
+        ru: "Проверка отмены веерного запуска ждёт УСЛОВИЯ, а не отрезка времени, и спрашивает о тех детях, что были в полёте на момент отмены. Прежде она ждала полтораста миллисекунд в надежде, что дети успели зарегистрироваться, и на загруженной машине объявляла сиротой то, чего ещё не существовало.",
+        en: "The fan-out cancellation check waits for a CONDITION rather than a stretch of time, and asks about the children that were in flight when the cancel ran. It used to wait a hundred and fifty milliseconds hoping the children had registered, and on a loaded machine reported an orphan where nothing had yet come into being.",
+      },
+    ],
+  },
   {
     version: "0.172.0",
     date: "2026-08-06",

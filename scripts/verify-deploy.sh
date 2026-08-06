@@ -114,6 +114,17 @@ say "── every artifact carries the version the source declares"
 # and a mismatch names the version the artifact actually carries, not just "stale".
 CHANGELOG_TS="$ROOT/engine/packages/app/src/data/fabula-changelog.ts"
 SRC_VER="$(sed -n 's/^export const FABULA_VERSION = "\(.*\)"$/\1/p' "$CHANGELOG_TS" 2>/dev/null | head -1)"
+
+# The shell's two TRACKED manifests carry the version too, and they are stamped rather than hand-edited.
+# Checked BEFORE anything is built, because a lag there is invisible on a machine that does not build the
+# shell and surfaces only as a failed package on the platforms that do — which is exactly how it happened.
+if command -v bun >/dev/null 2>&1 && [ -f "$ROOT/scripts/stamp-shell-version.ts" ]; then
+  if shell_out="$(bun "$ROOT/scripts/stamp-shell-version.ts" --check 2>&1)"; then
+    ok "shell manifests carry $SRC_VER"
+  else
+    bad "$(printf '%s' "$shell_out" | head -2 | tr '\n' ' ')"
+  fi
+fi
 # What a JS payload ACTUALLY carries: the newest changelog entry survives minification verbatim as
 # `version:"X",date` — read X from stdin so the same probe serves the dist file and the binary.
 carried() { grep -oE 'version:"[0-9][0-9.]*",date' 2>/dev/null | head -1 | cut -d'"' -f2; }

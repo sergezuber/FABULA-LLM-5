@@ -9,14 +9,13 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
 
+# Stamping lives in ONE place and every build calls it — including the macOS build, which does not
+# compile this shell at all. It used to live here, so it ran only where the shell was built: commits from
+# a macOS machine left these two tracked manifests two waves behind the source, and Linux and Windows CI
+# then built exactly that and were told, correctly, that the package did not carry the declared version.
+bun "$ROOT/scripts/stamp-shell-version.ts"
 VERSION="$(sed -n 's/^export const FABULA_VERSION = "\(.*\)"$/\1/p' \
   "$ROOT/engine/packages/app/src/data/fabula-changelog.ts" 2>/dev/null | head -1)"
-[ -n "$VERSION" ] || { echo "FAIL: no FABULA_VERSION in the changelog source — nothing to stamp"; exit 1; }
-echo "stamping $VERSION"
-
-# Cargo.toml: only the package version, never a dependency's.
-perl -0pi -e "s/^version = \"[^\"]*\"/version = \"$VERSION\"/m" "$HERE/Cargo.toml"
-perl -0pi -e "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/"  "$HERE/tauri.conf.json"
 
 # `frontendDist` in tauri.conf.json is "ui" — relative to that FILE, never to a guessed repository
 # layout. It once read "../shell/ui", which resolved only because the crate directory happens to be

@@ -126,6 +126,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Stamp the declared version into the shell manifests
+        run: bun scripts/stamp-shell-version.ts
       - name: Build
         working-directory: shell
         # A REAL compile and link, not a check: the shell's non-macOS branches were cfg-gated code that had
@@ -157,6 +162,11 @@ jobs:
           sudo apt-get install -y nsis lld llvm clang
           cargo install cargo-xwin --locked
           cargo install tauri-cli --version "^2" --locked
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Stamp the declared version into the shell manifests
+        run: bun scripts/stamp-shell-version.ts
       - name: Build the installer, and prove the artifacts are Windows PE carrying the declared version
         working-directory: shell
         # A real installer, not a check: this is what proves the shell's Windows branches COMPILE AND LINK

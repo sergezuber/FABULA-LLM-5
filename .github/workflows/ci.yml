@@ -183,6 +183,14 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get install -y xvfb x11-utils
+          # The engine's build script is a workspace package, so its dependencies have to be there —
+          # this row installed the shell's, never the engine's, and the build died on a missing module.
+          for i in 1 2 3; do
+            (cd engine && bun install) && break
+            echo "install attempt $i did not succeed; retrying"
+            sleep $((i * 10))
+            [ "$i" = 3 ] && { echo "dependencies could not be installed after three attempts"; exit 1; }
+          done
           (cd engine/packages/opencode && bun run script/build.ts --only=linux-x64)
           mkdir -p bin
           cp engine/packages/opencode/dist/mimocode-linux-x64/bin/mimo bin/fabula
@@ -298,7 +306,10 @@ jobs:
         run: |
           $exe = "shell/target/release/fabula-shell.exe"
           if (-not (Test-Path $exe)) { Write-Output "::error::no shell executable at $exe"; exit 1 }
-          $p = Start-Process -FilePath $exe -PassThru
+          # KEEP WHAT IT SAID. The first run measured a window and a silent engine, and had no way to
+          # explain the second because the shell's own output went nowhere. A row that can see only half
+          # of what it started can only report half of what happened.
+          $p = Start-Process -FilePath $exe -PassThru -RedirectStandardOutput shell-out.log -RedirectStandardError shell-err.log
           # Wait for the CONDITION — a main window — not for a duration.
           $deadline = (Get-Date).AddSeconds(120)
           while ((Get-Date) -lt $deadline) {
@@ -317,6 +328,9 @@ jobs:
             $r = Invoke-WebRequest -Uri "http://127.0.0.1:4096/global/health" -TimeoutSec 5 -UseBasicParsing
             Write-Output "GET /global/health -> $($r.StatusCode)"
           } catch { Write-Output "the engine did not answer: $($_.Exception.Message)" }
+          Write-Output "-- what the shell said --"
+          if (Test-Path shell-out.log) { Get-Content shell-out.log -Tail 30 } else { Write-Output "(it wrote nothing to output)" }
+          if (Test-Path shell-err.log) { Get-Content shell-err.log -Tail 30 } else { Write-Output "(it wrote nothing to error)" }
           $ok = (-not $p.HasExited) -and ($p.MainWindowHandle -ne 0)
           if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
           if (-not $ok) { Write-Output "::error::the application produced no window on a clean Windows machine"; exit 1 }

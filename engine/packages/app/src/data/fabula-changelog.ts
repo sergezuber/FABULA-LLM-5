@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.203.0"
+export const FABULA_VERSION = "0.204.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.204.0",
+    date: "2026-08-07",
+    items: [
+      {
+        ru: "Приложение ЗАПУЩЕНО на чистой машине Windows, и это замерено: процесс жив, у него есть главное окно. Тот же замер сказал и неприятное — окно без заголовка и молчащий движок, — но объяснить второе было нечем: вывод оболочки шёл в никуда. Теперь он сохраняется и печатается. Ряд, который видит лишь половину запущенного им, и рассказать может лишь половину.",
+        en: "The application has been LAUNCHED on a clean Windows machine, and it is measured: the process is alive and it has a main window. The same measurement also said something unwelcome — a window with no title and a silent engine — and there was nothing with which to explain the second, because the shell's own output went nowhere. It is kept and printed now. A row that sees only half of what it started can report only half of what happened.",
+      },
+      {
+        ru: "Ряд оболочки на Linux ставит зависимости движка. Он собирал движок, ни разу их не установив, и сборка умирала на отсутствующем модуле — сам сценарий сборки живёт в рабочем пространстве.",
+        en: "The Linux shell row installs the engine's dependencies. It built the engine without ever installing them, and the build died on a missing module — the build script is itself a workspace package.",
+      },
+    ],
+  },
   {
     version: "0.203.0",
     date: "2026-08-06",

@@ -700,7 +700,12 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  3_000,
+  // A budget for what this check DOES, not a round number. It starts a real server — two of these also
+  // run a real shell — and three seconds is below what that costs on a machine where spawning a process
+  // is several times dearer. MEASURED: four of them expired at exactly 3000ms on one platform while
+  // passing everywhere else, which is a fact about process cost, not about the code under test. Their
+  // siblings that start a server already carry tens of seconds.
+  30_000,
 )
 
 // Cancel semantics
@@ -730,7 +735,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  3_000,
+  30_000,
 )
 
 it.live(
@@ -758,7 +763,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  3_000,
+  30_000,
 )
 
 it.live(
@@ -836,7 +841,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  3_000,
+  30_000,
 )
 
 // Queue semantics
@@ -880,7 +885,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  3_000,
+  30_000,
 )
 
 it.live(
@@ -949,7 +954,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  3_000,
+  30_000,
 )
 
 it.live(
@@ -979,7 +984,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  3_000,
+  30_000,
 )
 
 it.live("assertNotBusy succeeds when idle", () =>
@@ -1024,7 +1029,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  3_000,
+  30_000,
 )
 
 unix("shell captures stdout and stderr in completed tool output", () =>
@@ -1194,7 +1199,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  3_000,
+  30_000,
 )
 
 it.live(
@@ -1234,7 +1239,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  3_000,
+  30_000,
 )
 
 unix(

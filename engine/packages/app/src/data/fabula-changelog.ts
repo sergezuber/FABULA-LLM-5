@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.207.0"
+export const FABULA_VERSION = "0.208.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,30 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.208.0",
+    date: "2026-08-07",
+    items: [
+      {
+        ru: "Срок проверки назначен по тому, что она ДЕЛАЕТ, а не круглым числом. Десять проверок объявляли себе три секунды, хотя каждая поднимает настоящий сервер, а часть ещё и запускает настоящую оболочку; четыре из них истекли ровно на трёх тысячах миллисекунд на одной платформе, проходя на всех прочих. Это факт о цене запуска процесса, а не о проверяемом коде, и соседние проверки, поднимающие сервер, давно объявляют себе десятки секунд.",
+        en: "A check's budget is set by what it DOES, not by a round number. Ten of them declared three seconds although each starts a real server and some also run a real shell; four expired at exactly three thousand milliseconds on one platform while passing on every other. That is a fact about the cost of starting a process, not about the code under test, and their siblings that start a server already declare tens of seconds.",
+      },
+      {
+        ru: "Отказ удаления рабочего дерева называет, КАКОЙ из двух шагов его бросил. Они убирают один и тот же каталог по противоположным причинам — один после того, как git уже забыл дерево, другой когда git о нём и не знал, — и терпеть занятый системой каталог вправе лишь первый. Сообщение, не называющее ни того ни другого, оставляет читателя гадать, какое правило вообще действовало.",
+        en: "A refused worktree removal names WHICH of the two steps raised it. They remove the same kind of directory for opposite reasons — one after git has already forgotten the tree, one when git never knew it — and only the first may tolerate a directory the system still holds. A message naming neither leaves the reader to guess which rule was even in force.",
+      },
+    ],
+  },
+  {
+    version: "0.208.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Список моделей показывает то же, что показывает сам движок моделей: чистое имя, формат с квантованием и окно контекста одним числом. Прежние подписи несли рабочие пометки — «(A/B)», «(stable tools)», оценку одной модели как лучшей, которую собственный замер потом опроверг, — и одна была написана не на языке интерфейса. Формат и окно опускаются, а не выдумываются, когда поставщик их не сообщает.",
+        en: "The model list now shows what the model runtime itself shows: a clean name, the format with its quantization, and the context window as one number. The previous labels carried working notes — \"(A/B)\", \"(stable tools)\", one model called the best by a judgement our own measurement later disproved — and one was not written in the interface language. Format and window are omitted rather than guessed when a provider does not report them.",
+      },
+    ],
+  },
   {
     version: "0.207.0",
     date: "2026-08-07",

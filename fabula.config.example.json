@@ -30,7 +30,8 @@
       },
       "models": {
         "your-local-model-id": {
-          "name": "Local model (e.g. a tool-calling, vision-capable build)",
+          "name": "Local model",
+          "family": "MLX · 4bit",
           "tools": true,
           "attachment": true,
           "limit": {

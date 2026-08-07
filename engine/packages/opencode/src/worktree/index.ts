@@ -369,7 +369,7 @@ export const layer: Layer.Layer<
      * failure and skips the branch deletion below it. Every other error still throws, and the call that
      * runs when git never knew the tree stays strict, because there the bytes ARE the whole operation.
      */
-    function cleanDirectory(target: string, tolerateBusy = false) {
+    function cleanDirectory(target: string, tolerateBusy = false, site = "unknown") {
       return Effect.promise(() =>
         import("fs/promises")
           .then((fsp) =>
@@ -393,8 +393,14 @@ export const layer: Layer.Layer<
               log.info("worktree directory still held; git has already removed the worktree", { target })
               return
             }
+            // WHICH call site, and what it knew. Two of them remove the same kind of directory for
+            // opposite reasons — one after git has already dropped the worktree, one when git never knew it
+            // — and only the first can tolerate a directory the system is still holding. A message naming
+            // neither leaves the reader to guess which rule was even in force.
             const message = errorMessage(error)
-            throw new RemoveFailedError({ message: message || "Failed to remove git worktree directory" })
+            throw new RemoveFailedError({
+              message: `${message || "Failed to remove git worktree directory"} [removing ${target} at the "${site}" step]`,
+            })
           }),
       )
     }
@@ -419,7 +425,7 @@ export const layer: Layer.Layer<
         const directoryExists = yield* fs.exists(directory).pipe(Effect.orDie)
         if (directoryExists) {
           yield* stopFsmonitor(directory)
-          yield* cleanDirectory(directory)
+          yield* cleanDirectory(directory, false, "git never knew this tree")
         }
         return true
       }
@@ -440,7 +446,7 @@ export const layer: Layer.Layer<
         }
       }
 
-      yield* cleanDirectory(entry.path, true)
+      yield* cleanDirectory(entry.path, true, "after git removed the worktree")
 
       const branch = entry.branch?.replace(/^refs\/heads\//, "")
       if (branch) {

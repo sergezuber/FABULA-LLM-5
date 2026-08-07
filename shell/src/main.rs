@@ -35,6 +35,12 @@ const PORT: u16 = 4096;
 /// The engine gets this long to answer /global/health before the window says so and stops waiting.
 /// ABSOLUTE, not a retry count: a slow machine must extend the wait, never multiply it.
 const STARTUP_DEADLINE: Duration = Duration::from_secs(90);
+/// How long to keep watching AFTER the window has said the engine is not up yet.
+///
+/// A first start on a clean machine runs a one-time database migration whose own message says it "may
+/// take a few minutes". Ninety seconds is the right moment to stop showing an empty window and start
+/// explaining; it is the wrong moment to stop looking.
+const FIRST_RUN_DEADLINE: Duration = Duration::from_secs(900);
 /// A day of engine decisions is useful, a month is a disk leak. Same ceiling the engine's own trace uses.
 const LOG_CEILING: u64 = 20 * 1024 * 1024;
 
@@ -593,9 +599,29 @@ fn main() {
                 if let Ok(w) = win {
                     if !ready {
                         // Never an endless spinner: say what happened and what to check.
-                        let html = failure_html("The engine did not answer its health check within 90 seconds.")
+                        let html = failure_html(
+                            "The engine has not answered its health check yet. On a first run it builds its database,
+                             which can take a few minutes; this page loads by itself the moment it answers.",
+                        )
                             .replace('`', "\\`");
                         let _ = w.eval(&format!("document.documentElement.innerHTML = `{html}`"));
+                        // AND KEEP WATCHING. Giving up at the deadline was wrong for the one case the deadline exists
+                        // for: a CLEAN machine, where the first start runs a one-time database migration whose own
+                        // message says it "may take a few minutes". MEASURED on a fresh Windows machine — the engine
+                        // came up and announced it was listening, while the window sat on a page saying it never would.
+                        // The message is right about what has happened and wrong about what will, so what will is
+                        // watched: when the engine answers, the window goes to the real interface by itself.
+                        let watch = w.clone();
+                        std::thread::spawn(move || {
+                            let began = Instant::now();
+                            while began.elapsed() < FIRST_RUN_DEADLINE {
+                                if port_listening(PORT) {
+                                    let _ = watch.eval(&format!("location.replace('http://127.0.0.1:{PORT}/')"));
+                                    return;
+                                }
+                                std::thread::sleep(Duration::from_millis(1000));
+                            }
+                        });
                     }
                 }
             });

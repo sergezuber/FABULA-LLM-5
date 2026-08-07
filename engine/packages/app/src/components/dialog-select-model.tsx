@@ -16,6 +16,10 @@ import { useLanguage } from "@/context/language"
 const isFree = (provider: string, cost: { input: number } | undefined) =>
   provider === "opencode" && (!cost || cost.input === 0)
 
+/** A context window as a person reads it: 147456 -> "144K". Rounded to whole thousands because the
+ *  exact token count is a provisioning detail, not something to compare models by at a glance. */
+const contextLabel = (tokens: number) => (tokens >= 1000 ? `${Math.round(tokens / 1024)}K` : String(tokens))
+
 type ModelState = ReturnType<typeof useLocal>["model"]
 
 const ModelList: Component<{
@@ -79,6 +83,17 @@ const ModelList: Component<{
           <Show when={i.latest}>
             <Tag>{language.t("model.tag.latest")}</Tag>
           </Show>
+          {/* Format and window, the two facts a local runtime's own picker shows next to a model.
+              `family` is the model's declared format/quantization; the window is what it is actually
+              served with. Both are omitted rather than guessed when a provider does not report them. */}
+          <div class="ml-auto flex items-center gap-x-2 shrink-0 text-text-weaker">
+            <Show when={i.family}>
+              <span class="text-12-regular">{i.family}</span>
+            </Show>
+            <Show when={i.limit?.context}>
+              <span class="text-12-regular tabular-nums">{contextLabel(i.limit.context)}</span>
+            </Show>
+          </div>
         </div>
       )}
     </List>

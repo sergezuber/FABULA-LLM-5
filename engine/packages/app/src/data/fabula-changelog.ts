@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.206.0"
+export const FABULA_VERSION = "0.207.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.207.0",
+    date: "2026-08-07",
+    items: [
+      {
+        ru: "Первый запуск на чистой машине больше не упирается в страницу отказа. Такой запуск проводит разовую сборку базы, о которой она сама говорит, что может занять несколько минут, — и оболочка переставала смотреть через полторы минуты. ЗАМЕРЕНО на свежей машине Windows: движок поднялся и объявил, что слушает, пока окно показывало сообщение, что он не поднимется. Полторы минуты — верный момент перестать показывать пустое окно и начать объяснять, но неверный момент перестать смотреть: теперь окно само переходит к интерфейсу, как только движок отвечает.",
+        en: "A first start on a clean machine no longer ends at a failure page. Such a start performs a one-time database build which says of itself that it may take a few minutes, and the shell stopped watching after ninety seconds. MEASURED on a fresh Windows machine: the engine came up and announced it was listening while the window showed a message saying it would not. Ninety seconds is the right moment to stop showing an empty window and start explaining; it is the wrong moment to stop looking — the window now goes to the interface by itself the moment the engine answers.",
+      },
+      {
+        ru: "Ряд запуска требует и окна, И ответа движка — на обеих платформах. Окно над не ответившим движком приложением не является, а прежняя проверка засчитала бы именно его.",
+        en: "The launch row requires a window AND an answer from the engine, on both platforms. A window over an engine that has not answered is not an application that started, and the earlier check would have accepted exactly that.",
+      },
+    ],
+  },
   {
     version: "0.206.0",
     date: "2026-08-07",

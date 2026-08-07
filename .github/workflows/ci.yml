@@ -201,9 +201,13 @@ jobs:
           ./shell/target/release/fabula-shell >/tmp/shell.log 2>&1 &
           shell_pid=$!
           # Wait for the CONDITION — the window — not for a duration.
-          for i in $(seq 1 60); do
-            if xwininfo -root -tree 2>/dev/null | grep -qi "fabula"; then break; fi
-            sleep 2
+          # BOTH, for the same reason as the Windows twin: a window over an engine that has not answered
+          # is not an application that started.
+          engine_up=0
+          for i in $(seq 1 200); do
+            [ "$engine_up" = 0 ] && curl -sf -o /dev/null --max-time 3 http://127.0.0.1:4096/global/health && engine_up=1
+            if xwininfo -root -tree 2>/dev/null | grep -qi "fabula" && [ "$engine_up" = 1 ]; then break; fi
+            sleep 3
           done
           echo "── windows the server knows about ──"
           xwininfo -root -tree 2>/dev/null | grep -i "fabula" || true
@@ -211,8 +215,8 @@ jobs:
           curl -s -o /dev/null -w "GET /global/health -> %{http_code}\n" http://127.0.0.1:4096/global/health || true
           echo "── shell log ──"
           tail -20 /tmp/shell.log || true
-          xwininfo -root -tree 2>/dev/null | grep -qi "fabula" || {
-            echo "::error::the application produced no window on a clean machine"
+          xwininfo -root -tree 2>/dev/null | grep -qi "fabula" && [ "$engine_up" = 1 ] || {
+            echo "::error::the application did not start on a clean machine (window? engine_up=$engine_up)"
             kill $shell_pid 2>/dev/null || true
             exit 1
           }
@@ -311,12 +315,21 @@ jobs:
           # of what it started can only report half of what happened.
           $p = Start-Process -FilePath $exe -PassThru -RedirectStandardOutput shell-out.log -RedirectStandardError shell-err.log
           # Wait for the CONDITION — a main window — not for a duration.
-          $deadline = (Get-Date).AddSeconds(120)
+          # WAIT FOR BOTH, and for the CONDITION rather than a stretch of time. The window alone is not the
+          # application: the first measurement here found a window over an engine that had not answered yet,
+          # because a first start on a clean machine performs a one-time database migration. The engine
+          # arrived a little later and said so in its own log — which is exactly the case this row exists to
+          # catch, and it would have passed on the window alone.
+          $deadline = (Get-Date).AddSeconds(600)
+          $engineUp = $false
           while ((Get-Date) -lt $deadline) {
             $p.Refresh()
             if ($p.HasExited) { break }
-            if ($p.MainWindowHandle -ne 0) { break }
-            Start-Sleep -Seconds 2
+            if (-not $engineUp) {
+              try { Invoke-WebRequest -Uri "http://127.0.0.1:4096/global/health" -TimeoutSec 3 -UseBasicParsing | Out-Null; $engineUp = $true } catch { }
+            }
+            if (($p.MainWindowHandle -ne 0) -and $engineUp) { break }
+            Start-Sleep -Seconds 3
           }
           $p.Refresh()
           Write-Output "-- the process --"
@@ -339,9 +352,13 @@ jobs:
           $logs = Get-ChildItem -Path $env:USERPROFILE -Filter plugins.log -Recurse -ErrorAction SilentlyContinue | Select-Object -First 3
           if ($logs) { foreach ($l in $logs) { Write-Output "   $($l.FullName)"; Get-Content $l.FullName -Tail 40 } }
           else { Write-Output "(no engine log was written at all — it never got as far as opening one)" }
-          $ok = (-not $p.HasExited) -and ($p.MainWindowHandle -ne 0)
+          $ok = (-not $p.HasExited) -and ($p.MainWindowHandle -ne 0) -and $engineUp
           if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
-          if (-not $ok) { Write-Output "::error::the application produced no window on a clean Windows machine"; exit 1 }
+          if (-not $ok) {
+            $why = if ($p.HasExited) { "the shell exited" } elseif ($p.MainWindowHandle -eq 0) { "no window appeared" } else { "the engine never answered" }
+            Write-Output "::error::the application did not start on a clean Windows machine — $why"
+            exit 1
+          }
 
   deploy-guard-windows:
     name: Deploy guard runs where bash is optional

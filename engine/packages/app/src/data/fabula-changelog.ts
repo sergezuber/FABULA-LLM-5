@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.204.0"
+export const FABULA_VERSION = "0.205.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.205.0",
+    date: "2026-08-07",
+    items: [
+      {
+        ru: "Ряд запуска печатает и то, что сказал ДВИЖОК. Оболочка запускает его отдельным ребёнком и уводит его вывод в собственный журнал, поэтому потоки самой оболочки молчат ровно о том, что важно, когда движок не отвечает. Журнал ищется на диске, а не вычисляется заново: повторить правило о каталоге данных на втором языке — и есть тот способ, каким у одного правила заводится второе определение.",
+        en: "The launch row prints what the ENGINE said too. The shell starts it as a child of its own and sends its output to a separate log, so the shell's own streams are silent about the one thing that matters when the engine does not answer. The log is searched for rather than recomputed: restating the data-directory rule in a second language is exactly how one rule acquires a second definition.",
+      },
+    ],
+  },
   {
     version: "0.204.0",
     date: "2026-08-07",

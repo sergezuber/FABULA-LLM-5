@@ -331,6 +331,14 @@ jobs:
           Write-Output "-- what the shell said --"
           if (Test-Path shell-out.log) { Get-Content shell-out.log -Tail 30 } else { Write-Output "(it wrote nothing to output)" }
           if (Test-Path shell-err.log) { Get-Content shell-err.log -Tail 30 } else { Write-Output "(it wrote nothing to error)" }
+          # AND WHAT THE ENGINE SAID. The shell starts it as a child and sends its output to a log of its
+          # own, so the shell's streams are silent about the one thing that matters when the engine does
+          # not answer. Searched rather than recomputed: reproducing the data-directory rule in a second
+          # language is how two definitions of one rule start.
+          Write-Output "-- what the engine said --"
+          $logs = Get-ChildItem -Path $env:USERPROFILE -Filter plugins.log -Recurse -ErrorAction SilentlyContinue | Select-Object -First 3
+          if ($logs) { foreach ($l in $logs) { Write-Output "   $($l.FullName)"; Get-Content $l.FullName -Tail 40 } }
+          else { Write-Output "(no engine log was written at all — it never got as far as opening one)" }
           $ok = (-not $p.HasExited) -and ($p.MainWindowHandle -ne 0)
           if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
           if (-not $ok) { Write-Output "::error::the application produced no window on a clean Windows machine"; exit 1 }

@@ -208,6 +208,12 @@ describe("WorkflowRuntime workflow() journal (two-level resume)", () => {
   it.live("resuming an orchestrator replays a completed child with zero new spawns", () =>
     provideTmpdirServer(
       Effect.fnUntraced(function* ({ llm, dir }) {
+        // AND HOW FAR IT GOT. The outer budget expired once with all three named bounds silent, which means
+        // no single step was at fault and the time was spread — most of it OUTSIDE every bound, in the
+        // fixture, which starts a real server before the body begins. These lines cost nothing on a pass.
+        const t0 = Date.now()
+        const mark = (what: string) => console.log(`  [wf resume] ${what} at +${Date.now() - t0}ms`)
+        mark("the body started, so the fixture is done")
         const runtime = yield* WorkflowRuntime.Service
         const session = yield* Session.Service
         const parent = yield* session.create({
@@ -247,6 +253,7 @@ describe("WorkflowRuntime workflow() journal (two-level resume)", () => {
             ),
           )
         const out1 = yield* step("the first run", runtime.wait({ runID }))
+        mark("the first run finished")
         expect(out1.status).toBe("completed")
         expect((out1 as { result: unknown }).result).toBe("child-done")
         const callsAfterFirst = yield* llm.calls
@@ -257,6 +264,7 @@ describe("WorkflowRuntime workflow() journal (two-level resume)", () => {
         const r = yield* step("resuming the orchestrator", runtime.resume({ runID }))
         expect(r.resumed).toBe(true)
         const out2 = yield* step("the resumed run", runtime.wait({ runID }))
+        mark("the resumed run finished")
         expect(out2.status).toBe("completed")
         expect((out2 as { result: unknown }).result).toBe("child-done")
         // The discriminating assertions: child body ran exactly once (parent journal
@@ -269,8 +277,11 @@ describe("WorkflowRuntime workflow() journal (two-level resume)", () => {
       }),
       { git: true, config: providerCfg },
     ),
-    // Behind its own parts, not in front of them: three named 40s bounds plus the work around them.
-    150000,
+    // Behind its own parts, not in front of them: three named 40s bounds is 120s, and the fixture —
+    // which starts a real server and lies outside every bound — sits on top of that. 150s was NOT behind
+    // the sum: it expired with all three bounds silent, which is this file's arithmetic mistake twice over.
+    // The marks above are what turn the next expiry into a place rather than a number.
+    240000,
   )
 })
 

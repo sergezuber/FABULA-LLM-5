@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.205.0"
+export const FABULA_VERSION = "0.206.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.206.0",
+    date: "2026-08-07",
+    items: [
+      {
+        ru: "Проверка возобновления тоже говорит, ДОКУДА дошла, и её внешний срок наконец стоит за суммой собственных границ. Он истёк при трёх названных границах, промолчавших все до одной, — значит виноват не шаг, а арифметика: сто двадцать секунд названных границ плюс фикстура, поднимающая настоящий сервер вне всяких границ, не помещались в сто пятьдесят. Эту ошибку файл сделал дважды; отметки — то, что превращает следующее истечение в место, а не в число.",
+        en: "The resume check also says HOW FAR it got, and its outer budget finally sits behind the sum of its own bounds. It expired with all three named bounds silent, so no step was at fault — the arithmetic was: a hundred and twenty seconds of named bounds plus a fixture that starts a real server outside every bound did not fit in a hundred and fifty. This file has now made that mistake twice; the marks are what turn the next expiry into a place rather than a number.",
+      },
+    ],
+  },
   {
     version: "0.205.0",
     date: "2026-08-07",

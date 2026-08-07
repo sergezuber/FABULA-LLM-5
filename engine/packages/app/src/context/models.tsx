@@ -1,4 +1,4 @@
-import { createMemo } from "solid-js"
+import { createMemo, createResource } from "solid-js"
 import { createStore } from "solid-js/store"
 import { DateTime } from "luxon"
 import { filter, firstBy, flat, groupBy, mapValues, pipe, uniqueBy, values } from "remeda"
@@ -36,14 +36,41 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       }),
     )
 
-    const available = createMemo(() =>
-      providers.connected().flatMap((p) =>
-        Object.values(p.models).map((m) => ({
-          ...m,
-          provider: p,
-        })),
-      ),
+    // A model the config DECLARES but the provider no longer SERVES must not be offered: the user
+    // deletes it from their runtime, the config still names it, and the picker keeps handing them a
+    // choice that cannot answer. `/global/fabula/models-served` asks each provider's own
+    // `GET /models` — the endpoint every OpenAI-compatible provider has — and reports the ids it
+    // returned, or null where it could not be asked.
+    //
+    // The initial value is an empty map on purpose: a resource created in the "pending" state
+    // registers with the app-wide Suspense and blanks the window (the anti-flicker rule), and an
+    // empty map means "nothing known yet", which filters nothing. Same for null per provider —
+    // a provider that did not answer keeps all of its declared models.
+    const [served] = createResource(
+      async () => {
+        const res = await fetch("/global/fabula/models-served").catch(() => undefined)
+        if (!res?.ok) return {} as Record<string, string[] | null>
+        const body = (await res.json().catch(() => undefined)) as
+          | { served?: Record<string, string[] | null> }
+          | undefined
+        return body?.served ?? {}
+      },
+      { initialValue: {} as Record<string, string[] | null> },
     )
+
+    const available = createMemo(() => {
+      const map = served.latest
+      return providers.connected().flatMap((p) => {
+        const ids = map?.[p.id]
+        const set = ids ? new Set(ids) : undefined
+        return Object.values(p.models)
+          .filter((m) => !set || set.has(m.id))
+          .map((m) => ({
+            ...m,
+            provider: p,
+          }))
+      })
+    })
 
     const release = createMemo(
       () =>

@@ -1097,6 +1097,57 @@ export const GlobalRoutes = lazy(() =>
     )
         // FABULA: launch-config provider catalog (the Settings > Providers Edit form reads and
     // writes the MIMOCODE_CONFIG file — /global/config does NOT include launch-file providers).
+    // WHICH DECLARED MODELS A PROVIDER ACTUALLY SERVES.
+    //
+    // The launch config DECLARES models; it cannot know which of them are still installed. Delete a
+    // model from the local runtime and the config still names it, so the picker keeps offering a
+    // model that cannot answer — the user picks it and the turn fails for a reason the interface
+    // never showed. Asking is the fix: `GET {baseURL}/models` is the one endpoint every
+    // OpenAI-compatible provider serves, local runtime or cloud gateway alike, so this is not a
+    // rule about one vendor.
+    //
+    // FAIL-OPEN, and that is the load-bearing half: a provider is filtered ONLY when its endpoint
+    // ANSWERED. No baseURL, no answer, a timeout, a malformed body — the provider maps to null and
+    // every declared model of it stays visible. A picker emptied by a network blip is worse than a
+    // picker with one stale row, because the second is a wrong offer while the first is no product.
+    .get(
+      "/fabula/models-served",
+      describeRoute({
+        summary: "Model ids each configured provider actually serves right now",
+        operationId: "fabula.modelsServed.get",
+        responses: { 200: { description: "Per-provider served ids, or null where the provider could not be asked" } },
+      }),
+      async (c) => {
+        const cfgPath = process.env["MIMOCODE_CONFIG"]
+        const cfg = cfgPath ? await Bun.file(cfgPath).json().catch(() => ({})) : {}
+        const providers = (cfg as {
+          provider?: Record<string, { options?: { baseURL?: string; apiKey?: string } }>
+        }).provider
+        const served: Record<string, string[] | null> = {}
+        await Promise.all(
+          Object.entries(providers ?? {}).map(async ([id, p]) => {
+            const base = p.options?.baseURL?.replace(/\/+$/, "")
+            if (!base) return void (served[id] = null)
+            const key = p.options?.apiKey
+            // A literal key is sent; a `{env:X}` / `{file:Y}` reference is not resolved here, because a
+            // listing that needs a secret is a listing we are content to skip — it falls to null and
+            // hides nothing.
+            const headers: Record<string, string> =
+              key && !key.startsWith("{") ? { authorization: `Bearer ${key}` } : {}
+            const res = await fetch(`${base}/models`, {
+              headers,
+              signal: AbortSignal.timeout(2500),
+            }).catch(() => undefined)
+            if (!res?.ok) return void (served[id] = null)
+            const body = (await res.json().catch(() => undefined)) as { data?: { id?: unknown }[] } | undefined
+            const ids = body?.data?.map((m) => String(m?.id ?? "")).filter(Boolean)
+            // An answer with no list is not an empty catalogue — it is an answer we cannot read.
+            served[id] = ids && ids.length > 0 ? ids : null
+          }),
+        )
+        return c.json({ served })
+      },
+    )
     .get(
       "/fabula/providers-config",
       describeRoute({

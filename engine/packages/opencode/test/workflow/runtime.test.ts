@@ -319,7 +319,12 @@ describe("WorkflowRuntime cancel cascade", () => {
           title: "wf cancel no-orphan",
           permission: [{ permission: "*", pattern: "*", action: "allow" }],
         })
-        yield* llm.hang // every child hangs at the LLM → in-flight at cancel time
+        // ONE PER CHILD. A single queued hang is consumed by whichever child pulls it first; the other seven
+        // then get the server's auto-answer and finish BY THEMSELVES, so reclaim has almost nothing left to
+        // reclaim and the check can pass while doing nothing. MEASURED: removing the stamp reclaim writes
+        // left this check green. With one hang per child, every one of them is genuinely in flight when the
+        // cancel lands, which is the state the orphan defect lived in and the only state that tests reclaim.
+        for (let i = 0; i < 8; i++) yield* llm.hang
         // A wide fan-out keeps spawns resolving across the bridge so the cancel
         // lands while children are registered but the post-resolve add (the bug)
         // has not run.
@@ -389,7 +394,14 @@ describe("WorkflowRuntime cancel cascade", () => {
         // it, and a child that failed on its own was never orphaned. So: every one accounted for, and at
         // least one carrying the cancel — without which reclaim could have done nothing and still passed.
         expect(reclaimed.filter((a) => !a.lastOutcome)).toEqual([])
-        expect(reclaimed.some((a) => a.lastOutcome === "cancelled")).toBe(true)
+        // NOT "at least one says cancelled". That contradicted the sentence above it: if a child may reach
+        // its own terminal before the cancel arrives, then ALL of them may, and under load all eight did —
+        // a run in which reclaim had nothing left to cancel and did its job perfectly. Nothing is lost by
+        // dropping it, because neither remaining assertion can pass vacuously: a reclaim that did nothing
+        // leaves children with NO outcome, which the line above catches, and the run's own status is
+        // cancelled only because cancel ran — no amount of children finishing by themselves produces it.
+        // What every in-flight child must carry is a TERMINAL outcome, whichever one it is.
+        expect(reclaimed.filter((a) => !["cancelled", "success", "failure"].includes(a.lastOutcome ?? ""))).toEqual([])
       }),
       { git: true, config: providerCfg },
     ),
@@ -460,8 +472,11 @@ describe("WorkflowRuntime per-agent timeout (straggler-abort)", () => {
         const outcome = yield* runtime.wait({ runID })
         expect(outcome.status).toBe("completed")
         const r = (outcome as { result: string[] }).result
-        expect(r.filter((x) => x === "null").length).toBe(1)
-        expect(r.filter((x) => x === "ok").length).toBe(1)
+        // The OUTCOME, sorted — not two separate counts. Which of the two agents pulls the queued hang is a
+        // race, and the property under test is indifferent to it: one times out to null, the other returns
+        // ok. Counting them apart reports "expected 1" and hides what actually came back, so a failure
+        // cannot say whether neither hung or both did — opposite findings behind one number.
+        expect([...r].sort()).toEqual(["null", "ok"])
       }),
       { git: true, config: providerCfg },
     ),

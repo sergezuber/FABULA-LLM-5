@@ -11,6 +11,20 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.209.0",
+    date: "2026-08-07",
+    items: [
+      {
+        ru: "Проверка каскадной отмены перестала быть вакуумной. Её комментарий обещал, что зависают ВСЕ дети, а заглушка ставилась одна: её забирал первый, остальные семеро получали ответ и заканчивались сами — и отменять было почти нечего. ЗАМЕРЕНО: удаление отметки, которую пишет реклейм, оставляло проверку зелёной. Теперь заглушка на каждого, и та же мутация её убивает. Заодно снято требование «хотя бы один отменённый»: оно противоречило соседней строке — если ребёнок вправе закончиться сам до прихода отмены, то вправе и все; настоящее свойство — ни одного брошенного, и обойти его нельзя.",
+        en: "The cancel-cascade check has stopped being vacuous. Its comment promised that EVERY child hangs while a single stand-in was queued: the first child took it and the other seven were answered and finished by themselves, so there was almost nothing left to cancel. MEASURED: removing the stamp reclaim writes left the check green. There is one per child now, and the same mutation kills it. The demand for \"at least one cancelled\" is gone with it — it contradicted the line above it, since if one child may finish before the cancel arrives then all of them may; the real property is that none is left unaccounted for, and that one cannot be passed vacuously.",
+      },
+      {
+        ru: "Исход проверки истечения на агента сверяется целиком, а не двумя отдельными счётчиками. Какой из двух агентов заберёт зависание — гонка, и проверяемое свойство к ней безразлично; счёт по отдельности печатал «ожидалось 1» и скрывал, что вернулось на самом деле, — а не зависший никто и зависшие оба суть противоположные находки за одним числом.",
+        en: "The per-agent timeout check compares the outcome whole rather than as two separate counts. Which of the two agents takes the hang is a race the property is indifferent to; counting them apart printed \"expected 1\" and hid what actually came back — and neither hung and both hung are opposite findings behind one number.",
+      },
+    ],
+  },
+  {
     version: "0.208.0",
     date: "2026-08-07",
     items: [

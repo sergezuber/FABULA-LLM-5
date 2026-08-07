@@ -27,6 +27,7 @@ import { current, type Platform } from "./index"
 import { memoryReading, gpuReading, defaultRun, type GpuReading, type MemoryKind } from "./memory"
 import { sandboxPlan, untrustedScope } from "./sandbox"
 import { dataDir } from "./paths"
+import { containerBin } from "./shell"
 
 // The accelerator is asked ONCE, in `./memory`, because sizing the window and describing the machine are
 // the same question about the same hardware. They had been two probes and had already drifted: the one
@@ -84,9 +85,10 @@ export function readMachineProfile(
  * stand-in could be approved and the real runtime invoked — an approval about one program and a run
  * against another.
  */
-export function containerBin(env: NodeJS.ProcessEnv = process.env): string {
-  return env.FABULA_DOCKER_BIN || "docker"
-}
+
+
+/** Re-exported so every caller keeps the name it already uses; the rule lives in one place. */
+export { containerBin }
 
 /** Whether a container runtime can run the images the sandbox uses — the same question the tool asks. */
 export function containerReading(

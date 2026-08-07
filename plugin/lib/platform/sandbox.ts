@@ -24,7 +24,7 @@
 
 import { current, type Platform } from "./index"
 import { credentialReadDirs, hardlineKernelRegex, hardlineTargets } from "./persistence"
-import { shellArgv, whichBin } from "./shell"
+import { shellArgv, whichBin, containerBin } from "./shell"
 import { homeDir } from "./paths"
 
 export interface SandboxScope {
@@ -176,13 +176,25 @@ export function sandboxPlan(
     }
   }
 
+  // Not a missing package: Windows has no per-spawn path-scoped confinement a plugin can apply, so
+  // saying "not installed" would send someone looking for something to install. What it DOES have is a
+  // container, and that is the isolation this platform offers — so whether one is present here is
+  // PROBED and named, not asserted. Pointing at a runtime that is not installed is the same defect as
+  // claiming a kernel profile that is not there: the reader cannot tell an unfixable platform from a
+  // fixable machine.
+  //
+  // `available` stays false, deliberately. A container confines by running the work INSIDE an image the
+  // caller chooses; this plan wraps an argv and knows no image, so claiming it could enforce would be a
+  // promise nothing here keeps. It reports what the machine really offers and leaves the choice with the
+  // caller that owns it (`execute_code` already prefers the container and can refuse without one).
+  const container = whichBin(containerBin(env), env, p)
   return {
     available: false,
     wrap: (a) => [...a],
     mechanism: "none",
-    // Not a missing package: Windows has no per-spawn path-scoped confinement a plugin can apply.
-    // Saying "not installed" would send someone looking for something to install.
-    note: "Windows has no per-command kernel path confinement; use the Docker backend for isolation",
+    note: container
+      ? `Windows has no per-command kernel path confinement; a container runtime IS present here (${containerBin(env)}), so the Docker backend — running the work inside an image — is the isolation this platform has`
+      : `Windows has no per-command kernel path confinement, and no container runtime is present either (${containerBin(env)} not found), so nothing on this machine can confine a command; the Docker backend is the isolation this platform has, once a runtime serves Linux images`,
   }
 }
 

@@ -6,6 +6,9 @@
 // claim nobody is keeping.
 
 import { test, expect, describe } from "bun:test"
+import { mkdtempSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import * as path from "node:path"
 import { sandboxPlan, sandboxShellArgv, buildSeatbeltProfile, bubblewrapArgs, shellScope, untrustedScope } from "./sandbox"
 import { hardlineKernelRegex } from "./persistence"
 import { shellArgv } from "./shell"
@@ -160,4 +163,38 @@ test.if(HAS_BWRAP)("the Linux kernel DENIES persistence writes and credential re
   // how a broken floor looks identical to a working one.
   expect(run(`require("fs").writeFileSync("/tmp/fabula-floor-ok.txt","x")`)).toBe(0)
   expect(run(`require("fs").readdirSync("/usr/bin")`)).toBe(0)
+})
+
+// ── Where the kernel cannot confine, say what the machine DOES have — probed, not asserted ─────────
+//
+// "Use the Docker backend for isolation" was constant text. It pointed at a runtime that may not be
+// installed, which is the same defect as claiming a kernel profile that is not there: the reader cannot
+// tell an unfixable platform from a fixable machine. `available` stays false either way, because a
+// container confines by running the work inside an image this plan does not choose.
+describe("the Windows note reports what this machine really offers", () => {
+  const SCOPE = { home: "C:\\Users\\u", denyCredentialReads: true }
+
+  test("a container runtime that IS present is named", () => {
+    // A real file on THIS disk, named the way a win32 probe looks for one, so the branch is exercised
+    // rather than asserted: the probe reads the filesystem, and a made-up path would only ever answer no.
+    const dir = mkdtempSync(path.join(tmpdir(), "fab-container-"))
+    writeFileSync(path.join(dir, "podman.exe"), "")
+    const plan = sandboxPlan(SCOPE, "win32", { PATH: dir, PATHEXT: ".EXE", FABULA_DOCKER_BIN: "podman" })
+    expect(plan.available).toBe(false)
+    expect(plan.mechanism).toBe("none")
+    expect(plan.note).toContain("IS present here")
+  })
+
+  test("no container runtime either is said outright, not implied", () => {
+    const plan = sandboxPlan(SCOPE, "win32", { PATH: "C:\\nonexistent", FABULA_DOCKER_BIN: "definitely-not-a-program" })
+    expect(plan.available).toBe(false)
+    expect(plan.note).toContain("no container runtime is present either")
+    expect(plan.note).not.toContain("IS present here")
+  })
+
+  test("the runtime's NAME comes from the one definition, so an override is honoured here too", () => {
+    const plan = sandboxPlan(SCOPE, "win32", { PATH: "C:\\nonexistent", FABULA_DOCKER_BIN: "podman" })
+    expect(plan.note).toContain("podman")
+    expect(plan.note).not.toContain("docker not found")
+  })
 })

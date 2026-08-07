@@ -312,3 +312,15 @@ export function writeMarkerScript(
   fs.writeFileSync(cmd, `@echo off\r\n"${shell}" "${scriptPath}" %*\r\n`)
   return cmd
 }
+
+/**
+ * Which program runs containers here.
+ *
+ * ONE definition, beside the other question about which program to run, because more than one place asks
+ * it: the tool that starts a container, the description of the machine, and the plan that says what this
+ * platform can confine. They had already parted company once — an override honoured when one looked and
+ * ignored when another did, so an approval could be about one program and the run about a different one.
+ */
+export function containerBin(env: NodeJS.ProcessEnv = process.env): string {
+  return env["FABULA_DOCKER_BIN"] || "docker"
+}

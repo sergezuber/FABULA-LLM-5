@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.202.0"
+export const FABULA_VERSION = "0.203.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.203.0",
+    date: "2026-08-06",
+    items: [
+      {
+        ru: "Там, где ядро ограничить не может, говорится, что машина ДЕЙСТВИТЕЛЬНО умеет, — и это спрашивается у машины, а не вписано текстом. Прежняя строка указывала на способ через контейнер, которого на машине может не быть: это тот же изъян, что обещание ядерного профиля, которого нет, — читающий не отличит непреодолимую платформу от исправимой машины. Теперь наличие исполнителя контейнеров проверяется и называется, а сам план по-прежнему НЕ заявляет, что ограничит: контейнер ограничивает, запуская работу внутри образа, а образ выбирает вызывающий.",
+        en: "Where the kernel cannot confine, what the machine DOES offer is said — and it is asked of the machine rather than written in as text. The old line pointed at isolation through a container that may not be installed: the same defect as promising a kernel profile that is not there, since a reader cannot tell an unfixable platform from a fixable machine. The presence of a container runtime is now probed and named, and the plan still does NOT claim it would confine: a container confines by running the work inside an image, and the image is the caller's choice.",
+      },
+      {
+        ru: "Имя программы, запускающей контейнеры, имеет одно определение — рядом с тем же вопросом «какую программу запустить». Его спрашивают три места: инструмент, описание машины и план ограничений; они уже расходились однажды, и переопределение чтилось одним и игнорировалось другим — тогда разрешение было об одной программе, а запуск о другой.",
+        en: "The name of the programme that runs containers has one definition, beside the same question of which programme to run. Three places ask it: the tool, the description of the machine, and the confinement plan; they had parted company once already, with an override honoured by one and ignored by another — so an approval was about one programme and the run about a different one.",
+      },
+    ],
+  },
   {
     version: "0.202.0",
     date: "2026-08-06",

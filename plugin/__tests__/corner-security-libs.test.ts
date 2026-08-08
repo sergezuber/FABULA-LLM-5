@@ -241,14 +241,38 @@ describe("ssrf.checkUrl (async DNS, fail-closed)", () => {
     const v = await checkUrl("http://10.0.0.1/")
     expect(v.code).toBe("rfc1918")
   })
-  test("non-existent hostname fails closed (dns_fail)", async () => {
-    const v = await checkUrl("https://this-domain-should-not-resolve-fabula-xyz-123456789.invalid/")
+  // THE RULE, not the network. These feed the resolver directly, so the verdict comes from this code
+  // and from nothing else. The first case is the one the real network CANNOT produce — no public name
+  // resolves to a loopback address — and it is the whole reason the async check exists beside the
+  // synchronous one, so until now the anti-rebinding floor had no test at all.
+  test("a name that resolves to a private address is refused, whatever it is called", async () => {
+    const v = await checkUrl("https://totally-innocent.example/", async () => ["127.0.0.1"])
+    expect(v.blocked).toBe(true)
+    expect(v.code).toBe("loopback")
+  })
+  test("one private address among public ones is enough to refuse", async () => {
+    const v = await checkUrl("https://mixed.example/", async () => ["93.184.216.34", "169.254.169.254"])
+    expect(v.blocked).toBe(true)
+    expect(v.code).toBe("cloud_metadata")
+  })
+  test("a name that resolves only to public addresses passes", async () => {
+    const v = await checkUrl("https://ordinary.example/", async () => ["93.184.216.34"])
+    expect(v.blocked).toBe(false)
+  })
+  test("a resolver that fails closes the door", async () => {
+    const v = await checkUrl("https://nowhere.example/", async () => { throw new Error("no answer") })
     expect(v.blocked).toBe(true)
     expect(v.code).toBe("dns_fail")
   })
-  test("public hostname resolving to public IP passes (live DNS)", async () => {
-    const v = await checkUrl("https://example.com/")
-    // example.com always resolves to public IANA addresses
+  // And ONE against the real resolver, which asks a different question: that the default path is wired
+  // to a resolver at all. A missing network is reported as a SKIP naming itself — an instrument that
+  // cannot run must say so rather than report the mechanism dead.
+  test("the default path really resolves (live; skipped when DNS cannot answer)", async () => {
+    const v = await checkUrl("https://example.com/").catch(() => null)
+    if (v === null || v.code === "dns_fail") {
+      console.log("  [skip] DNS did not answer here — the live half of this check was not run")
+      return
+    }
     expect(v.blocked).toBe(false)
   })
 })

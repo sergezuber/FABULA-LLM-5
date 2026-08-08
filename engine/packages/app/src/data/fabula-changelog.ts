@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.210.0"
+export const FABULA_VERSION = "0.211.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.211.0",
+    date: "2026-08-09",
+    items: [
+      {
+        ru: "Правило «имя, разрешающееся во внутренний адрес, отклоняется» наконец ПРОВЕРЯЕТСЯ. Разрешатель имени вынесен наружу, поэтому вердикт приходит от этого кода и ни от чего больше. Настоящая сеть этот случай выдать не может вовсе — ни одно публичное имя не разрешается в петлевой адрес, — и ровно ради него асинхронная проверка и существует рядом с синхронной; до сих пор пола против подмены DNS не касалась ни одна проверка. Заодно ушла зависимость вердикта от того, ответил ли DNS: на другой машине две проверки упали по таймауту разрешения, когда с кодом всё было в порядке. Одна живая проверка осталась — она спрашивает другое (что путь по умолчанию вообще подключён к разрешателю) и при молчащей сети сообщает о ПРОПУСКЕ, называя себя.",
+        en: "The rule \"a name that resolves to an internal address is refused\" is finally TESTED. The resolver is injectable, so the verdict comes from this code and from nothing else. The real network cannot produce that case at all — no public name resolves to a loopback address — and it is precisely why the async check exists beside the synchronous one; until now nothing tested the anti-rebinding floor. It also removes a verdict that depended on whether DNS answered: on another machine two checks failed on resolution timeouts while the code was fine. One live check remains, asking a different question — that the default path is wired to a resolver at all — and on a silent network it reports a SKIP that names itself.",
+      },
+    ],
+  },
   {
     version: "0.209.0",
     date: "2026-08-07",

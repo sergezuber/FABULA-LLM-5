@@ -156,7 +156,20 @@ export function checkUrlSync(rawUrl: string): UrlVerdict {
  * internal/metadata IP is blocked too (anti-DNS-rebinding floor). Returns OK only if EVERY
  * resolved address is public.
  */
-export async function checkUrl(rawUrl: string): Promise<UrlVerdict> {
+export type HostLookup = (host: string) => Promise<string[]>
+
+const realLookup: HostLookup = async (host) => (await dns.lookup(host, { all: true })).map((r) => r.address)
+
+/**
+ * How a name becomes addresses. Injectable, and the default is the real resolver.
+ *
+ * The rule this function exists for — a name that resolves to an internal address is refused, whatever
+ * it is called — CANNOT be exercised against the real network: no public name resolves to 127.0.0.1, so
+ * the anti-rebinding floor had no test at all. What the network did contribute was a verdict that
+ * depended on whether DNS answered — MEASURED elsewhere: two checks failed on resolution timeouts while
+ * this code was fine. A check whose answer comes from the network is not a check of this code.
+ */
+export async function checkUrl(rawUrl: string, lookup: HostLookup = realLookup): Promise<UrlVerdict> {
   const structural = checkUrlSync(rawUrl)
   if (structural.blocked) return structural
   let host: string
@@ -165,8 +178,7 @@ export async function checkUrl(rawUrl: string): Promise<UrlVerdict> {
   if (ipv4ToInt(host) !== null || host.includes(":")) return structural
   let addrs: string[] = []
   try {
-    const res = await dns.lookup(host, { all: true })
-    addrs = res.map((r) => r.address)
+    addrs = await lookup(host)
   } catch {
     return { blocked: true, reason: `DNS resolution failed for ${host} (fail-closed).`, code: "dns_fail" }
   }

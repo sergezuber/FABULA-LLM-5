@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.216.0"
+export const FABULA_VERSION = "0.217.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.217.0",
+    date: "2026-08-09",
+    items: [
+      {
+        ru: "Две записи журнала носили ОДИН номер. Правка от 7 августа была помечена 0.209.0, тогда как выпущена она была под 0.210.0 — версию в тот раз подняли, а в записи проставили прежнюю, и номер столкнулся с настоящим выпуском 0.209.0 от 6-го. Журнал — это то, по чему собираются заметки к релизу: два разных изменения под одним номером означают, что одно из них в заметках либо потеряется, либо припишется не туда. Номер исправлен по тому, что версия РЕАЛЬНО была в том коммите, а не по тому, что написано в записи.",
+        en: "Two log entries carried ONE number. The change of 7 August was labelled 0.209.0 while it actually shipped as 0.210.0 — the version was bumped that time and the entry kept the previous number, colliding with the genuine 0.209.0 of the 6th. The log is what release notes are assembled from: two different changes under one number means one of them is either lost from the notes or attributed to the wrong release. The number is corrected against what the version REALLY was at that commit, not against what the entry claimed.",
+      },
+    ],
+  },
   {
     version: "0.216.0",
     date: "2026-08-09",
@@ -21,26 +31,6 @@ export const CHANGELOG: ChangelogEntry[] = [
       {
         ru: "Правило закреплено перечислением, а не памятью: проверка читает исходники и требует, чтобы КАЖДЫЙ файл интерфейса, читающий список моделей, переспрашивал его. Первая версия проверки пыталась отделить «показывает» от «считает» и нашла три поверхности из шести — половина оборачивает вызов переносом строки. Правило с исключениями гниёт; экран первого запуска показывает число моделей, и оно тоже должно быть правдой в момент показа.",
         en: "The rule is pinned by an enumeration rather than by memory: a check reads the sources and requires that EVERY interface file reading the model list also re-asks it. The first version of the check tried to separate showing from counting and found three of the six surfaces — half of them wrap the call across a line break. A rule with exceptions rots; the first-run screen shows how many models there are, and that number has to be true when it is shown too.",
-      },
-    ],
-  },
-  {
-    version: "0.215.0",
-    date: "2026-08-09",
-    items: [
-      {
-        ru: "Переспрашивание списка привязано к ОТКРЫТИЮ меню, а не к его монтированию. Содержимое всплывающего меню создаётся один раз, поэтому хук монтирования срабатывал на первом открытии и больше никогда — и следующее открытие показывало то, что было правдой тогда. Проверено вживую: движок гасили посреди сессии, маршрут отвечал «скрыт», а меню всё ещё предлагало его модель. Заметить это могла только живая проверка — и маршрут, и тесты отвечали правильно, устаревшим был третий слой.",
-        en: "The list is re-asked on the menu OPENING rather than on its mounting. A popover's content is created once, so a mount hook fired on the first open and never again — and the next open showed whatever had been true then. Verified live: the runtime was stopped mid-session, the route answered hidden, and the menu still offered its model. Only a live check could catch it — the route and the tests both answered correctly; the stale layer was the third one.",
-      },
-    ],
-  },
-  {
-    version: "0.214.0",
-    date: "2026-08-09",
-    items: [
-      {
-        ru: "Список моделей переспрашивается в тот момент, когда на него смотрят. Переспрашивание, заведённое накануне, было односторонним: оно вытаскивало движок, который поднялся, но не замечало движок, который погас, — и в меню оставалась строка, которая уже не может ответить. Нашлось это не тестом и не маршрутом, а живой проверкой в самом приложении: маршрут отвечал «скрыт», а меню показывало модель. Теперь каждая поверхность, ПОКАЗЫВАЮЩАЯ список — пикер, управление моделями, настройки, — спрашивает заново при открытии.",
-        en: "The model list is re-asked at the moment somebody looks at it. Yesterday's re-ask was one-sided: it recovered a runtime that had come UP but never noticed one that had gone DOWN, leaving a row in the menu that can no longer answer. This was found neither by a test nor by the route but by a live check in the running application — the route said hidden while the menu still showed the model. Now every surface that SHOWS the list — the picker, model management, settings — asks again as it opens.",
       },
     ],
   },
@@ -99,7 +89,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     ],
   },
   {
-    version: "0.209.0",
+    version: "0.210.0",
     date: "2026-08-07",
     items: [
       {
@@ -246,12 +236,6 @@ export const CHANGELOG: ChangelogEntry[] = [
         ru: "Цвет снимается с вывода до того, как его кто-либо читает. Программа, пишущая в канал, всё равно может раскрасить вывод — и тогда её числа не примыкают к словам рядом: «2719 пройдено» приходит с управляющей последовательностью между цифрами и словом, любой поиск читает ноль, и зелёный набор из 2794 проверок объявляется исчезнувшим. Замерено на настоящем исполнителе: критерий сказал «0 пройдено / 0 упало», тогда как сделанный им же прогон сказал «2719 пройдено, 0 упало, код 0».",
         en: "Colour is stripped from output before anything reads it. A programme writing to a pipe may colour its output anyway, and then its numbers are not adjacent to the words beside them: \"2719 pass\" arrives with an escape sequence between the digits and the word, every pattern reads zero, and a green suite of 2794 checks is reported as one that vanished. Measured on a real runner: the criterion said \"0 pass / 0 fail\" while the run it had just made said \"2719 pass, 0 fail, exit 0\".",
       },
-    ],
-  },
-  {
-    version: "0.198.0",
-    date: "2026-08-06",
-    items: [
       {
         ru: "Витринный кадр на главной странице показывает продукт за работой, а не пустой запуск. В кадре — сама суть: жёсткий гейт, отказавшийся засчитать зелёные тесты без доказанного воспроизведения бага, вердикт с реальным счётом тестов и отчеканенный чек с командой перепроверки. Каждый факт в кадре взят из настоящего прогона на локальной модели; снято с живого интерфейса.",
         en: "The showcase frame on the front page shows the product at work rather than an empty launch. The frame carries the essence itself: the hard gate that refused to count green tests without a proven reproduction of the bug, the verdict with the real test score, and the minted receipt with its re-verification command. Every fact in the frame comes from a real run on a local model; captured from the live interface.",
@@ -300,12 +284,6 @@ export const CHANGELOG: ChangelogEntry[] = [
         ru: "Удаление рабочего дерева не объявляет несостоявшимся то, что состоялось. К моменту стирания оставшихся байтов git уже не знает об этом дереве; там, где описатель переживает породивший его процесс, отказ на этих байтах выдавал завершённое удаление за провал и вдобавок отменял удаление ветки. Любая другая ошибка по-прежнему поднимается, а вызов, когда git о дереве и не знал, остаётся строгим — там байты и есть вся работа.",
         en: "Removing a worktree no longer calls a completed removal a failure. By the time the leftover bytes are erased, git no longer knows the tree; where a handle outlives the process that held it, refusing on those bytes reported a finished removal as a failure and skipped the branch deletion too. Every other error is still raised, and the call made when git never knew the tree stays strict — there the bytes are the whole job.",
       },
-    ],
-  },
-  {
-    version: "0.194.0",
-    date: "2026-08-03",
-    items: [
       {
         ru: "Витрина проекта выровнена по лучшим открытым репозиториям. Первой картинкой теперь само приложение — настоящий снимок с чистыми данными, а не диаграмма; установка поднята в первую половину страницы и у каждой платформы есть команда запуска; добавлен раздел сообщества. Таблица плагинов перестала быть эссе в сетке: самая длинная ячейка ужалась с двух тысяч символов до обычного абзаца, а подробности двух главных гейтов вынесены в отдельные секции со ссылками из таблицы. У обзора архитектуры появилось кликабельное оглавление.",
         en: "The project storefront was aligned with the best open repositories. The first image is now the app itself — a real capture with clean data, not a diagram; installation moved into the first half of the page and every platform states its launch command; a community section was added. The plugin table stopped being an essay in a grid: the longest cell shrank from two thousand characters to an ordinary paragraph, with the two main gates' details moved to their own linked sections. The architecture overview gained a clickable table of contents.",

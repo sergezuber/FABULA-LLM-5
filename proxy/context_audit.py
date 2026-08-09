@@ -83,11 +83,33 @@ def render_template(template_str, messages, tools):
     """Render a HF-style chat template with the same conveniences transformers provides
     (raise_exception, strftime_now, tojson filter is jinja2-builtin)."""
     import jinja2
+    import jinja2.ext
+    import jinja2.nodes
 
     def raise_exception(msg):
         raise ValueError(msg)
 
-    env = jinja2.Environment(trim_blocks=True, lstrip_blocks=True, extensions=["jinja2.ext.loopcontrols"])
+    # `{% generation %}…{% endgeneration %}` is a REAL chat-template extension, not a typo: transformers
+    # uses it to mark which span of the rendered text is the assistant's, so a trainer can build a token
+    # mask. A plain Jinja environment does not know the tag and refuses to COMPILE the template — and
+    # this audit then reports a perfectly ordinary template as a layout violation, which is a statement
+    # about our parser dressed as a statement about the model. MEASURED: a model on this disk carries it,
+    # and the audit called its layout broken. What the span MEANS is irrelevant here — this tool asks in
+    # which ORDER the blocks appear — so the extension renders its body and adds nothing.
+    class _Generation(jinja2.ext.Extension):
+        tags = {"generation"}
+
+        def parse(self, parser):
+            lineno = next(parser.stream).lineno
+            body = parser.parse_statements(("name:endgeneration",), drop_needle=True)
+            return jinja2.nodes.CallBlock(self.call_method("_emit", []), [], [], body).set_lineno(lineno)
+
+        def _emit(self, caller):
+            return caller()
+
+    env = jinja2.Environment(
+        trim_blocks=True, lstrip_blocks=True, extensions=["jinja2.ext.loopcontrols", _Generation]
+    )
     env.globals["raise_exception"] = raise_exception
     env.globals["strftime_now"] = lambda fmt: "1970-01-01"
     tpl = env.from_string(template_str)

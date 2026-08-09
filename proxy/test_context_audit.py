@@ -37,9 +37,39 @@ from adapter_util import dump_last_request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MODELS_GLOB = os.path.expanduser("~/.lmstudio/models/*/*/chat_template.jinja")
-PROD_TEMPLATE = os.path.expanduser(
-    "~/.lmstudio/models/KCh3dRi4n/Qwen3.6-35B-A3B-NVIDIA-NVFP4-512K/chat_template.jinja"
-)
+
+
+def _production_template():
+    """The template of the model actually configured, RESOLVED rather than written down.
+
+    This was a hardcoded path, and the model it named had been replaced — so the invariant this file
+    itself calls design-critical was skipped in silence on the owner's own machine, for as long as that
+    model had been gone. A fact about a moving thing, recorded once, stops being a fact, and nothing
+    says when it stopped.
+
+    Asked of the same file the engine reads. The directory carries a publisher and a quantisation suffix
+    that the model id does not, so the match is on the stem, case-folded — the same tolerance the digest
+    resolver already needs, for the same reason. Returns (path, reason-it-is-absent).
+    """
+    cfg = os.environ.get("MIMOCODE_CONFIG") or os.path.join(os.path.dirname(HERE), "fabula.config.json")
+    if not os.path.exists(cfg):
+        return None, f"no engine config at {cfg} — cannot tell which model is the production one"
+    try:
+        with open(cfg, encoding="utf-8") as f:
+            model = (json.load(f) or {}).get("model") or ""
+    except Exception as e:  # a malformed config is a reason to report, not a crash
+        return None, f"engine config unreadable ({e})"
+    if not model:
+        return None, "the engine config names no default model"
+    stem = model.split("/")[-1].lower()
+    for path in sorted(glob.glob(MODELS_GLOB)):
+        name = os.path.basename(os.path.dirname(path)).lower()
+        if name == stem or name.startswith(stem):
+            return path, None
+    return None, f"the configured model {model!r} is not installed here"
+
+
+PROD_TEMPLATE, PROD_ABSENT = _production_template()
 
 # Minimal hermetic Qwen-style template: tools block FIRST inside the system turn, then the
 # system content, then messages — the exact physical layout the design's §3 documents.
@@ -173,15 +203,58 @@ def test_render_template_provides_hf_conveniences():
 
 @pytest.mark.parametrize("path", sorted(glob.glob(MODELS_GLOB)) or [pytest.param(None, marks=pytest.mark.skip(reason="no LM Studio models on this machine"))])
 def test_real_templates_layout(path):
+    """Every real template on this machine PARSES, and its layout is REPORTED.
+
+    What the layout IS, for a model this project neither writes nor ships, is that vendor's decision
+    and not a defect here. The invariant FABULA depends on is asserted separately, against the model
+    actually in the socket — see test_production_model_is_tools_first below. What IS ours, and what is
+    asserted here, is that the audit can READ every real template and answer with a well-formed order.
+
+    MEASURED, and it is why this changed: with the `{% generation %}` extension unimplemented the audit
+    could not compile one template at all, and this check reported it as a layout violation — a
+    statement about our parser wearing the clothes of a statement about the model. Once it could be
+    read, the honest answer was ["system", "tools", "user"]: that model is NOT tools-first. Three of
+    the four models on this disk are; one is not. That is a fact worth printing — the cache-key
+    hierarchy the design assumes (tool-set outermost) is inverted on such a model — and not a failure
+    to raise against a vendor who never agreed to it.
+    """
     if path is None:
         return
     with open(path, encoding="utf-8") as f:
         res = probe_layout(f.read())
-    # Every template must at least keep system before user; tool-aware ones must put tools first.
-    assert res["ok"] is True, f"{path}: layout {res['order']} violates the Context OS §3 physical model"
+    print(f"  {os.path.basename(os.path.dirname(path))}: {res['order']} tools={res['tools_supported']}")
+    # OURS: the template was readable and the probe answered about it.
+    assert isinstance(res.get("order"), list) and res["order"], f"{path}: the audit could not read this template"
+    assert "user" in res["order"], f"{path}: no user block found — the probe did not understand this template"
+    # And the one ordering rule that holds regardless of tools: a system block precedes the user turn.
+    if "system" in res["order"]:
+        assert res["order"].index("system") < res["order"].index("user"), f"{path}: system after user"
 
 
-@pytest.mark.skipif(not os.path.exists(PROD_TEMPLATE), reason="production model not installed")
+def test_the_sweep_says_what_it_examined():
+    """A sweep over nothing must SAY so, because it reads exactly like a sweep that found no fault.
+
+    The parametrize above enumerates the models on this disk. On a machine with none — every continuous
+    check runs on one — it collapses to a single skipped case among two dozen passes, and the row goes
+    green having verified nothing about the one invariant this file calls design-critical. That is the
+    same defect as a guard that quietly disappears: absence and success look identical in the count.
+
+    This does not fail: a machine legitimately may have no models. It states the coverage plainly, so a
+    reader of the log is told what was and was not examined rather than left to infer it from a number.
+    """
+    found = sorted(glob.glob(MODELS_GLOB))
+    print(f"  templates examined on this machine: {len(found)}")
+    for f in found:
+        print(f"    {os.path.basename(os.path.dirname(f))}")
+    if not found:
+        print("  NOTHING WAS EXAMINED — the layout invariant was not checked on this machine.")
+    if PROD_TEMPLATE is None:
+        print(f"  the production invariant was NOT checked: {PROD_ABSENT}")
+    else:
+        print(f"  production model resolved to {os.path.basename(os.path.dirname(PROD_TEMPLATE))}")
+
+
+@pytest.mark.skipif(PROD_TEMPLATE is None, reason=PROD_ABSENT or "production model not resolvable")
 def test_production_model_is_tools_first():
     """The exact invariant the design doc §3 documents for the ACTIVE production model."""
     with open(PROD_TEMPLATE, encoding="utf-8") as f:

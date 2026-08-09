@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.211.0"
+export const FABULA_VERSION = "0.212.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,24 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.212.0",
+    date: "2026-08-09",
+    items: [
+      {
+        ru: "Разбор шаблонов понимает расширение `generation`. Это настоящее расширение шаблонов чата, а не опечатка: им помечают, какой кусок текста принадлежит ассистенту. Обычное окружение такого тега не знает и ОТКАЗЫВАЕТСЯ компилировать шаблон — и разбор объявлял совершенно обычную модель нарушителем раскладки, то есть высказывание о нашем разборщике выдавалось за высказывание о модели. Как только шаблон стало можно прочесть, честный ответ оказался иным: эта модель не tools-first. Три из четырёх на диске — да, одна нет.",
+        en: "Template parsing understands the `generation` extension. It is a real chat-template extension, not a typo: it marks which span of the text belongs to the assistant. A plain environment does not know the tag and REFUSES to compile the template — so the audit called a perfectly ordinary model a layout violation, a statement about our parser dressed as a statement about the model. Once the template could be read, the honest answer was different: that model is not tools-first. Three of the four on this disk are; one is not.",
+      },
+      {
+        ru: "Проход по установленным моделям СООБЩАЕТ их раскладку, а утверждает лишь то, что наше: шаблон прочитан и определитель ответил. Какова раскладка у модели, которую этот проект не пишет и не поставляет, — решение того, кто её сделал, а не наш дефект; инвариант, от которого зависит FABULA, проверяется отдельно, на модели в сокете.",
+        en: "The sweep over installed models REPORTS their layout and asserts only what is ours: the template was readable and the probe answered. What the layout is, for a model this project neither writes nor ships, is that author's decision and not a defect here; the invariant FABULA depends on is asserted separately, against the model in the socket.",
+      },
+      {
+        ru: "Производственная модель ВЫВОДИТСЯ из того же файла, который читает движок, а не вписана путём. Путь был вписан, названная им модель давно заменена — и инвариант, который сам этот файл называет ключевым для замысла, молча пропускался на машине владельца ровно столько, сколько её нет. Записанный однажды факт о движущемся перестаёт быть фактом, и ничто не говорит, когда именно. Плюс проход, не осмотревший ничего, теперь так и говорит: отсутствие и успех в числах выглядят одинаково.",
+        en: "The production model is DERIVED from the same file the engine reads instead of being written down as a path. The path was written down, the model it named had long been replaced — and the invariant this very file calls design-critical was skipped in silence on the owner's machine for as long as it had been gone. A fact about a moving thing, recorded once, stops being a fact and nothing says when. And a sweep that examined nothing now says so: absence and success look identical in a count.",
+      },
+    ],
+  },
   {
     version: "0.211.0",
     date: "2026-08-09",

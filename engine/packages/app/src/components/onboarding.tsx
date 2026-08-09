@@ -1,6 +1,6 @@
 // FABULA: first-run onboarding — a short multi-step wizard shown once on Home
 // (flag `fabula.onboarded` in localStorage): welcome → project folder → models → tips.
-import { createMemo, createSignal, For, Show } from "solid-js"
+import { createMemo, createSignal, For, onMount, Show } from "solid-js"
 import { Button } from "@mimo-ai/ui/button"
 import { Dialog } from "@mimo-ai/ui/dialog"
 import { Icon } from "@mimo-ai/ui/icon"
@@ -10,6 +10,7 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useProviders } from "@/hooks/use-providers"
+import { useModels } from "@/context/models"
 import { useServer } from "@/context/server"
 
 export const ONBOARDED_KEY = "fabula.onboarded"
@@ -28,13 +29,18 @@ export function OnboardingDialog() {
   const layout = useLayout()
   const platform = usePlatform()
   const providers = useProviders()
+  const models = useModels()
+  // This screen SHOWS how many models there are, so it re-asks as it opens —
+  // see useModels().refresh. Same rule as every other surface that reads the list.
+  onMount(() => models.refresh())
   const server = useServer()
   const [step, setStep] = createSignal(0)
   const [pickedDir, setPickedDir] = createSignal<string | undefined>(undefined)
 
-  const modelCount = createMemo(() =>
-    providers.connected().reduce((total, p) => total + Object.keys(p.models ?? {}).length, 0),
-  )
+  // Counted through the same list the picker offers, not off the raw config. Counting the config
+  // was a SECOND definition of "how many models do you have", and the two now disagree wherever a
+  // provider declares more than it serves — greeting a new user with a number the menu contradicts.
+  const modelCount = createMemo(() => models.list().length)
 
   const finish = () => {
     markOnboarded()

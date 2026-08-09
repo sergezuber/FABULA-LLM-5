@@ -3,10 +3,12 @@ import { List } from "@mimo-ai/ui/list"
 import { Switch } from "@mimo-ai/ui/switch"
 import { Tooltip } from "@mimo-ai/ui/tooltip"
 import { Button } from "@mimo-ai/ui/button"
-import type { Component } from "solid-js"
+import { onMount, type Component } from "solid-js"
 import { useLocal } from "@/context/local"
 import { popularProviders } from "@/hooks/use-providers"
 import { useLanguage } from "@/context/language"
+import { useModels } from "@/context/models"
+import { emptyModelsMessage } from "@/context/models-served"
 import { useDialog } from "@mimo-ai/ui/context/dialog"
 import { DialogSelectProvider } from "./dialog-select-provider"
 
@@ -14,6 +16,8 @@ export const DialogManageModels: Component = () => {
   const local = useLocal()
   const language = useLanguage()
   const dialog = useDialog()
+  // Opening this surface is the moment the list has to be true — see useModels().refresh.
+  onMount(() => useModels().refresh())
 
   const handleConnectProvider = () => {
     dialog.show(() => <DialogSelectProvider />)
@@ -40,7 +44,7 @@ export const DialogManageModels: Component = () => {
     >
       <List
         search={{ placeholder: language.t("dialog.model.search.placeholder"), autofocus: true }}
-        emptyMessage={language.t("dialog.model.empty")}
+        emptyMessage={emptyModelsMessage(useModels().hiddenProviders(), language.t)}
         key={(x) => `${x?.provider?.id}:${x?.id}`}
         items={local.model.list()}
         filterKeys={["provider.name", "name", "id"]}

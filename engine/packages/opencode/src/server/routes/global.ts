@@ -96,6 +96,7 @@ import { Config } from "../../config"
 import { ExternalImport } from "../../session/external-import"
 import { errors } from "../error"
 import nodePath from "path"
+import { connect as netConnect } from "net"
 import nodeOs from "node:os"
 import nodeFs from "fs"
 import { Global } from "@/global"
@@ -125,6 +126,109 @@ const REGISTRY_BUILTINS: Record<RegistryKind, string[]> = {
 function fabulaConfigDir() {
   const dir = process.env["MIMOCODE_CONFIG_DIR"]
   return dir && dir.length > 0 ? dir : Global.Path.config
+}
+/**
+ * The eight 16-bit groups of an IPv6 literal, or null if it is not one.
+ *
+ * Written out rather than pattern-matched because a WRITTEN address and a PARSED address are not
+ * the same thing: `new URL("http://[::ffff:127.0.0.1]/").hostname` is `[::ffff:7f00:1]`, so a rule
+ * that matches the dotted spelling can never fire from a URL. `plugin/lib/ssrf.ts` carries the same
+ * rule for the outbound guard and records the same lesson; the two cannot be one function because
+ * the plugin runtime and this binary are separate build graphs.
+ */
+function ipv6Groups(host: string): number[] | null {
+  let s = host.toLowerCase()
+  if (!s.includes(":")) return null
+  // A trailing dotted quad is legal in every IPv6 spelling — fold it into two groups first.
+  const dotted = s.match(/(\d+\.\d+\.\d+\.\d+)$/)
+  if (dotted) {
+    const parts = dotted[1].split(".").map(Number)
+    if (parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return null
+    const n = ((parts[0]! << 24) | (parts[1]! << 16) | (parts[2]! << 8) | parts[3]!) >>> 0
+    s = s.slice(0, s.length - dotted[1].length) + ((n >>> 16) & 0xffff).toString(16) + ":" + (n & 0xffff).toString(16)
+  }
+  const halves = s.split("::")
+  if (halves.length > 2) return null
+  const parse = (part: string) =>
+    part === "" ? [] : part.split(":").map((g) => (/^[0-9a-f]{1,4}$/.test(g) ? parseInt(g, 16) : NaN))
+  const head = parse(halves[0]!)
+  const tail = halves.length === 2 ? parse(halves[1]!) : []
+  if ([...head, ...tail].some(Number.isNaN)) return null
+  if (halves.length === 1) return head.length === 8 ? head : null
+  const gap = 8 - head.length - tail.length
+  if (gap < 1) return null
+  return [...head, ...Array(gap).fill(0), ...tail]
+}
+
+/**
+ * Is this address one this machine answers itself? Only such an address can ever be declared
+ * "serving nothing" (see nothingListening): a refusal from a remote host says as much about the
+ * path as about the service.
+ */
+export function isLoopbackURL(baseURL: string): boolean {
+  if (!URL.canParse(baseURL)) return false
+  const host = new URL(baseURL).hostname.replace(/^\[|\]$/g, "").toLowerCase()
+  if (host === "localhost" || host.endsWith(".localhost")) return true
+  if (/^127\.\d+\.\d+\.\d+$/.test(host)) return true
+  const g = ipv6Groups(host)
+  if (!g) return false
+  const leadingZeros = g.slice(0, 5).every((x) => x === 0)
+  // ::1 in any spelling.
+  if (leadingZeros && g[5] === 0 && g[6] === 0 && g[7] === 1) return true
+  // ::ffff:a.b.c.d — the IPv4-mapped form, which the URL parser writes as hex. 127/8 is loopback.
+  return leadingZeros && g[5] === 0xffff && (g[6]! >>> 8) === 127
+}
+
+// "Nobody is listening on this machine's port" — the one transport failure that is an ANSWER rather
+// than a missed question, used by /fabula/models-served to hide a local runtime that is not running.
+//
+// It is established by TRYING TO CONNECT, never by reading the error text of the failed request.
+// That distinction is the whole correctness of this function and it was paid for: the first version
+// classified the fetch error, and with HTTP_PROXY set in the environment Bun routes even a loopback
+// request through the proxy — an unreachable proxy then rejects with a message byte-identical to a
+// closed local port, so a runtime answering HTTP 200 was hidden entirely. The hostname in the URL
+// cannot settle that, because the decision to use a proxy is made by the transport, not by the URL.
+// A direct socket to the port cannot be spoofed by a proxy: either something accepts, or nothing does.
+//
+// Every other outcome is fail-open by construction. Something accepted -> we simply could not ask
+// (a timeout, a busy runtime, an unreadable body) and nothing is hidden. The probe itself failing
+// for any reason other than a refusal -> nothing is hidden either. Hiding is the narrow branch.
+export async function nothingListening(
+  baseURL: string,
+  connect: (host: string, port: number, timeoutMs: number) => Promise<"open" | "refused" | "unknown"> = tcpProbe,
+  timeoutMs = 1500,
+): Promise<boolean> {
+  if (!isLoopbackURL(baseURL)) return false
+  const url = new URL(baseURL)
+  const port = Number(url.port) || (url.protocol === "https:" ? 443 : 80)
+  const host = url.hostname.replace(/^\[|\]$/g, "")
+  return (await connect(host, port, timeoutMs).catch(() => "unknown" as const)) === "refused"
+}
+
+// The kernel's own answer, and deliberately the only thing consulted. A connection that opens is
+// closed again at once: this asks whether the port accepts, and nothing more.
+//
+// Exported for its own tests. The decision layer above takes an injected probe, so without this
+// being exercised directly the three outcomes would rest on nothing — and "any socket error means
+// refused" is exactly the mutation that survived a suite covering only the decision.
+export async function tcpProbe(host: string, port: number, timeoutMs = 1500): Promise<"open" | "refused" | "unknown"> {
+  return new Promise((resolve) => {
+    const done = (v: "open" | "refused" | "unknown") => {
+      clearTimeout(timer)
+      resolve(v)
+    }
+    const timer = setTimeout(() => done("unknown"), timeoutMs)
+    const socket = netConnect({ host, port }, () => {
+      socket.destroy()
+      done("open")
+    })
+    socket.on("error", (err: NodeJS.ErrnoException) => {
+      socket.destroy()
+      // ECONNREFUSED is the kernel saying no listener. Anything else — unreachable, permission,
+      // reset — is not that statement, so it must not hide anything.
+      done(err?.code === "ECONNREFUSED" ? "refused" : "unknown")
+    })
+  })
 }
 function registryRoot(kind: RegistryKind, scope?: string, dir?: string) {
   // Project scope maps to the engine's own per-project config dir contract (<project>/.mimocode);
@@ -1110,12 +1214,29 @@ export const GlobalRoutes = lazy(() =>
     // ANSWERED. No baseURL, no answer, a timeout, a malformed body — the provider maps to null and
     // every declared model of it stays visible. A picker emptied by a network blip is worse than a
     // picker with one stale row, because the second is a wrong offer while the first is no product.
+    //
+    // ONE case is not a blip and must not fail open: a REFUSED connection to a LOOPBACK address.
+    // Nothing is listening on that port, which is a definite statement that nothing is served there —
+    // not an unanswered question. Without this, a local runtime the owner has not started still fills
+    // the picker with rows that cannot answer, which is exactly the offer this route exists to remove.
+    // It is established by CONNECTING to the port (nothingListening), never by reading the failed
+    // request's error text — with a proxy in the environment a live local runtime produces the very
+    // same error as a closed port, and hiding a serving runtime is the outcome this whole route exists
+    // to avoid. A remote address is never eligible, and a request that merely timed out over an OPEN
+    // port hides nothing.
     .get(
       "/fabula/models-served",
       describeRoute({
         summary: "Model ids each configured provider actually serves right now",
         operationId: "fabula.modelsServed.get",
-        responses: { 200: { description: "Per-provider served ids, or null where the provider could not be asked" } },
+        responses: {
+          200: {
+            description:
+              "Per-provider: the ids it serves; an EMPTY array when it is a local address with nothing " +
+              "listening on the port; null where it could not be asked (no baseURL, timeout, error, " +
+              "unreadable body) and every declared model must stay visible",
+          },
+        },
       }),
       async (c) => {
         const cfgPath = process.env["MIMOCODE_CONFIG"]
@@ -1138,6 +1259,9 @@ export const GlobalRoutes = lazy(() =>
               headers,
               signal: AbortSignal.timeout(2500),
             }).catch(() => undefined)
+            // Only a failed request is worth asking the kernel about, and only then. A provider that
+            // answered has already proved something is there.
+            if (!res && (await nothingListening(base))) return void (served[id] = [])
             if (!res?.ok) return void (served[id] = null)
             const body = (await res.json().catch(() => undefined)) as { data?: { id?: unknown }[] } | undefined
             const ids = body?.data?.map((m) => String(m?.id ?? "")).filter(Boolean)

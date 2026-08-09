@@ -1,10 +1,11 @@
-import { createMemo, createResource } from "solid-js"
+import { createEffect, createMemo, createResource, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { DateTime } from "luxon"
 import { filter, firstBy, flat, groupBy, mapValues, pipe, uniqueBy, values } from "remeda"
 import { createSimpleContext } from "@mimo-ai/ui/context"
 import { useProviders } from "@/hooks/use-providers"
 import { Persist, persisted } from "@/utils/persist"
+import { servedModelFilter } from "./models-served"
 
 export type ModelKey = { providerID: string; modelID: string }
 
@@ -17,10 +18,15 @@ type Store = {
 }
 
 const RECENT_LIMIT = 5
+// How often to re-ask about a provider currently reported as serving nothing. Short enough that
+// starting the runtime feels immediate, long enough to be nothing in a menu that is otherwise
+// asked once. Only runs while something is actually hidden.
+const HIDDEN_RECHECK_MS = 5_000
 
 function modelKey(model: ModelKey) {
   return `${model.providerID}:${model.modelID}`
 }
+
 
 export const { use: useModels, provider: ModelsProvider } = createSimpleContext({
   name: "Models",
@@ -46,7 +52,11 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
     // registers with the app-wide Suspense and blanks the window (the anti-flicker rule), and an
     // empty map means "nothing known yet", which filters nothing. Same for null per provider —
     // a provider that did not answer keeps all of its declared models.
-    const [served] = createResource(
+    //
+    // An EMPTY LIST is the opposite of null and the distinction is load-bearing: the route sends it
+    // when a local runtime refused the connection outright, i.e. it is not running. That provider's
+    // models are all hidden, which is why a runtime the owner has not started contributes no rows.
+    const [served, { refetch: refetchServed }] = createResource(
       async () => {
         const res = await fetch("/global/fabula/models-served").catch(() => undefined)
         if (!res?.ok) return {} as Record<string, string[] | null>
@@ -58,13 +68,43 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       { initialValue: {} as Record<string, string[] | null> },
     )
 
+    // The providers currently reported as serving nothing, by the name a person would recognise.
+    // Both the re-ask below and the picker's empty state read this ONE answer: an empty menu has to
+    // be able to say WHICH runtime is not running, or the owner is left with a blank list and no
+    // sentence — a state that did not exist before models could be hidden.
+    const hiddenProviders = createMemo(() => {
+      const map = served.latest
+      return providers
+        .connected()
+        .filter((p) => {
+          const ids = map?.[p.id]
+          return Array.isArray(ids) && ids.length === 0
+        })
+        .map((p) => p.name || p.id)
+    })
+
+    // "Nothing is listening there" is true of an INSTANT, and this map is read once per app launch.
+    // Start FABULA before LM Studio — the ordinary order — and that one probe lands while the port
+    // is still closed, so the runtime's every model would stay hidden for the life of the window
+    // while it sits there serving. Before hiding existed, the same instant simply failed open.
+    //
+    // So the ONE non-fail-open answer is the one that gets asked again, and only while it stands:
+    // when nothing is hidden there is no poll at all, and the moment the runtime answers, the
+    // interval stops on its own. The cost is a handful of local requests per minute in exactly the
+    // state where the alternative is a menu that never comes back.
+    const anyHidden = createMemo(() => hiddenProviders().length > 0)
+    createEffect(() => {
+      if (!anyHidden()) return
+      const timer = setInterval(() => void refetchServed(), HIDDEN_RECHECK_MS)
+      onCleanup(() => clearInterval(timer))
+    })
+
     const available = createMemo(() => {
       const map = served.latest
       return providers.connected().flatMap((p) => {
-        const ids = map?.[p.id]
-        const set = ids ? new Set(ids) : undefined
+        const allow = servedModelFilter(map?.[p.id])
         return Object.values(p.models)
-          .filter((m) => !set || set.has(m.id))
+          .filter((m) => !allow || allow(m.id))
           .map((m) => ({
             ...m,
             provider: p,
@@ -175,6 +215,12 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       ready,
       list,
       find,
+      hiddenProviders,
+      // Ask again NOW. The list is otherwise read once per launch, plus a poll that runs only while
+      // something is hidden — which recovers a runtime that came UP but never notices one that went
+      // DOWN mid-session, leaving a row that cannot answer. Every surface that SHOWS the list calls
+      // this as it opens: the moment a person looks at the menu is exactly when it must be true.
+      refresh: () => void refetchServed(),
       visible,
       setVisibility,
       recent: {

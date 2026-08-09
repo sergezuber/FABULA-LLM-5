@@ -8,10 +8,11 @@ import { Button } from "@mimo-ai/ui/button"
 import { Dialog } from "@mimo-ai/ui/dialog"
 import { useDialog } from "@mimo-ai/ui/context/dialog"
 import { showToast } from "@mimo-ai/ui/toast"
-import { createResource, createSignal, type Component, For, Show, type JSX } from "solid-js"
+import { createResource, createSignal, onMount, type Component, For, Show, type JSX } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useModels } from "@/context/models"
 import { popularProviders } from "@/hooks/use-providers"
+import { emptyModelsMessage } from "@/context/models-served"
 import { SettingsList } from "./settings-list"
 
 // Per-model metadata editor for launch-config providers: display name + context/output limits
@@ -130,6 +131,8 @@ export const SettingsModels: Component = () => {
   const language = useLanguage()
   const models = useModels()
   const dialog = useDialog()
+  // Opening this surface is the moment the list has to be true — see useModels().refresh.
+  onMount(() => models.refresh())
   type LaunchProvider = { name?: string; baseURL?: string; models: Record<string, { name?: string; limit?: { context?: number; output?: number } }> }
   const [launchProviders, { refetch: refetchLaunch }] = createResource(async () => {
     const res = await fetch("/global/fabula/providers-config").catch(() => undefined)
@@ -209,7 +212,7 @@ export const SettingsModels: Component = () => {
         >
           <Show
             when={list.flat().length > 0}
-            fallback={<ListEmptyState message={language.t("dialog.model.empty")} filter={list.filter()} />}
+            fallback={<ListEmptyState message={emptyModelsMessage(models.hiddenProviders(), language.t)} filter={list.filter()} />}
           >
             <For each={list.grouped.latest}>
               {(group) => (

@@ -1,5 +1,5 @@
 import { Popover as Kobalte } from "@kobalte/core/popover"
-import { Component, ComponentProps, createMemo, JSX, Show, ValidComponent } from "solid-js"
+import { Component, ComponentProps, createMemo, JSX, onMount, Show, ValidComponent } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocal } from "@/context/local"
 import { useDialog } from "@mimo-ai/ui/context/dialog"
@@ -12,6 +12,8 @@ import { List } from "@mimo-ai/ui/list"
 import { Tooltip } from "@mimo-ai/ui/tooltip"
 import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
+import { useModels } from "@/context/models"
+import { emptyModelsMessage } from "@/context/models-served"
 
 const isFree = (provider: string, cost: { input: number } | undefined) =>
   provider === "opencode" && (!cost || cost.input === 0)
@@ -31,6 +33,8 @@ const ModelList: Component<{
 }> = (props) => {
   const model = props.model ?? useLocal().model
   const language = useLanguage()
+  // Opening the menu is the moment it has to be true — see useModels().refresh.
+  onMount(() => useModels().refresh())
 
   const models = createMemo(() =>
     model
@@ -43,7 +47,7 @@ const ModelList: Component<{
     <List
       class={`flex-1 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0 ${props.class ?? ""}`}
       search={{ placeholder: language.t("dialog.model.search.placeholder"), autofocus: true, action: props.action }}
-      emptyMessage={language.t("dialog.model.empty")}
+      emptyMessage={emptyModelsMessage(useModels().hiddenProviders(), language.t)}
       key={(x) => `${x.provider.id}:${x.id}`}
       items={models}
       current={model.current()}
@@ -119,6 +123,9 @@ export function ModelSelectorPopover(props: {
     dismiss: null,
   })
   const dialog = useDialog()
+  // Captured HERE, at component creation, not inside a callback: a context read belongs to the
+  // owner that created the component, and reading it later is what makes such a call unreliable.
+  const models = useModels()
 
   const close = (dismiss: Dismiss) => {
     setStore("dismiss", dismiss)
@@ -144,7 +151,15 @@ export function ModelSelectorPopover(props: {
     <Kobalte
       open={store.open}
       onOpenChange={(next) => {
-        if (next) setStore("dismiss", null)
+        // OPENING is the moment the list has to be true. Asked from the widget's own callback
+        // rather than from a reactive effect on the open flag: the popover's content is created
+        // ONCE, so anything keyed on mounting fires on the first open and never again, and the
+        // effect on the flag was measured live to not run at all. A callback the widget itself
+        // invokes has no such subtlety.
+        if (next) {
+          setStore("dismiss", null)
+          models.refresh()
+        }
         setStore("open", next)
       }}
       modal={false}

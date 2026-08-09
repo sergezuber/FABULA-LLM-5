@@ -194,6 +194,7 @@ export const dict = {
   "dialog.model.select.title": "Select model",
   "dialog.model.search.placeholder": "Search models",
   "dialog.model.empty": "No model results",
+  "dialog.model.empty.notRunning": "No models — {provider} is not running. Start it and its models appear here.",
   "dialog.model.manage": "Manage models",
   "dialog.model.manage.description": "Customize which models appear in the model selector.",
   "dialog.model.manage.provider.toggle": "Toggle all {{provider}} models",

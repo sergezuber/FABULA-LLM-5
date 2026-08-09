@@ -5,8 +5,9 @@ import { List, type ListRef } from "@mimo-ai/ui/list"
 import { ProviderIcon } from "@mimo-ai/ui/provider-icon"
 import { Tag } from "@mimo-ai/ui/tag"
 import { Tooltip } from "@mimo-ai/ui/tooltip"
-import { type Component, Show } from "solid-js"
+import { type Component, onMount, Show } from "solid-js"
 import { useLocal } from "@/context/local"
+import { useModels } from "@/context/models"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
@@ -16,6 +17,9 @@ type ModelState = ReturnType<typeof useLocal>["model"]
 export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props) => {
   const model = props.model ?? useLocal().model
   const dialog = useDialog()
+  // This surface SHOWS the model list, so it re-asks as it opens — see useModels().refresh.
+  // A dialog is created afresh each time, so mounting is its opening.
+  onMount(() => useModels().refresh())
   const providers = useProviders()
   const language = useLanguage()
 

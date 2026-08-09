@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.212.0"
+export const FABULA_VERSION = "0.216.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,66 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.216.0",
+    date: "2026-08-09",
+    items: [
+      {
+        ru: "Список моделей показывают ШЕСТЬ разных мест, и переспрашивают его теперь все шесть. Правку до этого писали трижды — и каждый раз не в том файле: на экране было меню домашней страницы, а правился пикер сессионного композера. Ни один тест не падал, потому что и маршрут, и фильтр отвечали верно; неправдой была та поверхность, которую никто не измерял. Нашлось это счётчиком в самом коде, а не рассуждением.",
+        en: "The model list is shown by SIX different places, and all six now re-ask it. The change had been written three times before, each time in the wrong file: what was on screen was the home page menu while the session composer's picker was being edited. No test failed, because the route and the filter both answered correctly; the untrue thing was the surface nobody was measuring. It was found by a counter placed in the code, not by reasoning about it.",
+      },
+      {
+        ru: "Правило закреплено перечислением, а не памятью: проверка читает исходники и требует, чтобы КАЖДЫЙ файл интерфейса, читающий список моделей, переспрашивал его. Первая версия проверки пыталась отделить «показывает» от «считает» и нашла три поверхности из шести — половина оборачивает вызов переносом строки. Правило с исключениями гниёт; экран первого запуска показывает число моделей, и оно тоже должно быть правдой в момент показа.",
+        en: "The rule is pinned by an enumeration rather than by memory: a check reads the sources and requires that EVERY interface file reading the model list also re-asks it. The first version of the check tried to separate showing from counting and found three of the six surfaces — half of them wrap the call across a line break. A rule with exceptions rots; the first-run screen shows how many models there are, and that number has to be true when it is shown too.",
+      },
+    ],
+  },
+  {
+    version: "0.215.0",
+    date: "2026-08-09",
+    items: [
+      {
+        ru: "Переспрашивание списка привязано к ОТКРЫТИЮ меню, а не к его монтированию. Содержимое всплывающего меню создаётся один раз, поэтому хук монтирования срабатывал на первом открытии и больше никогда — и следующее открытие показывало то, что было правдой тогда. Проверено вживую: движок гасили посреди сессии, маршрут отвечал «скрыт», а меню всё ещё предлагало его модель. Заметить это могла только живая проверка — и маршрут, и тесты отвечали правильно, устаревшим был третий слой.",
+        en: "The list is re-asked on the menu OPENING rather than on its mounting. A popover's content is created once, so a mount hook fired on the first open and never again — and the next open showed whatever had been true then. Verified live: the runtime was stopped mid-session, the route answered hidden, and the menu still offered its model. Only a live check could catch it — the route and the tests both answered correctly; the stale layer was the third one.",
+      },
+    ],
+  },
+  {
+    version: "0.214.0",
+    date: "2026-08-09",
+    items: [
+      {
+        ru: "Список моделей переспрашивается в тот момент, когда на него смотрят. Переспрашивание, заведённое накануне, было односторонним: оно вытаскивало движок, который поднялся, но не замечало движок, который погас, — и в меню оставалась строка, которая уже не может ответить. Нашлось это не тестом и не маршрутом, а живой проверкой в самом приложении: маршрут отвечал «скрыт», а меню показывало модель. Теперь каждая поверхность, ПОКАЗЫВАЮЩАЯ список — пикер, управление моделями, настройки, — спрашивает заново при открытии.",
+        en: "The model list is re-asked at the moment somebody looks at it. Yesterday's re-ask was one-sided: it recovered a runtime that had come UP but never noticed one that had gone DOWN, leaving a row in the menu that can no longer answer. This was found neither by a test nor by the route but by a live check in the running application — the route said hidden while the menu still showed the model. Now every surface that SHOWS the list — the picker, model management, settings — asks again as it opens.",
+      },
+    ],
+  },
+  {
+    version: "0.213.0",
+    date: "2026-08-09",
+    items: [
+      {
+        ru: "Список моделей больше не предлагает то, чего на машине не запущено, и «там никого нет» теперь спрашивается у ЯДРА, а не вычитывается из текста ошибки. Прежде правило «показываем лишь то, что провайдер действительно отдаёт» держалось на ответе провайдера, а закрытый порт ответом не считался — и все модели такого провайдера оставались в меню. Теперь на неудачный запрос по локальному адресу открывается обычное соединение с портом: отказ ядра — и только он — означает, что не слушает никто. Открыт, истёк срок, любая другая ошибка, любой удалённый адрес — не скрываем ничего.",
+        en: "The model list stops offering what is not running on this machine, and \"nobody is there\" is now asked of the KERNEL rather than read out of an error message. The rule \"offer only what a provider really serves\" used to rest on the provider ANSWERING, and a closed port did not count as an answer — so every model of such a provider stayed in the menu. Now a failed request to a local address opens a plain connection to the port: a refusal from the kernel, and only that, means nobody is listening. Open, timed out, any other error, any remote address — nothing is hidden.",
+      },
+      {
+        ru: "Первая версия читала текст ошибки, и это было ошибкой, стоившей дорого: при выставленном в окружении HTTP_PROXY запрос даже на собственную петлю идёт через прокси, а недоступный прокси отвечает сообщением, побайтно совпадающим с закрытым портом. Живой движок, отвечающий 200, скрывался целиком — ровно то, ради предотвращения чего весь этот механизм и существует. Имя в адресе этого решить не может: идти ли через прокси, решает транспорт, а не адрес. Прямое соединение с портом подделать прокси не способен: либо кто-то принимает, либо нет.",
+        en: "The first version read the error text, and that was a costly mistake: with HTTP_PROXY set in the environment, even a loopback request travels through the proxy, and an unreachable proxy answers with a message byte-identical to a closed port. A live runtime answering 200 was hidden entirely — precisely what this mechanism exists to prevent. The hostname cannot settle it: whether to use a proxy is decided by the transport, not by the address. A direct socket to the port is something a proxy cannot spoof: either something accepts, or nothing does.",
+      },
+      {
+        ru: "Скрытие, истинное одно мгновение, больше не приговор на всю сессию. Карта запрашивалась один раз за запуск, и владелец, запустивший приложение раньше движка — обычный порядок, — не увидел бы моделей до перезапуска окна. Теперь переспрашивается ровно один ответ — тот единственный, что не «на всякий случай показываем», — и только пока он в силе: когда ничего не скрыто, опроса нет вовсе.",
+        en: "A hiding that was true for one instant is no longer a verdict for the whole session. The map was asked once per launch, so an owner who starts the application before the runtime — the ordinary order — would see no models until the window was reloaded. Now exactly one answer is re-asked, the single one that is not fail-open, and only while it stands: when nothing is hidden there is no polling at all.",
+      },
+      {
+        ru: "Скрытая модель больше не обрывает выбор. Пригодность кандидата проверялась по конфигурации, а искалась модель в отфильтрованном списке — объявленный, но не отдаваемый кандидат принимался, а затем терялся, и выбор возвращал пустоту вместо перехода к следующему. Теперь вопрос «этим можно пользоваться?» задаётся тому же списку, который показывает меню, а перебор по умолчанию идёт по всем моделям провайдера, а не только по первой. Подсчёт моделей в первом запуске приведён туда же: два разных ответа на вопрос «сколько у вас моделей» противоречили друг другу.",
+        en: "A hidden model no longer breaks model selection. A candidate's fitness was checked against the configuration while the model was then looked up in the FILTERED list — so a declared-but-unserved candidate was accepted and then lost, and selection returned nothing instead of trying the next one. \"Can this be used?\" is now asked of the same list the menu shows, and the default scan walks all of a provider's models rather than only its first. Onboarding's model count moved to the same source: two different answers to \"how many models do you have\" were contradicting each other.",
+      },
+      {
+        ru: "Пустой список моделей теперь говорит, ПОЧЕМУ он пуст, и называет движок, который не запущен, — раньше такого состояния просто не существовало, а «Модели не найдены» ничего не подсказывает тому, у кого всё выключено.",
+        en: "An empty model list now says WHY it is empty and names the runtime that is not running — that state simply did not exist before, and \"No model results\" tells nothing to someone whose runtime is off.",
+      },
+    ],
+  },
   {
     version: "0.212.0",
     date: "2026-08-09",

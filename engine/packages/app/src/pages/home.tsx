@@ -338,7 +338,14 @@ export default function Home() {
                 <div class="flex-1" />
 
                 {/* Default model (ZCode's model menu incl. Manage models) — real: launch config */}
-                <DropdownMenu>
+                <DropdownMenu
+                  onOpenChange={(open) => {
+                    // Opening is the moment the list has to be true: a provider that stopped
+                    // serving since the page loaded must not still be offered here. Asked from the
+                    // widget's own callback — see useModels().refresh.
+                    if (open) models.refresh()
+                  }}
+                >
                   <DropdownMenu.Trigger
                     as="button"
                     class="flex h-7 items-center gap-1 rounded-lg px-2 text-[13px] text-text-base hover:bg-surface-raised-base-hover transition-colors cursor-pointer"

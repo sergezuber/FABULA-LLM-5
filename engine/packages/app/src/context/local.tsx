@@ -89,10 +89,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       last: undefined,
     })
 
-    const validModel = (model: ModelKey) => {
-      const provider = providers.all().find((item) => item.id === model.providerID)
-      return !!provider?.models[model.modelID] && connected().has(model.providerID)
-    }
+    // "Can this actually be used" is asked of the SAME list the picker offers, so the two cannot
+    // disagree. It used to be asked of the raw config — provider declared it, provider connected —
+    // which stopped being sufficient once the list started offering only what a provider really
+    // SERVES: a declared-but-unserved model passed here, `firstModel` returned it as the answer,
+    // and `current()` then failed to find it and returned nothing at all. A candidate that cannot
+    // be used must be SKIPPED so the next one is tried, never accepted and then lost.
+    const validModel = (model: ModelKey) => !!models.find(model)
 
     const firstModel = (...items: Array<() => ModelKey | undefined>) => {
       for (const item of items) {
@@ -162,10 +165,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (validModel(model)) return model
         }
 
-        const first = Object.values(provider.models)[0]
-        if (!first) continue
-        const model = { providerID: provider.id, modelID: first.id }
-        if (validModel(model)) return model
+        // Every model of the provider, not only its first: with the list offering just what is
+        // really served, a provider's first declared model can be one the runtime no longer has
+        // while the rest are fine, and taking only [0] would abandon the whole provider over it.
+        for (const candidate of Object.values(provider.models)) {
+          const model = { providerID: provider.id, modelID: candidate.id }
+          if (validModel(model)) return model
+        }
       }
     }
 

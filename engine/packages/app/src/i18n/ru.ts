@@ -211,6 +211,7 @@ export const dict = {
   "dialog.model.select.title": "Выбрать модель",
   "dialog.model.search.placeholder": "Поиск моделей",
   "dialog.model.empty": "Модели не найдены",
+  "dialog.model.empty.notRunning": "Моделей нет — {provider} не запущен. Запустите его, и модели появятся здесь.",
   "dialog.model.manage": "Управление моделями",
   "dialog.model.manage.description": "Настройте какие модели появляются в выборе модели",
   "dialog.model.manage.provider.toggle": "Переключить все модели {{provider}}",

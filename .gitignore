@@ -36,7 +36,11 @@ dist/
 build/
 
 # ── Runtime logs / databases ──────────────────────────────────
+# `*.log` alone misses a rotated log, because the suffix lands AFTER the extension:
+# `adapter.err.log.old` and `adapter.err.log.pre25` slipped past it and were tracked for
+# 194 commits, carrying the machine owner's real home directory into a public repository.
 *.log
+*.log.*
 *.db
 *.sqlite
 

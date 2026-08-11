@@ -11,6 +11,7 @@
 import { test, expect } from "bun:test"
 import { execSync } from "node:child_process"
 import { readFileSync, statSync } from "node:fs"
+import { homedir } from "node:os"
 import * as path from "node:path"
 
 const REPO = path.resolve(__dirname, "..", "..")
@@ -85,6 +86,38 @@ test("no tracked path contains a backslash — Windows cannot check out such a t
   const offenders = trackedFiles().filter((p) => p.includes("\\"))
   expect(offenders.slice(0, 10)).toEqual([])
   expect(offenders.length).toBe(0)
+})
+
+/**
+ * No tracked file carries the home directory of the machine it was authored on.
+ *
+ * MEASURED, and it is why this gate exists: `proxy/adapter.err.log.old` and
+ * `adapter.err.log.pre25` — two hand-made copies illustrating log rotation — were tracked for 194
+ * commits, each carrying one stack-trace line with the author's real home path, and both reached a
+ * public repository. Nothing could have caught it: `.gitignore` said `*.log`, which does not match a
+ * name whose suffix lands AFTER the extension, and no check looked for personal paths at all.
+ *
+ * The rule is written against THIS machine's home directory, read at runtime, and that is the whole
+ * design. A username cannot be written down here — spelling one out would BE the leak this gate
+ * exists to prevent — and reading it from the environment makes the rule true for every contributor
+ * on every machine without naming any of them. A fictional path in a fixture (`/Users/dev`,
+ * `/Users/kelvin`) is deliberately fine and stays fine: it belongs to nobody.
+ */
+test("no tracked file contains this machine's home directory", () => {
+  const home = homedir()
+  // A home of "/" or "" would match everything; refuse to run rather than pass vacuously.
+  expect(home.length).toBeGreaterThan(4)
+
+  const offenders = trackedFiles().flatMap((rel) => {
+    const abs = path.join(REPO, rel)
+    if (!statSync(abs, { throwIfNoEntry: false })?.isFile()) return []
+    const text = readFileSync(abs, "latin1")
+    if (!text.includes(home)) return []
+    const line = text.slice(0, text.indexOf(home)).split("\n").length
+    return [`${rel}:${line}`]
+  })
+
+  expect(offenders).toEqual([])
 })
 
 test("naming policy: no Claude/Anthropic/mimo/OpenCode leaks in FABULA-authored tracked files", () => {

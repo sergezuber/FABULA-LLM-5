@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.218.0"
+export const FABULA_VERSION = "0.219.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.219.0",
+    date: "2026-08-12",
+    items: [
+      {
+        ru: "Провайдера, добавленного через «Свой провайдер», теперь можно и РЕДАКТИРОВАТЬ. Раньше подключить новую модель без готового провайдера было можно (форма пишет в глобальный конфиг), а вот изменить её — нет: кнопка «Изменить» показывалась, но сохранение падало с «provider not in launch config». Причина — фирменная: создание писало в один файл (глобальный, ~/.config/fabula), а все правки искали провайдера только в конфиге проекта. Один провайдер — три места, и они не сходились.",
+        en: "A provider added via «Custom provider» can now also be EDITED. Connecting a new model without a predefined provider already worked (the form writes the global config), but changing it did not: the Edit button showed, yet saving failed with «provider not in launch config». The cause is the familiar one — create wrote one file (the global ~/.config/fabula) while every edit path looked only at the project config. One provider, three places, disagreeing.",
+      },
+      {
+        ru: "Кастомный провайдер — свойство пользователя, а не папки, поэтому он живёт в ГЛОБАЛЬНОМ конфиге и доступен во всех проектах; запись правок теперь идёт туда же, где он создан. Правка стала location-aware: провайдер из конфига проекта (например локальная LM Studio) правится на месте, как раньше; провайдер из глобального — в глобальном, с точной заменой (удалённая модель действительно удаляется — прежний merge её сохранял) и безопасно для .jsonc-комментариев, с проверкой схемы ДО записи на диск.",
+        en: "A custom provider is a property of the user, not of a folder, so it lives in the GLOBAL config and is available in every project; edits now write where it was created. The edit path became location-aware: a project-config provider (e.g. the local LM Studio) is patched in place as before; a global one is patched in the global file with precise replacement (a removed model is really removed — the old merge kept it) and JSONC-comment-safe, schema-validated BEFORE it touches disk.",
+      },
+    ],
+  },
   {
     version: "0.218.0",
     date: "2026-08-12",

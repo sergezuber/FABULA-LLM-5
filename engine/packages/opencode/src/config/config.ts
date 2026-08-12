@@ -528,6 +528,7 @@ export interface Interface {
   readonly getConsoleState: () => Effect.Effect<ConsoleState>
   readonly update: (config: Info) => Effect.Effect<void>
   readonly updateGlobal: (config: Info) => Effect.Effect<Info>
+  readonly updateGlobalProvider: (providerID: string, provider: unknown | null) => Effect.Effect<Info>
   readonly invalidate: (wait?: boolean) => Effect.Effect<void>
   readonly directories: () => Effect.Effect<string[]>
   readonly waitForDependencies: () => Effect.Effect<void>
@@ -1078,12 +1079,48 @@ export const layer = Layer.effect(
       return next
     })
 
+    // Replace or delete ONE provider in the global config, precisely. `updateGlobal` merges (and so
+    // can `patchJsonc`), which means neither can REMOVE a model a user deleted while editing — they
+    // drill to leaves and never prune. A user-added custom provider lives in the global config (it is
+    // a property of the user, not of a project), so its whole edit lifecycle needs replace semantics.
+    // `modify` from jsonc-parser sets the value at a path wholesale — replacing the subtree, and
+    // DELETING it when the value is undefined — which is exactly right and is JSONC-comment-safe. The
+    // candidate is schema-validated BEFORE the file is written, so an invalid provider can never
+    // corrupt the config; and `invalidate()` means the change takes effect without an engine restart.
+    const updateGlobalProvider = Effect.fn("Config.updateGlobalProvider")(function* (
+      providerID: string,
+      provider: unknown | null,
+    ) {
+      const file = globalConfigFile()
+      const before = (yield* readConfigFile(file)) ?? "{}"
+      const updated = !file.endsWith(".jsonc")
+        ? (() => {
+            const obj = (ConfigParse.jsonc(before, file) ?? {}) as { provider?: Record<string, unknown> }
+            obj.provider = obj.provider ?? {}
+            if (provider === null) delete obj.provider[providerID]
+            else obj.provider[providerID] = provider
+            return JSON.stringify(obj, null, 2)
+          })()
+        : applyEdits(
+            before,
+            modify(before, ["provider", providerID], provider === null ? undefined : provider, {
+              formattingOptions: { insertSpaces: true, tabSize: 2 },
+            }),
+          )
+      // Validate the WHOLE resulting config before it touches disk.
+      const next = ConfigParse.schema(Info, ConfigParse.jsonc(updated, file), file)
+      yield* fs.writeFileString(file, updated).pipe(Effect.orDie)
+      yield* invalidate()
+      return next
+    })
+
     return Service.of({
       get,
       getGlobal,
       getConsoleState,
       update,
       updateGlobal,
+      updateGlobalProvider,
       invalidate,
       directories,
       waitForDependencies,

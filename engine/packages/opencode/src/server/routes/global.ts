@@ -1335,35 +1335,65 @@ export const GlobalRoutes = lazy(() =>
       ),
       async (c) => {
         const body = c.req.valid("json")
-        const cfgPath = process.env["MIMOCODE_CONFIG"]
-        if (!cfgPath) return c.json({ ok: false, error: "no MIMOCODE_CONFIG" }, 400)
-        const cfg = (await Bun.file(cfgPath)
-          .json()
-          .catch(() => undefined)) as
-          | { provider?: Record<string, { name?: string; options?: Record<string, unknown>; models?: unknown }> }
-          | undefined
-        if (!cfg) return c.json({ ok: false, error: "config unreadable" }, 500)
-        const prov = cfg.provider?.[body.providerID]
-        if (!prov) return c.json({ ok: false, error: "provider not in launch config" }, 404)
-        if (body.name !== undefined) prov.name = body.name
-        if (body.baseURL !== undefined) prov.options = { ...(prov.options ?? {}), baseURL: body.baseURL }
-        if (body.models !== undefined) prov.models = body.models
-        if (body.modelPatch) {
-          const models = (prov.models ?? {}) as Record<string, { name?: string; limit?: unknown }>
-          if (body.modelPatch.remove) {
-            delete models[body.modelPatch.id]
-          } else {
-            const prev = models[body.modelPatch.id] ?? {}
-            models[body.modelPatch.id] = {
-              ...prev,
-              ...(body.modelPatch.name !== undefined ? { name: body.modelPatch.name } : {}),
-              ...(body.modelPatch.limit !== undefined ? { limit: body.modelPatch.limit } : {}),
-            }
+        type ProvShape = { npm?: string; name?: string; options?: Record<string, unknown>; models?: unknown }
+
+        // The single patch, applied wherever the provider lives — so launch and global edits behave
+        // identically. A spread (not in-place mutation) so nothing outside name/baseURL/models is
+        // touched: npm, env and custom headers are preserved by carrying the current object forward.
+        const applyPatch = (prov: ProvShape): ProvShape => {
+          const next: ProvShape = { ...prov }
+          if (body.name !== undefined) next.name = body.name
+          if (body.baseURL !== undefined) next.options = { ...(next.options ?? {}), baseURL: body.baseURL }
+          if (body.models !== undefined) next.models = body.models
+          if (body.modelPatch) {
+            const models = { ...((next.models ?? {}) as Record<string, { name?: string; limit?: unknown }>) }
+            if (body.modelPatch.remove) delete models[body.modelPatch.id]
+            else
+              models[body.modelPatch.id] = {
+                ...(models[body.modelPatch.id] ?? {}),
+                ...(body.modelPatch.name !== undefined ? { name: body.modelPatch.name } : {}),
+                ...(body.modelPatch.limit !== undefined ? { limit: body.modelPatch.limit } : {}),
+              }
+            next.models = models
           }
-          prov.models = models
+          return next
         }
-        await Bun.write(cfgPath, JSON.stringify(cfg, null, 2))
-        return c.json({ ok: true })
+
+        // WHERE the provider lives decides where the edit is written. A LAUNCH-config provider (the
+        // local LM Studio one, or any provider declared in the project's fabula.config.json, whose
+        // model limits are edited in Settings ▸ Models) is patched in place there — unchanged from
+        // before. A provider ABSENT from the launch file is a user-added CUSTOM provider, which lives
+        // in the GLOBAL config (a property of the user, available in every project — the owner's
+        // decision), and is written there with replace semantics so a removed model is actually
+        // removed and a .jsonc file keeps its comments. This is the fix for the split-brain that made
+        // editing a UI-created provider fail with "provider not in launch config": create wrote the
+        // global file while every edit path looked only at the launch file.
+        const cfgPath = process.env["MIMOCODE_CONFIG"]
+        const launch = cfgPath
+          ? ((await Bun.file(cfgPath).json().catch(() => undefined)) as
+              | { provider?: Record<string, ProvShape> }
+              | undefined)
+          : undefined
+
+        if (launch?.provider?.[body.providerID]) {
+          launch.provider[body.providerID] = applyPatch(launch.provider[body.providerID]!)
+          await Bun.write(cfgPath!, JSON.stringify(launch, null, 2))
+          return c.json({ ok: true, scope: "launch" })
+        }
+
+        // Global config. Carry the CURRENT global provider forward (so npm/env/headers survive an
+        // edit), or seed the openai-compatible shim for a provider the route is creating.
+        const global = await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.getGlobal())).catch(() => undefined)
+        const current = (global?.provider?.[body.providerID] ?? {}) as ProvShape
+        const base: ProvShape = current.name || current.options ? current : { npm: "@ai-sdk/openai-compatible", ...current }
+        try {
+          await AppRuntime.runPromise(
+            Config.Service.use((cfg) => cfg.updateGlobalProvider(body.providerID, applyPatch(base))),
+          )
+        } catch (e) {
+          return c.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 400)
+        }
+        return c.json({ ok: true, scope: "global" })
       },
     )
     // FABULA: connectivity probe for a configured provider — GET {baseURL}/models with the

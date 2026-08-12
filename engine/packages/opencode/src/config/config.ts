@@ -56,9 +56,26 @@ function mergeConfigConcatArrays(target: Info, source: Info): Info {
   return merged
 }
 
-function normalizeLoadedConfig(data: unknown, source: string) {
+// Exported for its regression test — the test must drive THIS function, not a copy of its rule.
+export function normalizeLoadedConfig(data: unknown, source: string) {
   if (!isRecord(data)) return data
   const copy = { ...data }
+  // Top-level keys starting with "_" are pseudo-comments — the widespread JSON idiom for a file
+  // format believed to have no comments. This file IS parsed as JSONC, so real `//` comments are the
+  // right way; but a shipped example carried `_comment_*` keys for weeks, `setup.sh` copies the
+  // example into the user's config, and setup never overwrites an existing config — so every install
+  // made in that window keeps the keys forever and, under the strict schema, dies at startup with
+  // `unrecognized_keys` pointing at a file this project authored. A pseudo-comment carries no
+  // configuration and can shadow nothing, so tolerating it costs nothing; killing startup over one
+  // is the loader punishing the user for the project's own example. TOP LEVEL only: below top level
+  // an underscore key can be data (`enhance._default` is), so deeper levels are left to the schema.
+  const pseudo = Object.keys(copy).filter((k) => k.startsWith("_"))
+  for (const k of pseudo) delete copy[k]
+  if (pseudo.length)
+    log.warn("ignoring pseudo-comment keys in config; this file is JSONC, use // comments", {
+      path: source,
+      keys: pseudo.join(", "),
+    })
   const hadLegacy = "theme" in copy || "keybinds" in copy || "tui" in copy
   if (!hadLegacy) return copy
   delete copy.theme
@@ -251,6 +268,39 @@ const InfoSchema = Schema.Struct({
       }),
     }),
   ),
+  // Per-model tuning for the "Enhance prompt" button, keyed by the SELECTED model ref
+  // ("provider/model"), plus a "_default" entry applied to every model. An entry may carry request
+  // params merged into the /chat/completions body (temperature, max_tokens, reasoning flags …), an
+  // optional "timeout_ms", and an optional "model" to run enhance with a DIFFERENT model for that
+  // selection. With no entry, enhance uses exactly the selected model.
+  //
+  // DECLARED HERE because the enhance route already CONSUMES it — it reads this same file directly
+  // (server/routes/global.ts) with no schema, while this loader parses the file with `.strict()`.
+  // Two readers of one file disagreeing about what it may contain: the route required the key and
+  // the loader refused it, so a config carrying `enhance` — including the example this project tells
+  // people to copy — died at startup with `unrecognized_keys`, and only on machines whose config had
+  // actually been copied from it. Undeclared is not the same as unused.
+  enhance: Schema.optional(
+    Schema.Record(
+      Schema.String,
+      Schema.Any.annotate({
+        [ZodOverride]: z
+          .object({
+            model: z.string().optional(),
+            timeout_ms: z.number().int().positive().optional(),
+          })
+          // NOT strict on purpose: every remaining key is passed through into the
+          // /chat/completions body as a request parameter, so the set is open by design.
+          .passthrough(),
+      }),
+    ),
+  ).annotate({
+    description:
+      'Per-model tuning for the "Enhance prompt" button, keyed by the selected model ref ' +
+      '("provider/model") plus an optional "_default" applied to every model. An entry may set ' +
+      '"model" to run enhance with a different model, "timeout_ms" (default 45000), and any other ' +
+      "key, which is merged into the request body as a parameter.",
+  }),
   checkpoint: Schema.optional(
     Schema.Struct({
       thresholds: Schema.optional(Schema.Array(Schema.String)).annotate({

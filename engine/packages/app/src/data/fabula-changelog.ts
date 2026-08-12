@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.217.0"
+export const FABULA_VERSION = "0.218.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.218.0",
+    date: "2026-08-12",
+    items: [
+      {
+        ru: "Свежая установка перестала умирать на конфиге, который проект сам и выдал. Поставляемый пример нёс четыре ключа, которые строгий загрузчик отвергает: три псевдо-комментария (`_comment_*` — пояснения, записанные КЛЮЧАМИ в файле, который на деле разбирается как JSONC, где законны настоящие `//`-комментарии) и `enhance` — настоящую настройку кнопки «Улучшить промпт», которую маршрут читает из этого же файла напрямую, минуя схему. Один читатель требовал ключ, другой запрещал — и `setup` копировал этот пример каждому новому пользователю. На машинах со старым конфигом не падало никогда, поэтому дефект жил незамеченным до второй машины.",
+        en: "A fresh install no longer dies on a config this project itself handed out. The shipped example carried four keys the strict loader refuses: three pseudo-comments (`_comment_*` — prose written as KEYS in a file that is actually parsed as JSONC, where real `//` comments are legal) and `enhance` — a genuine setting of the Enhance-prompt button, which its route reads from the same file directly, bypassing the schema. One reader required the key, the other forbade it — and setup copied that example to every new user. Machines with an older config never crashed, so the defect lived unseen until a second machine.",
+      },
+      {
+        ru: "Починено для всех, а не только для новых: `enhance` объявлен в схеме (функция настоящая — удалить её значило бы чинить симптом), пример несёт настоящие комментарии, а загрузчик ТЕРПИТ псевдо-комментарии верхнего уровня с предупреждением в лог — потому что setup не перезаписывает существующий конфиг, и всякий, кто скопировал пример в плохую неделю, носил бы эти ключи вечно. Глубже верхнего уровня подчёркивание — данные (`enhance._default` — живой контракт) и не вычищается. Пример отныне проходит НАСТОЯЩУЮ схему в тестах: не список разрешённых ключей — список пришлось бы вести руками, а именно это дефект и породило.",
+        en: "Fixed for everyone, not only for new installs: `enhance` is declared in the schema (the feature is real — deleting it would treat the symptom), the example carries real comments, and the loader TOLERATES top-level pseudo-comment keys with a log warning — because setup never overwrites an existing config, so anyone who copied the example in a bad week would carry those keys forever. Below top level an underscore is data (`enhance._default` is a live contract) and is not stripped. The example now passes the REAL schema in tests — not an allowlist of keys, which would have to be kept in step by hand, the very failure that produced this defect.",
+      },
+    ],
+  },
   {
     version: "0.217.0",
     date: "2026-08-09",

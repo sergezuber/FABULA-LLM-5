@@ -1,7 +1,12 @@
 {
   "share": "disabled",
   "model": "lmstudio/your-local-model-id",
-  "_comment_enhance": "The «Enhance prompt» button uses the model SELECTED in the composer by default, with a 45s timeout (so a slow reasoning model still completes instead of failing). This optional section tunes it PER MODEL: keys are model refs ('provider/model'), '_default' applies to all. Each entry may set request params merged into the /chat/completions body (max_tokens, temperature, reasoning flags), a 'timeout_ms', and — if you want a slow reasoning model to enhance FAST — a 'model' override pointing enhance at a faster model for that selected model. Remove this section to just use the selected model as-is.",
+  // The «Enhance prompt» button uses the model SELECTED in the composer by default, with a 45s timeout (so a
+  // slow reasoning model still completes instead of failing). This optional section tunes it PER MODEL: keys
+  // are model refs ('provider/model'), '_default' applies to all. Each entry may set request params merged
+  // into the /chat/completions body (max_tokens, temperature, reasoning flags), a 'timeout_ms', and — if you
+  // want a slow reasoning model to enhance FAST — a 'model' override pointing enhance at a faster model for
+  // that selected model. Remove this section to just use the selected model as-is.
   "enhance": {
     "_default": {
       "max_tokens": 1024,
@@ -11,11 +16,16 @@
       "model": "provider/some-fast-instruct-model"
     }
   },
-  "_comment_checkpoint": "fork:true lets the background checkpoint-writer subagent REUSE the main agent's prefill cache instead of evicting it — on a local model this is a ~15x per-step speedup (the writer otherwise thrashes the KV cache each time it fires at a context threshold). Keeps memory/checkpointing fully on.",
+  // fork:true lets the background checkpoint-writer subagent REUSE the main agent's prefill cache instead of
+  // evicting it — on a local model this is a ~15x per-step speedup (the writer otherwise thrashes the KV
+  // cache each time it fires at a context threshold). Keeps memory/checkpointing fully on.
   "checkpoint": {
     "fork": true
   },
-  "_comment_instructions": "Loaded into EVERY request of EVERY project, so every byte here is a per-turn cost that competes with the task for the model's attention — keep this list small and general. Project-specific rules do NOT belong here: the engine already auto-discovers the nearest project-level agent instructions file for the repository being worked on. Situational, deep material belongs in skills, loaded on demand.",
+  // Loaded into EVERY request of EVERY project, so every byte here is a per-turn cost that competes with the
+  // task for the model's attention — keep this list small and general. Project-specific rules do NOT belong
+  // here: the engine already auto-discovers the nearest project-level agent instructions file for the
+  // repository being worked on. Situational, deep material belongs in skills, loaded on demand.
   "instructions": [
     "system-prompt.example.md",
     "prompts/runtime-tools-addendum.md",

@@ -1,5 +1,7 @@
 # FABULA plugins & tools — the full map
 
+[English](PLUGINS.md) · [中文](PLUGINS.zh-CN.md) · [Русский](PLUGINS.ru.md)
+
 Every capability is a plugin: a single file (`plugin/fabula-*.ts`) with a declared manifest
 ([`plugin/lib/manifest.ts`](../plugin/lib/manifest.ts) is the source of truth). The tags in the app's
 timeline **are** the plugins — same names everywhere: in `list_plugins`, in **Settings ▸ Plugins**, and below.

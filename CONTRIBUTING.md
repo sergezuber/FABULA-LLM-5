@@ -1,5 +1,7 @@
 # Contributing to FABULA-LLM-5
 
+[English](CONTRIBUTING.md) · [中文](CONTRIBUTING.zh-CN.md) · [Русский](CONTRIBUTING.ru.md)
+
 Thanks for your interest! This project is a local-first autonomous agent harness: the supervision layer — verification gates, checkpoints, loop guards, receipts — is what makes any model in the socket ship verified work. Contributions that keep it working **fully offline on ordinary hardware** are especially welcome.
 
 ## Ground rules

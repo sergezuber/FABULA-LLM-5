@@ -1,5 +1,7 @@
 # Evals & run notes
 
+[English](EVALS.md) · [中文](EVALS.zh-CN.md) · [Русский](EVALS.ru.md)
+
 **Done is a proof, not a feeling.** Honest, per-task evidence — captured runs, not marketing numbers. Receipts (`fabula receipt`, per the
 [Greenpaper](GREENPAPER.md)) will supersede this page; until then, run notes live here.
 

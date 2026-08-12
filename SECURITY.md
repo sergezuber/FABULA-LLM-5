@@ -1,5 +1,7 @@
 # Security Policy
 
+[English](SECURITY.md) · [中文](SECURITY.zh-CN.md) · [Русский](SECURITY.ru.md)
+
 FABULA-LLM-5 executes model-directed actions on your machine (shell, files, browser). The security layer (`fabula-security.ts` + `plugin/lib/`) provides SSRF guards, secret redaction, untrusted-content wrapping (prompt-injection defense), and write/command guards — but an agent with shell access is inherently powerful. Run it with the same care as any tool that can execute code.
 
 The write and fetch rules are enforced on **three doors**, from one set of rules:

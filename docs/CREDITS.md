@@ -1,5 +1,7 @@
 # Credits
 
+[English](CREDITS.md) · [中文](CREDITS.zh-CN.md) · [Русский](CREDITS.ru.md)
+
 The FABULA engine is derived from the **MiMoCode** harness (an OpenCode fork). Everything on top of it —
 the `fabula-*` plugins and their tools — is a **local-first implementation** expressed through the engine's
 plugin hooks, built to run on your own machine and models.

@@ -1,5 +1,7 @@
 # FABULA-LLM-5 — Architecture Overview
 
+[English](ARCHITECTURE.md) · [中文](ARCHITECTURE.zh-CN.md) · [Русский](ARCHITECTURE.ru.md)
+
 FABULA-LLM-5 is a **local-first, autonomous coding agent for macOS**. It runs your
 code-generation, research, and automation workloads against **local models** by default
 (via LM Studio), with an **opt-in** escalation path to a cloud provider for heavy work.

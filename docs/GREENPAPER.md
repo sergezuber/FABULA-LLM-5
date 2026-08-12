@@ -1,5 +1,7 @@
 # The Greenpaper — Verified Autonomy, v0.2 (draft)
 
+[English](GREENPAPER.md) · [中文](GREENPAPER.zh-CN.md) · [Русский](GREENPAPER.ru.md)
+
 **Done is a proof, not a feeling.**
 
 ## The problem

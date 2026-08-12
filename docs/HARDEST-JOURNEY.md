@@ -1,5 +1,7 @@
 # The hardest journey — what the machinery does on the worst day
 
+[English](HARDEST-JOURNEY.md) · [中文](HARDEST-JOURNEY.zh-CN.md) · [Русский](HARDEST-JOURNEY.ru.md)
+
 The front page shows a **captured run** (a real recording, a real receipt). This page shows the
 **full failure ladder** — the mechanisms that fire when a run goes worse than that: repeated red
 verifies, an automatic file rewind, a steered cloud second opinion.

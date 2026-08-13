@@ -9,14 +9,22 @@
 //   bun scripts/install-deps.ts --list     # report only, install nothing
 //   bun scripts/install-deps.ts --plugin=multimodal   # scope to one plugin
 //   bun scripts/install-deps.ts --yes      # non-interactive (assume yes)
+//   bun scripts/install-deps.ts --groups=browser,voice   # core + only the capabilities named
+//
+// --groups is what `setup.sh` passes after asking. Without it nothing changes: the old behaviour —
+// every plugin's required deps — is preserved for every existing caller and script.
 
 import { MANIFEST, allDeps, pluginById, type Dep } from "../plugin/lib/manifest"
 import { checkDep, installDep } from "../plugin/lib/manage"
+import { extraDepsForGroups, pluginsForGroups } from "../plugin/lib/setupgroups"
 
 const args = process.argv.slice(2)
 const LIST = args.includes("--list")
 const ALL = args.includes("--all")
 const onlyId = args.find((a) => a.startsWith("--plugin="))?.split("=")[1]
+// The capabilities a person actually chose. Absent → the historical "every plugin's required deps".
+const groupsArg = args.find((a) => a.startsWith("--groups="))?.split("=")[1]
+const GROUPS = groupsArg === undefined ? null : groupsArg.split(",").map((g) => g.trim()).filter(Boolean)
 
 // --md: print the dependency reference as markdown (source for DEPENDENCIES.md) and exit. No system checks.
 if (args.includes("--md")) {
@@ -26,7 +34,10 @@ if (args.includes("--md")) {
     "Auto-generated from [`plugin/lib/manifest.ts`](plugin/lib/manifest.ts) (the single source of truth).",
     "Regenerate: `bun scripts/install-deps.ts --md > DEPENDENCIES.md`.",
     "",
-    "Install everything missing: `bun scripts/install-deps.ts --all` (or `./setup.sh`). Install one plugin's deps:",
+    "`./setup.sh` installs the CORE (the four npm packages and git) and then ASKS about everything else —",
+    "each capability with its size and the honest reason to decline. Nothing here is installed because a",
+    "plugin exists. Take everything anyway: `bun scripts/install-deps.ts --all` (or `./setup.sh --all`).",
+    "Take one capability later: `./setup.sh --with=browser`. Install one plugin's deps:",
     "`bun scripts/install-deps.ts --plugin=<id>`, or the in-app `install_plugin_deps` tool. Toggle plugins with the",
     "in-app `enable_plugin` / `disable_plugin` tools (or `FABULA_DISABLE=id1,id2`).",
     "",
@@ -51,6 +62,26 @@ function depList(): Dep[] {
     // dedupe within the plugin
     const seen = new Set<string>(); const out: Dep[] = []
     for (const d of p.deps) { const k = `${d.kind}:${d.name}`; if (!seen.has(k)) { seen.add(k); out.push(d) } }
+    return out
+  }
+  if (GROUPS) {
+    // Core plus the chosen capabilities — and nothing else. A dependency reaches the install list only
+    // because a plugin the person kept needs it, or because a capability they asked for names it.
+    const keep = new Set(pluginsForGroups(GROUPS))
+    const extra = new Set(extraDepsForGroups(GROUPS))
+    const seen = new Set<string>()
+    const out: Dep[] = []
+    for (const m of MANIFEST) {
+      for (const d of m.deps) {
+        const wanted = (keep.has(m.id) && d.required) || extra.has(d.name)
+        if (!wanted) continue
+        const k = `${d.kind}:${d.name}`
+        if (seen.has(k)) continue
+        seen.add(k)
+        // A dep named by a chosen capability is required BY THAT CHOICE — the person asked for it.
+        out.push(extra.has(d.name) ? { ...d, required: true } : d)
+      }
+    }
     return out
   }
   return allDeps()

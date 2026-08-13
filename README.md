@@ -84,9 +84,33 @@ The receipt format is an open specification any agent can implement — [verifie
 
 ## Install
 
-**You need:** [LM Studio](https://lmstudio.ai) with a tool-calling model (or any OpenAI-compatible
-endpoint), and `git`. Everything else — the engine, Bun, the localhost adapter, the plugin
-dependencies — `setup.sh` installs for you.
+**You need `git`, and a model** — either one running on this machine or an OpenAI-compatible
+endpoint you already have. Nothing else is mandatory. `setup.sh` installs the engine, Bun and four npm
+packages, then asks you about everything that costs real disk or a background service.
+
+<details>
+<summary><b>What setup asks, and what each answer installs</b></summary>
+
+First, where your model comes from. Choose *a model on this machine* and it installs the localhost
+adapter FABULA talks to (you download the model in LM Studio yourself); choose *an endpoint I already
+have* and it installs nothing extra and points you at the two lines to fill in; choose *decide later*
+and FABULA starts with an empty model list.
+
+Then five capabilities, each with its size and the reason you might say no:
+
+| Capability | Costs | Say no if |
+|---|---|---|
+| Drive a real browser | ≈539 MB (Chromium) | You want it for code. Reading a page is `web_fetch`, installed either way — this is for pages you have to click through. |
+| Search the web | a local SearXNG | The machine is offline, or you already run one elsewhere and would rather point at it. |
+| Run code in a container | Docker Desktop | Code still runs, confined by the OS kernel profile where the platform has one. On Windows there is none, so a container is the only isolation there. |
+| Speech in and out | a few hundred MB of models | You do not intend to talk to it. Nothing else depends on speech. |
+| Go security floor | Go toolchain + 5 analysers | You have no Go projects. The floor is silent in any repo without a `go.mod`. |
+
+Every answer is reversible: `./setup.sh --with=browser` adds one later. `--minimal` takes the core and
+asks nothing, `--all` takes everything, and a run with no terminal to ask in never blocks — it installs
+the core and says what it skipped.
+
+</details>
 
 ### macOS — the desktop app
 
@@ -129,7 +153,7 @@ Re-run `setup.sh` (or `setup.ps1`) any time — after a `git pull`, after instal
 
 ### Point it at a model
 
-**Local (default):** open LM Studio, load a tool-calling model, start its server. `setup.sh` already installed the localhost adapter the config points at — nothing else to do.
+**A model on this machine:** open LM Studio, load a tool-calling model, start its server. If you answered *a model on this machine*, setup already installed the localhost adapter the config points at — nothing else to do. If you answered otherwise and changed your mind: `bun scripts/install-adapter-service.ts`.
 
 <details>
 <summary><b>Any OpenAI-compatible endpoint</b> — a cloud provider or a corporate gateway</summary>

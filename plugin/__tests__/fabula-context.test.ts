@@ -24,10 +24,13 @@ test("plugin injects cwd + git branch + verify command; keeps volatile changed-f
   const output = { system: [] as string[] }
   await hooks["experimental.chat.system.transform"]({ sessionID: "s" }, output)
   const block = output.system.join("\n")
-  expect(block).toContain(`Working directory: ${repo}`)
-  expect(block).toMatch(/Git branch: (main|master)/)
-  expect(block).toContain("npm test")          // detected from package.json (no bun.lockb → npm)
-  expect(block).toContain("verify_done")
+  // Every assertion carries the block it read. A bare "toContain failed" on an intermittent case sends
+  // whoever meets it hunting for a cause that the output already names.
+  const why = `injected block was:\n${block}`
+  expect(block, why).toContain(`Working directory: ${repo}`)
+  expect(block, why).toMatch(/Git branch: (main|master)/)
+  expect(block, why).toContain("npm test")     // detected from package.json (no bun.lockb → npm)
+  expect(block, why).toContain("verify_done")
   // the uncommitted file must NOT appear — changed-files would bust the model's KV-cache of the
   // static system prefix (they change every edit). Prefix stays byte-stable → cache reused each turn.
   expect(block).not.toContain("new.ts")

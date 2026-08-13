@@ -2,9 +2,11 @@
 <#
   FABULA-LLM-5 — one-shot setup on Windows: clone -> .\setup.ps1 -> serve.
 
-    .\setup.ps1            runtime + dependencies + engine build + config
-    .\setup.ps1 -All       also install OPTIONAL dependencies
-    .\setup.ps1 -DepsOnly  dependencies only, skip the engine build
+    .\setup.ps1                  ask what you want, then install the core plus that
+    .\setup.ps1 -Minimal         core only, no questions
+    .\setup.ps1 -All             everything, no questions
+    .\setup.ps1 -With browser    named capabilities, no questions
+    .\setup.ps1 -DepsOnly        dependencies only, skip the engine build
 
   This is the Windows twin of setup.sh, not a port of it: the two scripts do the same six things and
   each does them the way its own platform does. Everything downstream — the dependency manifest, the
@@ -17,7 +19,7 @@
   a hole shaped like whichever platform was added last. Git for Windows ships that shell, and `git` is a
   required dependency anyway, so it costs nothing extra.
 #>
-param([switch]$All, [switch]$DepsOnly)
+param([switch]$All, [switch]$Minimal, [string]$With = "", [switch]$DepsOnly)
 $ErrorActionPreference = "Stop"
 $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $Here
@@ -57,10 +59,58 @@ Write-Host "  shell: $bash"
 Write-Host "> 1/5  Plugin dependencies..."
 Push-Location plugin; bun install; Pop-Location
 
+# WHAT gets installed is a question, not a default. The manifest marks, per plugin, what THAT PLUGIN
+# cannot work without; reading it as what FABULA cannot work without installed 22 dependencies on a
+# first run, a 539 MB browser among them. The questions, their prices and the honest reason to decline
+# live in plugin/lib/setupgroups.ts - the same file setup.sh reads, so the two platforms cannot end up
+# offering people different products.
+$ModelSource = "later"
+$Groups = $With
+if (-not $All -and -not $Minimal -and $With -eq "") {
+  if ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
+    Write-Host ""
+    Write-Host "> Where will your model come from?"
+    $srcIds = @(); $n = 0
+    foreach ($line in (bun -e 'import { MODEL_SOURCES } from "./plugin/lib/setupgroups"; for (const m of MODEL_SOURCES) console.log([m.id, m.label, m.detail].join("|"))')) {
+      $f = $line -split '\|'; if ($f.Count -lt 3) { continue }
+      $n++; $srcIds += $f[0]
+      Write-Host "   $n) $($f[1])"
+      Write-Host "      $($f[2])" -ForegroundColor DarkGray
+    }
+    if ($n -gt 0) {
+      $pick = Read-Host "   Choose 1-$n [1]"
+      $i = 1; if ($pick -match '^\d+$' -and [int]$pick -ge 1 -and [int]$pick -le $n) { $i = [int]$pick }
+      $ModelSource = $srcIds[$i - 1]
+    } else { $ModelSource = "local" }
+
+    Write-Host ""
+    Write-Host "> Optional capabilities"
+    Write-Host "  Say no to anything you are unsure about - each can be added later." -ForegroundColor DarkGray
+    $chosen = @()
+    foreach ($line in (bun -e 'import { SETUP_GROUPS } from "./plugin/lib/setupgroups"; for (const g of SETUP_GROUPS) console.log([g.id, g.question, g.cost, g.skipIf, g.recommended ? "y" : "n"].join("|"))')) {
+      $f = $line -split '\|'; if ($f.Count -lt 5) { continue }
+      Write-Host ""
+      Write-Host "  $($f[1])"
+      Write-Host "  costs: $($f[2])" -ForegroundColor DarkGray
+      Write-Host "  skip it if: $($f[3])" -ForegroundColor DarkGray
+      $def = $f[4]
+      $hint = if ($def -eq "y") { "[Y/n]" } else { "[y/N]" }
+      $a = Read-Host "  install it? $hint"
+      if ($a -eq "") { $a = $def }
+      if ($a -match '^[Yy]') { $chosen += $f[0] }
+    }
+    $Groups = ($chosen -join ",")
+    Write-Host ""
+  } else {
+    # A prompt nobody can answer is a hang. Take the core and say what was skipped.
+    Write-Host "> Core only (nothing here can answer a question)."
+  }
+}
+
 Write-Host "> 2/5  System dependencies (from the manifest)..."
-$depArgs = @(); if ($All) { $depArgs += "--all" }
+$depArgs = @(); if ($All) { $depArgs += "--all" } else { $depArgs += "--groups=$Groups" }
 try { bun scripts/install-deps.ts @depArgs }
-catch { Write-Host "  (some optional dependencies were skipped - re-run with -All, or use install_plugin_deps from chat)" }
+catch { Write-Host "  (some installs failed - see above; this script is re-runnable any time)" }
 
 if (-not $DepsOnly) {
   Write-Host "> 3/5  Engine + shell..."
@@ -80,12 +130,26 @@ if (-not (Test-Path "fabula.config.json")) { Copy-Item "fabula.config.example.js
 if (-not (Test-Path ".env")) { Copy-Item ".env.example" ".env" }
 New-Item -ItemType Directory -Force -Path ".fabula" | Out-Null
 
-Write-Host "> 5/5  Local-model adapter (:1235)..."
-# Registered as a logon task by the same installer the other platforms use; it refuses to touch a live
-# adapter, because anything answering on that port already owns it.
-try { bun scripts/install-adapter-service.ts }
-catch { Write-Host "  (adapter service not installed - check: bun scripts/install-adapter-service.ts --status)" }
+# The adapter is what FABULA talks to a model ON THIS MACHINE through. Installing it for someone whose
+# model lives behind a corporate gateway registers a logon task they will never use.
+if ($ModelSource -eq "local" -or $All) {
+  Write-Host "> 5/5  Local-model adapter (:1235)..."
+  # Registered as a logon task by the same installer the other platforms use; it refuses to touch a live
+  # adapter, because anything answering on that port already owns it.
+  try { bun scripts/install-adapter-service.ts }
+  catch { Write-Host "  (adapter service not installed - check: bun scripts/install-adapter-service.ts --status)" }
+} else {
+  Write-Host "> 5/5  Local-model adapter: skipped - it is only needed for a model running on this machine."
+  Write-Host "  Changed your mind? bun scripts/install-adapter-service.ts" -ForegroundColor DarkGray
+}
 
 Write-Host ""
-Write-Host "Setup complete.  ->  bin\fabula.exe serve --port 4096   then open http://127.0.0.1:4096"
-Write-Host "  (Load a model in LM Studio, or add a cloud key to .env - the config is fabula.config.json.)"
+Write-Host "Setup complete."
+switch ($ModelSource) {
+  "local"    { Write-Host "  1. Open LM Studio, download a tool-calling model, start its server." }
+  "endpoint" { Write-Host "  1. Put your key in .env and describe the endpoint in fabula.config.json (it ships a filled-in example)." }
+  default    { Write-Host "  1. Add a model when you want one: in the app, Manage models -> Custom provider." }
+}
+Write-Host "  2. bin\fabula.exe serve --port 4096   then open http://127.0.0.1:4096"
+Write-Host ""
+Write-Host "  Add a capability later:  .\setup.ps1 -With browser   (or: browser,search,sandbox,voice,go)" -ForegroundColor DarkGray

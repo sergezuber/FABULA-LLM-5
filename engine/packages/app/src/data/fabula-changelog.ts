@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.219.0"
+export const FABULA_VERSION = "0.220.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,24 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.220.0",
+    date: "2026-08-13",
+    items: [
+      {
+        ru: "Установка больше не тянет то, чего человек не просил. Пользователи написали, что непонятно, ЧТО ставить и зачем — и были правы: манифест у каждого плагина отмечает, без чего НЕ РАБОТАЕТ ЭТОТ ПЛАГИН, а установщик читал эту пометку как «без чего не работает FABULA» и ставил обязательное всех плагинов подряд. Замерено до правки: 22 зависимости как обязательные, среди них Chromium на 539 МБ и LM Studio — последняя просто неверна для того, чей ключ смотрит в корпоративный шлюз. Теперь ядро — 5: четыре npm-пакета одной командой и git.",
+        en: "Setup no longer pulls in what nobody asked for. Users said they could not tell WHAT was being installed or why, and they were right: the manifest marks, per plugin, what THAT PLUGIN cannot work without, and the installer read that as what FABULA cannot work without — installing the required set of every plugin. Measured before the change: 22 dependencies treated as mandatory, among them a 539 MB Chromium and LM Studio, the latter simply wrong for anyone whose key points at a corporate gateway. The core is now 5: four npm packages in one command, and git.",
+      },
+      {
+        ru: "Всё остальное стало вопросом с ценой и честной причиной отказать. Браузер, поиск, контейнер, речь, набор для Go — каждый спрашивает, сколько весит и КОМУ он не нужен: «пропустите для работы с кодом: читать страницу умеет web_fetch, он ставится в любом случае; это нужно там, где по странице надо КЛИКАТЬ». Отдельный первый вопрос — откуда возьмётся модель: на этой машине, готовый endpoint, или решу позже. Ответ решает и остальное: адаптер localhost ставится только под локальную модель, а финальные шаги написаны под тот ответ, который человек дал.",
+        en: "Everything else became a question with a price and an honest reason to decline. Browser, search, container, speech, the Go set — each says what it costs and WHO does not need it: «skip it for coding work: reading a page is what web_fetch does, and it is installed either way; this is for pages that must be CLICKED». A separate first question asks where the model comes from: on this machine, an endpoint you already have, or decide later. That answer drives the rest — the localhost adapter is installed only for a local model, and the closing instructions are written for the answer the person actually gave.",
+      },
+      {
+        ru: "Вопросы, цены и причины живут в ОДНОМ файле, который читают и скрипт установки, и установщик зависимостей, — иначе они начинают рассказывать людям разное. Проверка на достижимость поймала это в тот же час: варианты выбора модели лежали в модуле без единого читателя, потому что setup.sh печатал свои три строки сам. Сам гейт при этом видел только TypeScript, то есть ЛЮБОЙ потребитель-шелл был для него невидим; расширен корпус, а не выписано исключение.",
+        en: "The questions, their prices and their reasons live in ONE file, read by the setup script and by the dependency installer alike — otherwise the two start telling people different things. The reachability gate caught this within the hour: the model-source options sat in the module with no reader at all, because setup.sh printed its own three lines. The gate itself saw only TypeScript, i.e. EVERY shell consumer was invisible to it; the corpus was widened rather than an exemption written.",
+      },
+    ],
+  },
   {
     version: "0.219.0",
     date: "2026-08-12",

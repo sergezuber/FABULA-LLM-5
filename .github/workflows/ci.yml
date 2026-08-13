@@ -288,6 +288,19 @@ jobs:
           done
           echo "dependencies could not be installed after three attempts"
           exit 1
+      - name: setup.ps1 parses
+        shell: pwsh
+        run: |
+          # This file has never been RUN on a Mac or a Linux box and cannot be: PowerShell is not there.
+          # So the only place its grammar is ever checked is here. A setup script that does not parse
+          # fails on the first machine a person clones onto, which is the worst place to find out.
+          $errs = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path setup.ps1), [ref]$null, [ref]$errs) | Out-Null
+          if ($errs -and $errs.Count -gt 0) {
+            $errs | ForEach-Object { Write-Host "::error file=setup.ps1,line=$($_.Extent.StartLineNumber)::$($_.Message)" }
+            exit 1
+          }
+          Write-Host "setup.ps1 parses"
       - name: Stamp the declared version into the shell manifests
         run: bun scripts/stamp-shell-version.ts
       - name: Build the engine and the shell for THIS machine

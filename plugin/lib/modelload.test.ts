@@ -39,14 +39,29 @@ const KAT = (state: string, loaded: number, bytes: number) => ({
 const STUB = join(tmpdir(), `lms-stub-${process.pid}.sh`)
 const STUB_BIN = writeMarkerScript(STUB, "#!/bin/sh\nif [ \"$1\" = ps ]; then echo IDENTIFIER; fi\nexit 0\n")
 
+// The MACHINE is pinned, like the `lms` binary and the serving API above it. Without it these cases
+// plan against however much memory THIS computer has, and a decision test becomes a fact about the
+// developer's hardware: the model here weighs 22 GiB, so on any machine with less than about 32 GiB the
+// planner would correctly refuse and every one of them would report a defect that does not exist.
+// A quiet 48 GiB Mac is what they were written against; now they say so instead of assuming it.
+// (This is NOT the cause of the flake fixed below — measured: the plan is sized from TOTAL memory, so
+// how much was free never entered the decision. Pinning `used` changes no verdict here; it is pinned
+// anyway so the two readings cannot disagree about which machine is being described.)
+const PINNED_TOTAL = 48 * GIB
+const PINNED_USED = 8 * GIB
+
 beforeEach(() => {
   process.env.FABULA_LMS_BIN = STUB_BIN
   process.env.FABULA_KVCOST_FILE = STORE
+  process.env.FABULA_MEMORY_TOTAL_BYTES = String(PINNED_TOTAL)
+  process.env.FABULA_MEMORY_USED_BYTES = String(PINNED_USED)
   delete process.env.FABULA_AUTO_WINDOW
   rmSync(STORE, { force: true })
 })
 afterEach(() => {
   server?.stop(true)
+  delete process.env.FABULA_MEMORY_TOTAL_BYTES
+  delete process.env.FABULA_MEMORY_USED_BYTES
   rmSync(STORE, { force: true })
 })
 
@@ -386,15 +401,22 @@ exit 0
     process.env.FABULA_LMS_BIN = writeMarkerScript(MARKER, MARKER_BODY)
     // Loaded at the passport while the machine can only pay for a fraction of it — the live 2026-07-26 state.
     serve([KAT("loaded", 262144, 22 * GIB)])
-    const r = await ensureLoadedAtPlannedWindow("kat", { loadTimeoutMs: 8000 })
+    // The bound exists so a genuinely hung load cannot stall the suite — not to time a process spawn.
+    // At 8s it did the latter: under the full 167-file run this failed about every other time with
+    // `load failed: [timed out after 8000ms]`, i.e. the stopwatch, not the product. The outer budget
+    // below sits BEHIND this one; the arithmetic is the point, and getting it backwards is how a
+    // bounded step reports the clock instead of the step.
+    const r = await ensureLoadedAtPlannedWindow("kat", { loadTimeoutMs: 30_000 })
     expect(r.plan!.tokens).toBeLessThan(262144)
-    expect(r.acted).toBe(true)
+    // The loader always says WHY it declined; a bare `false` here sent three rounds of guessing after a
+    // flake whose cause was one sentence away.
+    expect(r.acted, `declined to act: ${r.reason}`).toBe(true)
     const argv = readFileSync(ARGV, "utf8")
     expect(argv).toContain(String(r.plan!.tokens))
     for (const f of [SAMPLES, ARGV, MARKER]) rmSync(f, { force: true })
     delete process.env.FABULA_LMS_BIN
     delete process.env.FABULA_KVSAMPLE_FILE
-  }, 20000)
+  }, 60_000)
 
   test("refuses to plan when the weights are unknown, instead of treating them as free memory", async () => {
     // Point the on-disk weights source at an empty root: on the developer's machine the model id "kat"

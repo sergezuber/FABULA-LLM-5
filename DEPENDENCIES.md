@@ -3,7 +3,10 @@
 Auto-generated from [`plugin/lib/manifest.ts`](plugin/lib/manifest.ts) (the single source of truth).
 Regenerate: `bun scripts/install-deps.ts --md > DEPENDENCIES.md`.
 
-Install everything missing: `bun scripts/install-deps.ts --all` (or `./setup.sh`). Install one plugin's deps:
+`./setup.sh` installs the CORE (the four npm packages and git) and then ASKS about everything else —
+each capability with its size and the honest reason to decline. Nothing here is installed because a
+plugin exists. Take everything anyway: `bun scripts/install-deps.ts --all` (or `./setup.sh --all`).
+Take one capability later: `./setup.sh --with=browser`. Install one plugin's deps:
 `bun scripts/install-deps.ts --plugin=<id>`, or the in-app `install_plugin_deps` tool. Toggle plugins with the
 in-app `enable_plugin` / `disable_plugin` tools (or `FABULA_DISABLE=id1,id2`).
 

@@ -115,13 +115,21 @@ function listFiles(dir: string, filter: (f: string) => boolean): string[] {
 
 const isProdTs = (f: string) => f.endsWith(".ts") && !f.endsWith(".test.ts") && !f.endsWith(".d.ts")
 
+// A caller does not have to be TypeScript. `setup.sh` reads `lib/setupgroups.ts` through `bun -e`, so
+// the export has a real consumer that a .ts-only scan cannot see — and the gate reported it as an
+// orphan. Deleting it would have been wrong in the loud direction, and exempting it with a reason would
+// have hidden the blind spot rather than closed it: EVERY shell consumer was invisible, not this one.
+const isProdShell = (f: string) => f.endsWith(".sh") || f.endsWith(".ps1")
+
 /** Everything that could legitimately call a helper: the plugins, the other helpers, scripts, the app. */
 function productionCorpus(): { file: string; text: string }[] {
+  const REPO_ROOT = join(PLUGIN_DIR, "..")
   const files = [
     ...listFiles(PLUGIN_DIR, (f) => f.startsWith("fabula-") && isProdTs(f)),
     ...listFiles(LIB_DIR, isProdTs),
     ...listFiles(join(LIB_DIR, "attest"), isProdTs),
     ...EXTERNAL_CONSUMERS.flatMap((d) => listFiles(d, isProdTs)),
+    ...[REPO_ROOT, ...EXTERNAL_CONSUMERS].flatMap((d) => listFiles(d, isProdShell)),
   ]
   return files.map((file) => ({ file, text: readFileSync(file, "utf8") }))
 }

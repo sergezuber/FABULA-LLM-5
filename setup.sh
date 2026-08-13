@@ -1,19 +1,23 @@
 #!/bin/bash
 # FABULA-LLM-5 — setup. Clone → ./setup.sh → open the app. Re-run any time; every step is idempotent.
 #
-# It installs the CORE (four npm packages and git) and then asks what else you want. Nothing large is
-# downloaded because a plugin happens to exist: users told us it was not clear what was being
-# installed or why, and they were right — a browser of half a gigabyte and "LM Studio" as a hard
-# requirement both arrived unannounced, the second one wrong for anyone whose model lives behind a
-# gateway. Now every extra is a question with a price and a reason to say no.
+# IT ASKS NOTHING. That is the whole design of this script, and it was learned the hard way: the version
+# before it opened with "Where will your model come from?" and three paragraphs about localhost adapters,
+# OpenAI-compatible endpoints and model ids. To answer the first question you had to already understand
+# the architecture — so a person who simply wanted the application installed was made to sit an exam,
+# and said so. Explaining everything IS the complexity, not the cure for it.
 #
-#   ./setup.sh              # ask, then install core + what you chose
-#   ./setup.sh --minimal    # core only, no questions
-#   ./setup.sh --all        # everything, no questions
-#   ./setup.sh --with=browser,voice   # named capabilities, no questions
-#   ./setup.sh --deps       # dependencies only, skip the engine/app build
+# So the default installs what FABULA cannot run without (four npm packages, git, the engine, the
+# localhost adapter) and stops. Nothing large arrives unasked — no browser, no Docker, no speech models,
+# no Go toolchain. Choosing a model happens IN THE APPLICATION, which has a screen for it.
 #
-# Not a terminal (CI, a pipe)? It never blocks on a prompt — it installs the core and says what it skipped.
+#   ./setup.sh                        # install and finish — no questions
+#   ./setup.sh --ask                  # walk me through the optional extras
+#   ./setup.sh --with=browser,voice   # add named capabilities
+#   ./setup.sh --all                  # everything
+#   ./setup.sh --minimal              # skip even the adapter
+#   ./setup.sh --deps                 # dependencies only, skip the engine/app build
+#   ./setup.sh --help                 # this list
 set -e
 HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE"
@@ -22,18 +26,21 @@ IS_MAC=""
 [ "$(uname -s 2>/dev/null)" = "Darwin" ] && IS_MAC=1
 
 BUILD_APP=1
-MODE="ask"
+MODE="default"
 GROUPS=""
+SHOW_HELP=""
 for a in "$@"; do
   case "$a" in
+    --ask)      MODE="ask" ;;
     --all)      MODE="all" ;;
     --minimal)  MODE="minimal" ;;
     --with=*)   MODE="named"; GROUPS="${a#--with=}" ;;
     --deps)     BUILD_APP=0 ;;
+    --help|-h)  SHOW_HELP=1 ;;
   esac
 done
-# A prompt nobody can answer is a hang. Without a terminal we take the core and report the rest.
-[ -t 0 ] || { [ "$MODE" = "ask" ] && MODE="minimal"; }
+# A prompt nobody can answer is a hang. Without a terminal --ask degrades to the silent default.
+[ -t 0 ] || { [ "$MODE" = "ask" ] && MODE="default"; }
 
 say()  { printf '%s\n' "$1"; }
 bold() { printf '\033[1m%s\033[0m\n' "$1"; }
@@ -48,9 +55,26 @@ ask_yn() { # question, default(y/n) → 0 = yes
   case "$ans" in [Yy]*) return 0 ;; *) return 1 ;; esac
 }
 
+if [ -n "$SHOW_HELP" ]; then
+  say ""
+  bold "FABULA-LLM-5 setup"
+  say ""
+  say "  ./setup.sh                        install and finish — asks nothing"
+  say "  ./setup.sh --ask                  walk me through the optional extras"
+  say "  ./setup.sh --with=browser,voice   add named capabilities"
+  say "  ./setup.sh --all                  everything"
+  say "  ./setup.sh --minimal              core only, without the localhost adapter"
+  say "  ./setup.sh --deps                 dependencies only, skip the engine/app build"
+  say ""
+  dim  "  Capabilities: browser, search, sandbox, voice, go"
+  dim  "  Your fabula.config.json and .env are never overwritten."
+  say ""
+  exit 0
+fi
+
 say ""
 bold "FABULA-LLM-5 setup"
-dim  "Core first (four npm packages and git). Everything else is a question — with its size, and the reason you might not want it."
+dim  "Nothing to decide. This installs what FABULA needs to run and stops; you choose a model in the app."
 say ""
 
 # ── 0. Runtime ────────────────────────────────────────────────────────────────
@@ -65,7 +89,11 @@ command -v bun >/dev/null 2>&1 || { say "✗ bun is required and could not be in
 dim "  ok"
 
 # ── 1. What do you want? ──────────────────────────────────────────────────────
-MODEL_SOURCE="later"
+# Where the model comes from is asked ONLY under --ask. The silent default installs the adapter,
+# because it is ours, small, and inert until a local model runs — and because the alternative is asking
+# a question whose answer most people cannot know before they have opened the application once.
+MODEL_SOURCE="local"
+[ "$MODE" = "minimal" ] && MODEL_SOURCE="later"
 if [ "$MODE" = "ask" ]; then
   say ""
   bold "▸ Where will your model come from?"
@@ -119,7 +147,7 @@ EOF
   say ""
 elif [ "$MODE" = "minimal" ]; then
   say ""
-  dim "▸ Core only (--minimal, or no terminal to ask in)."
+  dim "▸ Core only (--minimal)."
 elif [ "$MODE" = "named" ]; then
   say ""
   dim "▸ Core + ${GROUPS} (--with)."
@@ -231,26 +259,15 @@ fi
 say ""
 bold "✓ Setup complete"
 say ""
-case "$MODEL_SOURCE" in
-  local)
-    say "  1. Open LM Studio, download a model that supports tool calling, start its server."
-    say "  2. Start FABULA:"
-    ;;
-  endpoint)
-    say "  1. Put your key in .env and describe the endpoint in fabula.config.json —"
-    dim  "     the file already contains a filled-in example to copy: provider, baseURL, apiKey, models."
-    say "  2. Start FABULA:"
-    ;;
-  later)
-    say "  1. Add a model when you want one: in the app, Manage models → Custom provider."
-    say "  2. Start FABULA:"
-    ;;
-esac
+say "  1. Start FABULA:"
 if [ -n "$IS_MAC" ]; then
-  say "     open FABULA-LLM-5.app"
+  say "       open FABULA-LLM-5.app"
 else
-  say "     bin/fabula serve --port 4096   then open http://127.0.0.1:4096"
+  say "       bin/fabula serve --port 4096   then open http://127.0.0.1:4096"
 fi
+say "  2. Add a model — whichever you have:"
+dim  "       on this machine — open LM Studio, load a tool-calling model, start its server"
+dim  "       an endpoint of your own — in the app: Manage models → Custom provider"
 say ""
-dim "  Add a capability later:  ./setup.sh --with=browser   (or: browser,search,sandbox,voice,go)"
-dim "  See what is installed:   bun scripts/install-deps.ts --list"
+dim "  More capabilities (browser, web search, container, speech, Go):  ./setup.sh --ask"
+dim "  What is installed:  bun scripts/install-deps.ts --list"

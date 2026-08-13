@@ -2,11 +2,17 @@
 <#
   FABULA-LLM-5 — one-shot setup on Windows: clone -> .\setup.ps1 -> serve.
 
-    .\setup.ps1                  ask what you want, then install the core plus that
-    .\setup.ps1 -Minimal         core only, no questions
-    .\setup.ps1 -All             everything, no questions
-    .\setup.ps1 -With browser    named capabilities, no questions
+    .\setup.ps1                  install and finish — asks nothing
+    .\setup.ps1 -Ask             walk me through the optional extras
+    .\setup.ps1 -With browser    add named capabilities
+    .\setup.ps1 -All             everything
+    .\setup.ps1 -Minimal         core only, without the localhost adapter
     .\setup.ps1 -DepsOnly        dependencies only, skip the engine build
+
+  IT ASKS NOTHING BY DEFAULT, like its POSIX twin and for the same measured reason: the version that
+  opened with "Where will your model come from?" made a person answer questions about localhost
+  adapters and model ids before they had ever opened the application. Choosing a model happens in the
+  app, which has a screen for it.
 
   This is the Windows twin of setup.sh, not a port of it: the two scripts do the same six things and
   each does them the way its own platform does. Everything downstream — the dependency manifest, the
@@ -19,7 +25,7 @@
   a hole shaped like whichever platform was added last. Git for Windows ships that shell, and `git` is a
   required dependency anyway, so it costs nothing extra.
 #>
-param([switch]$All, [switch]$Minimal, [string]$With = "", [switch]$DepsOnly)
+param([switch]$Ask, [switch]$All, [switch]$Minimal, [string]$With = "", [switch]$DepsOnly)
 $ErrorActionPreference = "Stop"
 $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $Here
@@ -64,9 +70,11 @@ Push-Location plugin; bun install; Pop-Location
 # first run, a 539 MB browser among them. The questions, their prices and the honest reason to decline
 # live in plugin/lib/setupgroups.ts - the same file setup.sh reads, so the two platforms cannot end up
 # offering people different products.
-$ModelSource = "later"
+# The silent default installs the adapter — ours, small, and inert until a local model runs. -Minimal
+# is how you decline it.
+$ModelSource = if ($Minimal) { "later" } else { "local" }
 $Groups = $With
-if (-not $All -and -not $Minimal -and $With -eq "") {
+if ($Ask -and -not $All -and -not $Minimal -and $With -eq "") {
   if ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
     Write-Host ""
     Write-Host "> Where will your model come from?"
@@ -102,8 +110,8 @@ if (-not $All -and -not $Minimal -and $With -eq "") {
     $Groups = ($chosen -join ",")
     Write-Host ""
   } else {
-    # A prompt nobody can answer is a hang. Take the core and say what was skipped.
-    Write-Host "> Core only (nothing here can answer a question)."
+    # A prompt nobody can answer is a hang. Fall back to the silent default.
+    Write-Host "> Installing without questions (nothing here can answer one)."
   }
 }
 

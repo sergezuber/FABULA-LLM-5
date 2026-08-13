@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.222.0"
+export const FABULA_VERSION = "0.223.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,24 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.223.0",
+    date: "2026-08-13",
+    items: [
+      {
+        ru: "Установка больше не спрашивает НИЧЕГО. Прошлая версия открывалась вопросом «Откуда возьмётся модель?» и тремя абзацами про локальный адаптер, OpenAI-совместимые endpoint'ы и model id — то есть, чтобы ответить на первый же вопрос, надо было заранее понимать устройство продукта. Человек, который просто хотел поставить приложение, оказывался на экзамене и прямо об этом сказал. Объяснять всё — это и есть сложность, а не лекарство от неё.",
+        en: "Setup no longer asks ANYTHING. The previous version opened with «Where will your model come from?» and three paragraphs about the localhost adapter, OpenAI-compatible endpoints and model ids — so answering the very first question required already understanding how the product is built. Someone who simply wanted the application installed found themselves sitting an exam, and said so. Explaining everything IS the complexity, not the cure for it.",
+      },
+      {
+        ru: "Теперь запуск ставит то, без чего FABULA не работает — четыре npm-пакета, git, движок и локальный адаптер, — и заканчивается двумя строками: запусти приложение, добавь модель. Ничего большого по-прежнему не приезжает без спроса: ни браузера, ни Docker, ни моделей речи, ни тулчейна Go. Выбор модели остался там, где ему и место, — в приложении, где для этого есть экран, кнопки и список провайдеров, а не номер от одного до трёх.",
+        en: "A run now installs what FABULA cannot work without — four npm packages, git, the engine and the localhost adapter — and ends in two lines: start the application, add a model. Nothing large still arrives unasked: no browser, no Docker, no speech models, no Go toolchain. Choosing a model stayed where it belongs — in the application, which has a screen for it with buttons and a provider list, rather than a number from one to three.",
+      },
+      {
+        ru: "Проведение по опциональным возможностям никуда не делось, оно просто перестало быть дорогой по умолчанию: `./setup.sh --ask` спросит про все пять с ценами и причинами отказаться, `--with=browser` добавит одну, `--all` возьмёт всё, `--minimal` не поставит даже адаптер, `--help` покажет список. Windows-двойник приведён к тому же поведению — иначе платформы снова начали бы предлагать людям разные продукты.",
+        en: "The guided walk through the optional capabilities has not gone anywhere, it merely stopped being the default path: `./setup.sh --ask` asks about all five with their prices and reasons to decline, `--with=browser` adds one, `--all` takes everything, `--minimal` installs not even the adapter, `--help` lists them. The Windows twin was brought to the same behaviour — otherwise the platforms would again start offering people different products.",
+      },
+    ],
+  },
   {
     version: "0.222.0",
     date: "2026-08-13",

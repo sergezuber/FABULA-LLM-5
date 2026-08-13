@@ -86,17 +86,16 @@ The receipt format is an open specification any agent can implement — [verifie
 
 **You need `git`, and a model** — either one running on this machine or an OpenAI-compatible
 endpoint you already have. Nothing else is mandatory. `setup.sh` installs the engine, Bun and four npm
-packages, then asks you about everything that costs real disk or a background service.
+packages, and stops. It asks you nothing: you pick a model in the application, which has a screen for it.
 
 <details>
-<summary><b>What setup asks, and what each answer installs</b></summary>
+<summary><b>What it installs, and what it deliberately does not</b></summary>
 
-First, where your model comes from. Choose *a model on this machine* and it installs the localhost
-adapter FABULA talks to (you download the model in LM Studio yourself); choose *an endpoint I already
-have* and it installs nothing extra and points you at the two lines to fill in; choose *decide later*
-and FABULA starts with an empty model list.
+Four npm packages, `git`, the engine, and the localhost adapter FABULA talks to a local model through.
+That is all. Nothing large arrives unasked — no browser, no Docker, no speech models, no Go toolchain —
+because a plugin exists that could use it.
 
-Then five capabilities, each with its size and the reason you might say no:
+Those are capabilities you add when you want them, each with a size and a reason you might not:
 
 | Capability | Costs | Say no if |
 |---|---|---|
@@ -106,9 +105,8 @@ Then five capabilities, each with its size and the reason you might say no:
 | Speech in and out | a few hundred MB of models | You do not intend to talk to it. Nothing else depends on speech. |
 | Go security floor | Go toolchain + 5 analysers | You have no Go projects. The floor is silent in any repo without a `go.mod`. |
 
-Every answer is reversible: `./setup.sh --with=browser` adds one later. `--minimal` takes the core and
-asks nothing, `--all` takes everything, and a run with no terminal to ask in never blocks — it installs
-the core and says what it skipped.
+`./setup.sh --with=browser` adds one. `./setup.sh --ask` walks through all five with their prices.
+`--all` takes everything, `--minimal` skips even the adapter, and a run with no terminal never blocks.
 
 </details>
 

@@ -134,6 +134,30 @@ describe("setup.sh and the installer read this file rather than repeating it", (
     expect(setup).toContain("[ -t 0 ]")
   })
 
+  // A person who wants the application installed should not have to answer anything. The version that
+  // asked first — "Where will your model come from?", three paragraphs about localhost adapters,
+  // OpenAI-compatible endpoints and model ids — required them to understand the architecture before
+  // the first prompt, and they said so in as many words. Explaining everything IS the complexity.
+  test("BOTH scripts ask nothing by default; the guided walk is opt-in", () => {
+    // POSIX: the DECLARATION, anchored to the line. `MODE="default"` also appears in the no-tty
+    // fallback (`[ "$MODE" = "ask" ] && MODE="default"`), so an unanchored match survived a mutation
+    // that flipped the declaration itself — an assertion satisfiable by an unrelated occurrence is
+    // decoration, which is the thing this suite exists to refuse.
+    expect(code(setup)).toMatch(/^MODE="default"$/m)
+    expect(code(setup)).toMatch(/--ask\)\s+MODE="ask"/)
+    // Windows: the question block is guarded by the same opt-in.
+    expect(code(setupPs1)).toMatch(/\[switch\]\$Ask/)
+    expect(code(setupPs1)).toMatch(/if \(\$Ask /)
+  })
+
+  test("choosing a model is the application's job, not the terminal's", () => {
+    // The app has an onboarding step for models; a terminal quiz about endpoints duplicates it in the
+    // worse medium. The closing text may POINT at the app, but must not interrogate.
+    const tail = code(setup).slice(code(setup).indexOf("Setup complete"))
+    expect(tail).toMatch(/Manage models/)
+    expect(tail, "the closing text asks a question").not.toMatch(/\?\s*"/)
+  })
+
   // Comments are blanked before these assertions. The first version matched the OLD form anywhere in
   // the file and failed on the comment that EXPLAINS why the old form was wrong — a grep cannot tell
   // code from the note beside it, and the repository has been bitten from the other side too, by a

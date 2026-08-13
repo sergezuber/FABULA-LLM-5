@@ -139,9 +139,31 @@ fi
 if [ "$BUILD_APP" = "1" ]; then
   say ""
   bold "▸ Engine${IS_MAC:+ + macOS app}"
-  [ -x bin/fabula ] || ./build.sh
+  # THE ARTIFACT, NOT ITS PRESENCE. This used to be `[ -x bin/fabula ] || ./build.sh`, so a re-run on an
+  # existing clone found the binary already there and skipped the build entirely — while the README, in
+  # all three languages, tells people to re-run setup after a `git pull`, which is exactly when a rebuild
+  # is the whole point. Someone following the documented path got a successful-looking run and kept
+  # running the old engine. Same trap RULE #20 exists for: a timestamp says a file is there, only the
+  # version inside says the artifact CARRIES the change.
+  #
+  # The version is read the way `verify-deploy.sh` reads it, from the one source that declares it. If it
+  # cannot be read, we build — an unnecessary build costs minutes, a skipped one costs a wrong answer.
+  DECLARED="$(bun -e 'import {FABULA_VERSION} from "./engine/packages/app/src/data/fabula-changelog"; console.log(FABULA_VERSION)' 2>/dev/null || true)"
+  if [ -x bin/fabula ] && [ -n "$DECLARED" ] && grep -qaF "\"$DECLARED\"" bin/fabula 2>/dev/null; then
+    dim "  engine already carries $DECLARED — nothing to build"
+  else
+    [ -n "$DECLARED" ] && dim "  building $DECLARED (the installed engine does not carry it)"
+    ./build.sh
+  fi
   if [ -n "$IS_MAC" ]; then
-    [ -d FABULA-LLM-5.app ] || bash app/build.sh
+    # app/build.sh is what stamps the version into Info.plist, so the bundle is rebuilt on the same
+    # condition rather than on whether the directory happens to exist.
+    if [ -d FABULA-LLM-5.app ] && [ -n "$DECLARED" ] &&
+       [ "$(defaults read "$HERE/FABULA-LLM-5.app/Contents/Info" CFBundleShortVersionString 2>/dev/null)" = "$DECLARED" ]; then
+      dim "  app bundle already carries $DECLARED"
+    else
+      bash app/build.sh
+    fi
   else
     dim "  no native window on this platform yet — the engine serves its own UI in the browser"
   fi

@@ -132,7 +132,9 @@ git clone https://github.com/sergezuber/FABULA-LLM-5; cd FABULA-LLM-5
 bin\fabula.exe serve --port 4096   # then open http://127.0.0.1:4096
 ```
 
-`setup.sh`（或者 `setup.ps1`）任何时候都可以再跑一遍 —— `git pull` 之后，装了新依赖之后。它绝不会覆盖你的 `.env` 或 `fabula.config.json`。
+`setup.sh`（或者 `setup.ps1`）任何时候都可以再跑一遍 —— `git pull` 之后，装了新依赖之后。装好的引擎若已不带源码声明的版本，它会重新构建；带了就跳过，不白花时间。它绝不会覆盖你的 `.env` 或 `fabula.config.json`。
+
+**更新已装好的一份：**`git pull && ./setup.sh`（只想重新构建就用 `./build.sh`），然后重新打开应用。先把它关掉 —— 构建会替换掉正在运行的那个引擎。
 
 ### 把它指向一个模型
 

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.221.0"
+export const FABULA_VERSION = "0.222.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.222.0",
+    date: "2026-08-13",
+    items: [
+      {
+        ru: "Повторный запуск `setup.sh` после `git pull` теперь действительно обновляет установленное. Прежде условие было `[ -x bin/fabula ] || ./build.sh` — то есть на уже установленном дереве бинарь на месте, и сборка пропускалась ЦЕЛИКОМ, тогда как README на всех трёх языках советует перезапускать setup именно после `git pull`. Человек делал ровно то, что написано, видел успешно завершившийся запуск и продолжал работать со СТАРЫМ движком. Теперь условие читает версию, которую артефакт НЕСЁТ, — тем же способом, что и `verify-deploy.sh`; несёт объявленную — сборка не тратится, не несёт — собирается. Оболочка macOS перестраивается по той же проверке `CFBundleShortVersionString`, а не по наличию папки.",
+        en: "Re-running `setup.sh` after a `git pull` now actually updates the installation. The condition used to be `[ -x bin/fabula ] || ./build.sh` — on an existing tree the binary is there, so the build was skipped ENTIRELY, while the README in all three languages tells people to re-run setup exactly after a `git pull`. Someone following the documented path saw a successful run and kept using the OLD engine. The condition now reads the version the artifact CARRIES, the way `verify-deploy.sh` does: carrying the declared version costs no build, not carrying it builds. The macOS bundle is rebuilt on the same `CFBundleShortVersionString` check rather than on whether the directory exists.",
+      },
+      {
+        ru: "README на трёх языках теперь прямо называет команду обновления и предупреждает закрыть приложение перед сборкой — она заменяет тот самый движок, который в этот момент работает.",
+        en: "The README in all three languages now names the update command outright and warns to quit the application before building — the build replaces the very engine that is running.",
+      },
+    ],
+  },
   {
     version: "0.221.0",
     date: "2026-08-13",

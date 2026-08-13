@@ -149,7 +149,9 @@ git clone https://github.com/sergezuber/FABULA-LLM-5; cd FABULA-LLM-5
 bin\fabula.exe serve --port 4096   # then open http://127.0.0.1:4096
 ```
 
-Re-run `setup.sh` (or `setup.ps1`) any time — after a `git pull`, after installing a dependency. It never overwrites your `.env` or `fabula.config.json`.
+Re-run `setup.sh` (or `setup.ps1`) any time — after a `git pull`, after installing a dependency. It rebuilds when the installed engine no longer carries the version the source declares, and skips the build when it does. It never overwrites your `.env` or `fabula.config.json`.
+
+**Updating an existing install:** `git pull && ./setup.sh` (or `./build.sh` to rebuild and nothing else), then reopen the app. Quit it first — the build replaces the engine it is running.
 
 ### Point it at a model
 

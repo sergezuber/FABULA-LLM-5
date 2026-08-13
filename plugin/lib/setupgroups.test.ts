@@ -133,4 +133,34 @@ describe("setup.sh and the installer read this file rather than repeating it", (
   test("setup never blocks on a prompt where nothing can answer it", () => {
     expect(setup).toContain("[ -t 0 ]")
   })
+
+  // Comments are blanked before these assertions. The first version matched the OLD form anywhere in
+  // the file and failed on the comment that EXPLAINS why the old form was wrong — a grep cannot tell
+  // code from the note beside it, and the repository has been bitten from the other side too, by a
+  // mutation that hid the removed line inside a comment.
+  const code = (t: string) =>
+    t
+      .split("\n")
+      .map((l) => (l.trimStart().startsWith("#") ? "" : l))
+      .join("\n")
+
+  test("re-running setup after a pull REBUILDS — presence of the binary is not freshness", () => {
+    // The README, in all three languages, tells people to re-run setup after a `git pull`. It used to
+    // read `[ -x bin/fabula ] || ./build.sh`, so on an existing clone the build was skipped entirely
+    // and the person kept running the old engine after a successful-looking run. The condition must
+    // read the VERSION the artifact carries, the way verify-deploy.sh does.
+    expect(code(setup), "the build is gated on the binary merely existing").not.toMatch(/\[ -x bin\/fabula \] \|\| \.\/build\.sh/)
+    expect(code(setup)).toContain("FABULA_VERSION")
+    expect(code(setup)).toMatch(/grep -qaF .*bin\/fabula/)
+    // …and the bundle on the same signal, not on the directory existing.
+    expect(code(setup), "the app bundle is gated on the directory existing").not.toMatch(/\[ -d FABULA-LLM-5\.app \] \|\| bash app\/build\.sh/)
+    expect(code(setup)).toContain("CFBundleShortVersionString")
+  })
+
+  test("the Windows twin builds on every re-run, so it cannot go stale either", () => {
+    // It does not need the version check — it never skips. What matters is that neither platform can
+    // finish a re-run leaving the old engine installed.
+    expect(setupPs1).toMatch(/build\.sh/)
+    expect(setupPs1).not.toMatch(/Test-Path .*bin\\fabula\.exe.*\)\s*\{?\s*$/m)
+  })
 })

@@ -115,8 +115,9 @@ The engine and every plugin run here. The desktop window builds separately and p
 
 ### Windows
 
-Install **Git for Windows** first — the harness runs every command through one POSIX shell on every
-platform, so the safety rules have a single grammar to parse.
+Install **Git for Windows** first — `setup.ps1` and the shell guards expect a POSIX shell, so the
+safety rules have one grammar to parse. The engine still recognises PowerShell when a command is
+dispatched to it, and the guards parse that shell on its own terms.
 
 ```powershell
 git clone https://github.com/sergezuber/FABULA-LLM-5; cd FABULA-LLM-5
@@ -187,7 +188,7 @@ You will see it write a test, watch that test fail on the old code, and only the
 
 Around the gates: web research, shell, sandboxed code execution, drift-tolerant file edits, browser automation, durable hand-offs, checkpoints and undo, and SSRF / redaction / injection defense.
 
-Those guards cover **three doors, not one**: a rule that stops a tool also stops the same thing through the shell, and code without a container runs under the OS kernel profile. An agent asked to install a startup item will reach for all three — not to attack anything, but to finish its task.
+Those guards cover **three doors, not one**: a rule that stops a tool also stops the same thing through the shell, and code without a container runs under the OS kernel profile where the platform has one — Seatbelt on macOS, bubblewrap on Linux. Windows has no per-command kernel confinement, so there the container backend is the isolation, and `execute_code` says so rather than pretending otherwise. An agent asked to install a startup item will reach for all three — not to attack anything, but to finish its task.
 
 The full map — 40 plugins, 90 tools: [`docs/PLUGINS.md`](docs/PLUGINS.md).
 

@@ -240,7 +240,10 @@ export const dict = {
   "provider.connect.toast.connected.description": "{{provider}} models are now available to use.",
 
   "provider.custom.title": "Your own endpoint",
-  "settings.providers.section.own": "Your own model",
+  "provider.custom.models.probe": "Ask the endpoint",
+  "provider.custom.models.probing": "Asking…",
+  "provider.custom.models.probed": "{{count}} model(s) found — names are yours to edit.",
+  "settings.providers.section.own": "Add your own model",
   "provider.custom.description.prefix": "Configure an OpenAI-compatible provider. See the ",
   "provider.custom.description.link": "provider config docs",
   "provider.custom.description.suffix": ".",

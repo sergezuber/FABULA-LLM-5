@@ -257,7 +257,10 @@ export const dict = {
   "provider.connect.toast.connected.description": "Модели {{provider}} теперь доступны.",
 
   "provider.custom.title": "Свой endpoint",
-  "settings.providers.section.own": "Своя модель",
+  "provider.custom.models.probe": "Спросить endpoint",
+  "provider.custom.models.probing": "Спрашиваю…",
+  "provider.custom.models.probed": "Найдено моделей: {{count}} — названия можно поправить.",
+  "settings.providers.section.own": "Добавить свою модель",
   "provider.custom.description.prefix": "Настройте OpenAI-совместимого провайдера. См. ",
   "provider.custom.description.link": "документацию по настройке провайдера",
   "provider.custom.description.suffix": ".",

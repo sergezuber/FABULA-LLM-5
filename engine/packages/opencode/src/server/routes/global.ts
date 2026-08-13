@@ -734,6 +734,47 @@ export const GlobalRoutes = lazy(() =>
         return c.json({ status: await f.json().catch(() => null) })
       },
     )
+    // FABULA: ask an endpoint being typed which models it serves.
+    //
+    // The custom-provider form let a model id be typed blind, and a gateway that refuses an unknown one
+    // answers long after the fact, in its own words, from inside a chat turn — the owner met exactly
+    // that: his gateway allows `deepseek-v4-flash` and the form carried `deepseek-v4-flash:max`. Every
+    // OpenAI-compatible endpoint can be asked, including the one that produced that error (it listed
+    // its own models in the refusal), so the form asks instead of guessing.
+    //
+    // Answers null with a reason rather than throwing: an endpoint that cannot be asked must leave the
+    // form usable, because typing the id by hand has to keep working for a gateway with no list.
+    .post(
+      "/fabula/probe-models",
+      describeRoute({
+        summary: "Models an endpoint serves",
+        description: "GET {baseURL}/models with the supplied credentials. Never throws; null when it could not be asked.",
+        operationId: "fabula.probeModels",
+        responses: { 200: { description: "Model ids" } },
+      }),
+      async (c) => {
+        const body = (await c.req.json().catch(() => ({}))) as {
+          baseURL?: string
+          apiKey?: string
+          headers?: Record<string, string>
+        }
+        const base = (body.baseURL ?? "").trim().replace(/\/+$/, "")
+        if (!/^https?:\/\//i.test(base)) return c.json({ models: null, reason: "base URL must start with http:// or https://" })
+        const headers: Record<string, string> = { accept: "application/json", ...(body.headers ?? {}) }
+        if (body.apiKey) headers["authorization"] = `Bearer ${body.apiKey}`
+        const res = await fetch(`${base}/models`, { headers, signal: AbortSignal.timeout(8000) }).catch(
+          (e) => ({ ok: false as const, status: 0, error: String(e) }),
+        )
+        if (!("ok" in res) || !res.ok) {
+          const status = "status" in res ? res.status : 0
+          return c.json({ models: null, reason: status ? `endpoint answered ${status}` : "could not reach the endpoint" })
+        }
+        const j = (await (res as Response).json().catch(() => undefined)) as { data?: { id?: unknown }[] } | undefined
+        const ids = Array.isArray(j?.data) ? j!.data.map((m) => m?.id).filter((x): x is string => typeof x === "string") : []
+        if (!ids.length) return c.json({ models: null, reason: "the endpoint listed no models" })
+        return c.json({ models: ids })
+      },
+    )
     // FABULA: plugin enable/disable backed by the same fabula-state.json convention the
     // plugins' own self-gating reads (lib/manage.ts). Toggles apply on the next engine start.
     .get(
@@ -1415,20 +1456,31 @@ export const GlobalRoutes = lazy(() =>
         responses: { 200: { description: "Providers" } },
       }),
       async (c) => {
-        const cfgPath = process.env["MIMOCODE_CONFIG"]
-        const cfg = cfgPath
-          ? await Bun.file(cfgPath)
-              .json()
-              .catch(() => ({}))
-          : {}
-        const providers = (cfg as {
-          provider?: Record<
-            string,
-            { name?: string; npm?: string; options?: { baseURL?: string }; models?: Record<string, { name?: string }> }
-          >
-        }).provider
+        // BOTH files, because a provider lives in whichever one created it. A custom endpoint added
+        // through the form is a property of the USER, so it is written to the GLOBAL config — and this
+        // reader looked only at the launch config, so the Edit button found nothing and returned
+        // without opening anything. The owner met it as "I added my provider and cannot change it".
+        //
+        // v0.219.0 made the WRITE side location-aware and left the READ side behind: the same defect
+        // seen from the other direction, in the wave that was meant to close it.
+        //
+        // The launch config wins on a collision, matching how the engine merges them, so a project that
+        // overrides a global provider still edits what it actually runs.
+        type P = { name?: string; npm?: string; options?: { baseURL?: string }; models?: Record<string, { name?: string }> }
+        const readProviders = async (file: string | undefined) => {
+          if (!file) return {} as Record<string, P>
+          const cfg = (await Bun.file(file)
+            .json()
+            .catch(() => ({}))) as { provider?: Record<string, P> }
+          return cfg.provider ?? {}
+        }
+        const merged = {
+          ...(await readProviders(nodePath.join(Global.Path.config, "mimocode.json"))),
+          ...(await readProviders(nodePath.join(Global.Path.config, "mimocode.jsonc"))),
+          ...(await readProviders(process.env["MIMOCODE_CONFIG"])),
+        }
         const out: Record<string, { name?: string; npm?: string; baseURL?: string; models: Record<string, { name?: string }> }> = {}
-        for (const [id, p] of Object.entries(providers ?? {})) {
+        for (const [id, p] of Object.entries(merged)) {
           out[id] = { name: p.name, npm: p.npm, baseURL: p.options?.baseURL, models: p.models ?? {} }
         }
         return c.json({ providers: out })

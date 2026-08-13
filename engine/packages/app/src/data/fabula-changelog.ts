@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.225.0"
+export const FABULA_VERSION = "0.226.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,24 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.226.0",
+    date: "2026-08-13",
+    items: [
+      {
+        ru: "Свой провайдер снова можно ИЗМЕНИТЬ. Кнопка «Изменить» читала конфиг ПРОЕКТА, а провайдер, добавленный через форму, пишется в ГЛОБАЛЬНЫЙ — это сознательное решение версии 0.225.0 и раньше: своя модель принадлежит пользователю, а не папке. Не найдя записи, обработчик молча выходил, и окно просто не открывалось: человек видел свой провайдер в списке, жал «Изменить» и не получал ничего. В 0.219.0 я сделал location-aware ЗАПИСЬ и не тронул ЧТЕНИЕ — тот же дефект с другой стороны, в волне, которая была должна его закрыть.",
+        en: "Your own provider can be EDITED again. The Edit button read the PROJECT config, while a provider added through the form is written to the GLOBAL one — a deliberate decision: your own model belongs to you, not to a folder. Finding no entry, the handler returned silently and no window opened: you saw your provider in the list, pressed Edit and got nothing. v0.219.0 made the WRITE side location-aware and left the READ side behind — the same defect from the other direction, in the wave meant to close it.",
+      },
+      {
+        ru: "Теперь читаются оба конфига, причём конфиг проекта побеждает при совпадении — так же, как их сливает движок, поэтому проект, переопределяющий глобального провайдера, правит именно то, что у него работает.",
+        en: "Both configs are read now, with the project config winning a collision — the same way the engine merges them, so a project overriding a global provider edits exactly what it runs.",
+      },
+      {
+        ru: "В форме появилась кнопка «Спросить endpoint»: она забирает список моделей у самого шлюза и заполняет строки. Раньше id вписывался вслепую, и ошибка приходила потом, из середины хода, словами шлюза — владелец получил ровно это: шлюз разрешает `deepseek-v4-flash`, а в форме стояло `deepseek-v4-flash:max`. Заголовок раздела стал действием — «Добавить свою модель», — потому что как категория он спорил со списком «Подключённые провайдеры», где уже лежит ваш собственный.",
+        en: "The form gained an «Ask the endpoint» button: it fetches the model list from the gateway itself and fills the rows in. An id used to be typed blind and the error arrived later, mid-turn, in the gateway's own words — the owner met exactly that: his gateway allows `deepseek-v4-flash` while the form carried `deepseek-v4-flash:max`. The section heading became an action — «Add your own model» — because as a category it competed with the «Connected providers» list, where the reader's own already sits.",
+      },
+    ],
+  },
   {
     version: "0.225.0",
     date: "2026-08-13",

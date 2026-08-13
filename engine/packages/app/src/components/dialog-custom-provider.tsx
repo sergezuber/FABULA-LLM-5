@@ -6,7 +6,7 @@ import { ProviderIcon } from "@mimo-ai/ui/provider-icon"
 import { useMutation } from "@tanstack/solid-query"
 import { TextField } from "@mimo-ai/ui/text-field"
 import { showToast } from "@mimo-ai/ui/toast"
-import { batch, For } from "solid-js"
+import { For, Show, batch, createSignal } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Link } from "@/components/link"
 import { useGlobalSDK } from "@/context/global-sdk"
@@ -184,6 +184,37 @@ export function DialogCustomProvider(props: Props) {
     },
   }))
 
+  const [probing, setProbing] = createSignal(false)
+  const [probeNote, setProbeNote] = createSignal("")
+
+  const probeModels = async () => {
+    setProbing(true)
+    setProbeNote("")
+    const headers = Object.fromEntries(
+      // The field is `key`, not `name` — read from the type rather than assumed from the label above it.
+      form.headers.filter((h) => h.key.trim()).map((h) => [h.key.trim(), h.value]),
+    )
+    const res = await fetch("/global/fabula/probe-models", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ baseURL: form.baseURL, apiKey: form.apiKey, headers }),
+    }).catch(() => undefined)
+    const body = (await res?.json().catch(() => undefined)) as { models?: string[] | null; reason?: string } | undefined
+    setProbing(false)
+    if (!body?.models?.length) {
+      // The reason travels verbatim: "could not ask" is not something a reader can act on.
+      setProbeNote(body?.reason ?? language.t("common.requestFailed"))
+      return
+    }
+    // Names already typed keep theirs; the id is what the endpoint is authoritative about.
+    const existing = new Map(form.models.filter((m) => m.id.trim()).map((m) => [m.id.trim(), m.name]))
+    setForm(
+      "models",
+      body.models.map((id) => ({ ...modelRow(), id, name: existing.get(id) ?? id })),
+    )
+    setProbeNote(language.t("provider.custom.models.probed", { count: String(body.models.length) }))
+  }
+
   const save = (e: SubmitEvent) => {
     e.preventDefault()
     if (saveMutation.isPending) return
@@ -257,7 +288,25 @@ export function DialogCustomProvider(props: Props) {
           </div>
 
           <div class="flex flex-col gap-3">
-            <label class="text-12-medium text-text-weak">{language.t("provider.custom.models.label")}</label>
+            <div class="flex items-center justify-between gap-3">
+              <label class="text-12-medium text-text-weak">{language.t("provider.custom.models.label")}</label>
+              {/* Ask the endpoint rather than have the reader type an id blind. A gateway refuses an
+                  unknown id long after the fact, from inside a chat turn, in its own words — which is
+                  how `deepseek-v4-flash:max` reached one. Typing stays available for a gateway with
+                  no list; this only fills the rows in. */}
+              <Button
+                type="button"
+                size="small"
+                variant="ghost"
+                disabled={probing()}
+                onClick={() => void probeModels()}
+              >
+                {probing() ? language.t("provider.custom.models.probing") : language.t("provider.custom.models.probe")}
+              </Button>
+            </div>
+            <Show when={probeNote()}>
+              <span class="text-12-regular text-text-weak">{probeNote()}</span>
+            </Show>
             <For each={form.models}>
               {(m, i) => (
                 <div class="flex gap-2 items-start" data-row={m.row}>

@@ -154,6 +154,8 @@ export const dict = {
   "settings.general.row.dataDirs.description": "Where FABULA keeps its database, config and logs. Click a row to copy the path. Moving the data directory is not supported (it holds the chat database).",
   "settings.general.row.dataDirs.data": "Data",
   "settings.general.row.dataDirs.config": "Config",
+  "settings.general.row.dataDirs.globalConfig": "Providers",
+  "settings.general.row.dataDirs.launchConfig": "Project",
   "settings.general.row.dataDirs.log": "Logs",
   "settings.general.row.dataDirs.copyHint": "Click to copy",
   "session.header.todos": "Plan",

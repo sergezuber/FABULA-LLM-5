@@ -171,6 +171,8 @@ export const dict = {
   "settings.general.row.dataDirs.description": "Где FABULA хранит базу, конфигурацию и логи. Клик по строке копирует путь. Перенос каталога данных не поддерживается (в нём база чатов).",
   "settings.general.row.dataDirs.data": "Данные",
   "settings.general.row.dataDirs.config": "Конфиг",
+  "settings.general.row.dataDirs.globalConfig": "Провайдеры",
+  "settings.general.row.dataDirs.launchConfig": "Проект",
   "settings.general.row.dataDirs.log": "Логи",
   "settings.general.row.dataDirs.copyHint": "Клик — копировать",
   "session.header.todos": "План",

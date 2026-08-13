@@ -90,7 +90,14 @@ export const SettingsGeneral: Component = () => {
     if (cachedEnginePaths) return cachedEnginePaths
     const res = await fetch("/global/fabula/paths").catch(() => undefined)
     if (!res?.ok) return undefined
-    cachedEnginePaths = (await res.json()) as { config: string; data: string; state: string; log: string }
+    cachedEnginePaths = (await res.json()) as {
+      config: string
+      data: string
+      state: string
+      log: string
+      launchConfig?: string
+      globalConfig?: string
+    }
     return cachedEnginePaths
   })
   const theme = useTheme()
@@ -568,6 +575,12 @@ export const SettingsGeneral: Component = () => {
                 { key: "data", label: () => language.t("settings.general.row.dataDirs.data") },
                 { key: "config", label: () => language.t("settings.general.row.dataDirs.config") },
                 { key: "log", label: () => language.t("settings.general.row.dataDirs.log") },
+                // The FILES where providers and models are declared. Which of the two holds a given
+                // provider is not guessable from outside: a provider added in the app goes to the
+                // global one, and the global config directory is a real folder on one machine and a
+                // symlink to the checkout on another.
+                { key: "globalConfig", label: () => language.t("settings.general.row.dataDirs.globalConfig") },
+                { key: "launchConfig", label: () => language.t("settings.general.row.dataDirs.launchConfig") },
               ]}
             >
               {(item) => (
@@ -576,13 +589,13 @@ export const SettingsGeneral: Component = () => {
                   class="flex items-center gap-2 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-surface-raised-base-hover cursor-pointer"
                   title={language.t("settings.general.row.dataDirs.copyHint")}
                   onClick={() => {
-                    const value = enginePaths.latest?.[item.key as "data" | "config" | "log"]
+                    const value = enginePaths.latest?.[item.key as keyof NonNullable<typeof cachedEnginePaths>]
                     if (value) void navigator.clipboard?.writeText(value)
                   }}
                 >
                   <span class="w-14 shrink-0 text-[11px] text-text-weaker">{item.label()}</span>
                   <span class="min-w-0 truncate font-mono text-[11px] text-text-weak">
-                    {enginePaths.latest?.[item.key as "data" | "config" | "log"] ?? "…"}
+                    {enginePaths.latest?.[item.key as keyof NonNullable<typeof cachedEnginePaths>] ?? "—"}
                   </span>
                 </button>
               )}

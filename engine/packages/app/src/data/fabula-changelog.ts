@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.227.0"
+export const FABULA_VERSION = "0.228.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.228.0",
+    date: "2026-08-13",
+    items: [
+      {
+        ru: "В Настройках ▸ Основные теперь показаны сами ФАЙЛЫ конфигурации, а не только папки: «Провайдеры» — глобальный конфиг, куда приложение пишет добавленного вами провайдера, и «Проект» — конфиг запуска. По клику путь копируется. Раньше там были только «Данные / Конфиг / Логи», и узнать, в каком файле лежит ваш провайдер, из приложения было нельзя.",
+        en: "Settings ▸ General now shows the config FILES, not just the directories: «Providers» — the global config the app writes a provider you added into, and «Project» — the launch config. A click copies the path. Before, only «Data / Config / Logs» were there, and which file held your provider could not be learned from the app at all.",
+      },
+      {
+        ru: "Почему это понадобилось: путь к этому файлу не угадывается снаружи. Глобальная конфиг-папка на одной машине — настоящая директория, на другой — симлинк на клон, а сам клон лежит там, куда его положили. Выясняя, где записан корпоративный провайдер, мы потратили четыре обмена сообщениями на пути, верные на одной машине и неверные на другой. Приложение знает оба — пусть говорит.",
+        en: "Why it was needed: that path is not guessable from outside. The global config directory is a real folder on one machine and a symlink to the checkout on another, and the checkout is wherever it was cloned. Establishing where a corporate provider was stored cost four exchanges on paths that were right on one machine and wrong on the other. The app knows both — it should say so.",
+      },
+    ],
+  },
   {
     version: "0.227.0",
     date: "2026-08-13",

@@ -639,13 +639,28 @@ export const GlobalRoutes = lazy(() =>
         operationId: "fabula.paths",
         responses: { 200: { description: "Paths" } },
       }),
-      async (c) =>
-        c.json({
+      async (c) => {
+        // The FILES, not just the directories. A provider you added lives in one of two configs, and
+        // which one is not guessable: the global config directory is a real folder on one machine and a
+        // symlink to the checkout on another, and the checkout is wherever the person cloned it. Asked
+        // where his corporate provider was stored, the owner and I spent four exchanges on paths that
+        // were right on my machine and wrong on his. The app knows both; it should say so.
+        const globalConfig = await (async () => {
+          for (const n of ["mimocode.jsonc", "mimocode.json"]) {
+            const f = nodePath.join(Global.Path.config, n)
+            if (await Bun.file(f).exists()) return f
+          }
+          return undefined
+        })()
+        return c.json({
           config: Global.Path.config,
           data: Global.Path.data,
           state: Global.Path.state,
           log: Global.Path.log,
-        }),
+          launchConfig: process.env["MIMOCODE_CONFIG"],
+          globalConfig,
+        })
+      },
     )
     // FABULA: what release is PUBLISHED. It deliberately does not say whether an update is available —
     // the running version is `FABULA_VERSION`, which lives in the frontend bundle and is the number the

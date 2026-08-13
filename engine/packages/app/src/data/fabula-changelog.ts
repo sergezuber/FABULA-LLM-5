@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.223.0"
+export const FABULA_VERSION = "0.224.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,24 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.224.0",
+    date: "2026-08-13",
+    items: [
+      {
+        ru: "Зелёная стрелка теперь ОБНОВЛЯЕТ, а не открывает страницу с архивом. Владелец ожидал ровно этого — «просто обновится локально и перезапустится», — и был прав: установка это git-клон, поэтому обновление означает подтянуть изменения и пересобрать здесь же. Ссылка на описание релиза осталась одной кнопкой рядом, для тех кто хочет сначала прочитать, что изменилось.",
+        en: "The green arrow now UPDATES rather than opening a page with an archive on it. That is exactly what the owner expected — «it should just update locally and restart» — and he was right: the install is a git checkout, so updating it means pulling and rebuilding right here. The release notes stayed one button away for anyone who wants to read what changed first.",
+      },
+      {
+        ru: "Обновление отказывается, а не рискует. Незакоммиченная работа в дереве, ветка без upstream, слияние, которое не сводится к перемотке вперёд, — каждый случай останавливает обновление и называет причину поимённо, вплоть до списка ваших изменённых файлов. Сборка идёт при живом движке (macOS позволяет заменить работающий бинарь — измерено), а `build.sh` кладёт новый бинарь на место только после успешной компиляции, поэтому неудачная сборка оставляет рабочую установку нетронутой.",
+        en: "The update refuses rather than risks. Uncommitted work in the tree, a branch with no upstream, a pull that is not a fast-forward — each stops it and names the reason, down to the list of your changed files. The build runs with the engine live (macOS permits replacing a running binary — measured), and `build.sh` puts the new binary in place only after a successful compile, so a failed build leaves the working installation untouched.",
+      },
+      {
+        ru: "Сама работа живёт в одном скрипте на все платформы; хосты делают единственное, чего кроме них не сделает никто, — перезапускают движок. И тут вскрылось, что кнопка перезапуска работала только на macOS: оболочка Linux и Windows превращала объект `{action:\"restart\"}` в строку «[object Object]», а её мост этого действия вообще не знал. Обе половины починены, иначе получилась бы фича, которая на двух платформах из трёх молча ничего не делает.",
+        en: "The work itself lives in one script for every platform; the hosts do the single thing only they can — restart the engine. Which surfaced that the restart button worked on macOS alone: the Linux/Windows shell turned the object `{action:\"restart\"}` into the string «[object Object]», and its bridge did not know the verb at all. Both halves are repaired, or this would have been a feature that silently does nothing on two platforms out of three.",
+      },
+    ],
+  },
   {
     version: "0.223.0",
     date: "2026-08-13",

@@ -287,8 +287,11 @@ fn engine_path(root: &Path) -> PathBuf {
 const BRIDGE_SHIM: &str = r#"
 (function () {
   const invoke = (cmd, args) => window.__TAURI__.core.invoke(cmd, args || {});
-  const post = (name) => ({ postMessage: (body) => invoke(name, { body: String(body ?? "") }) });
-  const reply = (name) => ({ postMessage: (body) => invoke(name, { body: String(body ?? "") }) });
+  // An OBJECT must survive the crossing. `String({action:"restart"})` is "[object Object]", so the
+  // macOS host's own vocabulary — which the shared frontend speaks — arrived here as nonsense.
+  const enc = (b) => (typeof b === "string" ? b : JSON.stringify(b ?? ""));
+  const post = (name) => ({ postMessage: (body) => invoke(name, { body: enc(body) }) });
+  const reply = (name) => ({ postMessage: (body) => invoke(name, { body: enc(body) }) });
   window.webkit = window.webkit || {};
   window.webkit.messageHandlers = Object.assign(window.webkit.messageHandlers || {}, {
     fabulaPlugins: post("bridge_plugins"),
@@ -424,7 +427,18 @@ fn run_capture(argv: &[String]) -> String {
 }
 
 #[tauri::command]
-fn bridge_plugins(app: tauri::AppHandle, body: String) -> String {
+fn bridge_plugins(app: tauri::AppHandle, body: String, state: tauri::State<EngineProc>) -> String {
+    // `{"action":"restart"}` is the macOS host's vocabulary on this channel, and the shared frontend
+    // speaks it — the update dialog asks for a restart once it has rebuilt. Without this arm the button
+    // would work on macOS and do nothing here, which is the one-platform-quietly-different defect this
+    // project keeps paying for. Answered HERE rather than through a second channel, so the frontend
+    // never has to know which window it is running in.
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&body) {
+        if v.get("action").and_then(|x| x.as_str()) == Some("restart") {
+            restart_engine(state);
+            return String::new();
+        }
+    }
     // The plugin panel is `scripts/manage-cli.ts`, the same program the macOS menu drives — one
     // definition of what a plugin is and whether it is on.
     let root = project_dir();

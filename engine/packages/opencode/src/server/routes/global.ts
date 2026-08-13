@@ -670,6 +670,70 @@ export const GlobalRoutes = lazy(() =>
       }),
       async (c) => c.json(await fabulaLatestRelease()),
     )
+    // FABULA: run the update. The reader expected the arrow to update the installation and restart it,
+    // not to open a page with a source archive on it — and they were right: the install is a git clone,
+    // so updating it is `git pull` plus the build this project already has.
+    //
+    // The WORK lives in `scripts/self-update.ts`, one definition for all three platforms; this route only
+    // starts it, DETACHED, and answers immediately. A build takes minutes, far past any request timeout,
+    // and the engine must stay answering while it runs — the same reason the corpus pipeline is a
+    // detached worker rather than a hook.
+    //
+    // It deliberately does not restart anything. Neither host revives an engine that dies unexpectedly,
+    // so a route that killed it would leave a dead window; the restart is the host's one job here.
+    .post(
+      "/fabula/update/apply",
+      describeRoute({
+        summary: "Update this installation",
+        description: "Pull and rebuild in the background. Poll /fabula/update/status for progress.",
+        operationId: "fabula.updateApply",
+        responses: { 200: { description: "Started" } },
+      }),
+      async (c) => {
+        const root = nodePath.join(Global.Path.data, "update")
+        await nodeFs.promises.mkdir(root, { recursive: true }).catch(() => {})
+        // FINDING THE CHECKOUT FROM A COMPILED BINARY. `import.meta.dir` is inside the bundle, not on
+        // disk — the first version resolved six levels up from it and found nothing, which the live run
+        // reported as "no self-update script". Three real pointers, in order of how deliberately they
+        // were set: an explicit override, the config file the app hands the engine (it lives IN the
+        // checkout), and `~/.config/fabula`, which setup.sh symlinks to the checkout root.
+        const candidates = [
+          process.env["FABULA_REPO"],
+          process.env["MIMOCODE_CONFIG"] ? nodePath.dirname(process.env["MIMOCODE_CONFIG"]!) : undefined,
+          await nodeFs.promises.realpath(Global.Path.config).catch(() => undefined),
+        ].filter((x): x is string => !!x)
+        let repo = ""
+        for (const dir of candidates) {
+          if (await Bun.file(nodePath.join(dir, "scripts", "self-update.ts")).exists()) {
+            repo = dir
+            break
+          }
+        }
+        if (!repo) {
+          // Name what was tried. "Not found" sends someone hunting for a path we already know we looked at.
+          return c.json({ started: false, reason: `no checkout found (looked in: ${candidates.join(", ") || "nowhere"})` })
+        }
+        const script = nodePath.join(repo, "scripts", "self-update.ts")
+        Bun.spawn([process.env["FABULA_BUN_BIN"] || "bun", script], {
+          cwd: repo,
+          stdio: ["ignore", "ignore", "ignore"],
+        }).unref()
+        return c.json({ started: true })
+      },
+    )
+    .get(
+      "/fabula/update/status",
+      describeRoute({
+        summary: "Progress of a running update",
+        operationId: "fabula.updateStatus",
+        responses: { 200: { description: "Status" } },
+      }),
+      async (c) => {
+        const f = Bun.file(nodePath.join(Global.Path.data, "update", "status.json"))
+        if (!(await f.exists())) return c.json({ status: null })
+        return c.json({ status: await f.json().catch(() => null) })
+      },
+    )
     // FABULA: plugin enable/disable backed by the same fabula-state.json convention the
     // plugins' own self-gating reads (lib/manage.ts). Toggles apply on the next engine start.
     .get(

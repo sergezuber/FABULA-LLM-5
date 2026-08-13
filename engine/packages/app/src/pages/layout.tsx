@@ -2201,7 +2201,11 @@ export default function Layout(props: ParentProps) {
                   data-component="sidebar-update"
                   class="w-full h-8 rounded-lg inline-flex shrink-0 items-center gap-2 px-2.5 text-[13px] text-text-strong hover:bg-surface-raised-base-hover transition-colors cursor-pointer"
                   title={language.t("sidebar.update.tooltip", { version: notice().version })}
-                  onClick={() => platform.openLink(notice().url)}
+                  onClick={() =>
+                    void import("@/components/dialog-update").then((x) =>
+                      dialog.show(() => <x.DialogUpdate version={notice().version} url={notice().url} />),
+                    )
+                  }
                 >
                   <Icon name="download" size="small" class="shrink-0 text-icon-success-base" />
                   <span class="min-w-0 flex-1 truncate text-left">{language.t("sidebar.update")}</span>

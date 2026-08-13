@@ -256,7 +256,8 @@ export const dict = {
   "provider.connect.toast.connected.title": "{{provider}} подключён",
   "provider.connect.toast.connected.description": "Модели {{provider}} теперь доступны.",
 
-  "provider.custom.title": "Пользовательский провайдер",
+  "provider.custom.title": "Свой endpoint",
+  "settings.providers.section.own": "Своя модель",
   "provider.custom.description.prefix": "Настройте OpenAI-совместимого провайдера. См. ",
   "provider.custom.description.link": "документацию по настройке провайдера",
   "provider.custom.description.suffix": ".",
@@ -984,7 +985,8 @@ export const dict = {
   "common.time.hoursAgo.short": "{{count}} ч назад",
   "common.time.daysAgo.short": "{{count}} д назад",
   "settings.providers.connected.environmentDescription": "Подключено из ваших переменных окружения",
-  "settings.providers.custom.description": "Добавить провайдера, совместимого с OpenAI, по базовому URL.",
+  "settings.providers.custom.description":
+    "Корпоративный шлюз, облачный провайдер, модель на другой машине — что угодно, говорящее по OpenAI-совместимому API. Вы даёте адрес, ключ и имена моделей.",
 
   "app.server.unreachable": "Не удалось связаться с {{server}}",
   "app.server.retrying": "Автоматическая повторная попытка...",

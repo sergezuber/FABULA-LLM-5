@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.224.0"
+export const FABULA_VERSION = "0.225.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,20 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.225.0",
+    date: "2026-08-13",
+    items: [
+      {
+        ru: "Подключить свою модель теперь видно сразу. Форма для этого была всегда и умеет всё, что нужно корпоративному шлюзу, — адрес, ключ (или авторизация заголовками), список моделей, произвольные заголовки, — но лежала ПОСЛЕДНЕЙ строкой списка «Популярные провайдеры», ниже восьми чужих брендов и прямо перед «Показать ещё». Владелец, который эту возможность и заказывал и сам работает через корпоративный шлюз, не смог её найти. Для продукта, чьё обещание — «в сокет ставится любая модель», способ поставить любую модель не может быть сноской под витриной чужих логотипов.",
+        en: "Connecting your own model is now visible immediately. The form always existed and does everything a corporate gateway needs — address, key (or header-based auth), a list of models, arbitrary headers — but it sat as the LAST row of «Popular providers», below eight other companies' brands and right before «Show more». The owner, who asked for the capability and works through a corporate gateway himself, could not find it. For a product whose promise is that any model can be dropped into the socket, the way to add any model cannot be a footnote under a display of other people's logos.",
+      },
+      {
+        ru: "Теперь это отдельный раздел «Своя модель» ВЫШЕ списка провайдеров, и он называет вещи своими именами: не «Пользовательский провайдер… по базовому URL», а «Свой endpoint — корпоративный шлюз, облачный провайдер, модель на другой машине; вы даёте адрес, ключ и имена моделей».",
+        en: "It is now a section of its own — «Your own model» — ABOVE the provider list, and it says what it is: not «Custom provider… by base URL» but «Your own endpoint — a corporate gateway, a cloud provider, a model on another machine; you give it an address, a key and the model names».",
+      },
+    ],
+  },
   {
     version: "0.224.0",
     date: "2026-08-13",

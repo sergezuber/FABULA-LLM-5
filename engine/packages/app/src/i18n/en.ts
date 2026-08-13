@@ -239,7 +239,8 @@ export const dict = {
   "provider.connect.toast.connected.title": "{{provider}} connected",
   "provider.connect.toast.connected.description": "{{provider}} models are now available to use.",
 
-  "provider.custom.title": "Custom provider",
+  "provider.custom.title": "Your own endpoint",
+  "settings.providers.section.own": "Your own model",
   "provider.custom.description.prefix": "Configure an OpenAI-compatible provider. See the ",
   "provider.custom.description.link": "provider config docs",
   "provider.custom.description.suffix": ".",
@@ -968,7 +969,8 @@ export const dict = {
   "settings.providers.connected.empty": "No connected providers",
   "settings.providers.connected.environmentDescription": "Connected from your environment variables",
   "settings.providers.section.popular": "Popular providers",
-  "settings.providers.custom.description": "Add an OpenAI-compatible provider by base URL.",
+  "settings.providers.custom.description":
+    "A corporate gateway, a cloud provider, a model on another machine — anything that speaks the OpenAI API. You give it an address, a key and the model names.",
   "settings.providers.tag.environment": "Environment",
   "settings.providers.tag.config": "Config",
   "settings.providers.tag.custom": "Custom",

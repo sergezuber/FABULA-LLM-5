@@ -28,7 +28,7 @@
 
 ---
 
-## MiMoCode / OpenCode — движок, из которого выросла FABULA
+## MiMoCode / OpenCode — движок, из которого она взята FABULA
 
 **Что:** фундамент, на котором работает FABULA-LLM-5. Агентный цикл. Плагинная система — хуки
 `tool.execute.*`, `chat.*`, `experimental.chat.system.transform`, в них встраивается каждый плагин

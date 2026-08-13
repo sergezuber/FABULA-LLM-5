@@ -700,6 +700,11 @@ export const dict = {
   "sidebar.menu.toggle": "Переключить меню",
   "sidebar.nav.projectsAndSessions": "Проекты и сессии",
   "sidebar.settings": "Настройки",
+  "sidebar.update": "Доступно обновление",
+  "sidebar.update.tooltip": "Вышла FABULA {{version}} — открыть страницу релиза",
+  "settings.updateCheck": "Проверять обновления",
+  "settings.updateCheck.description":
+    "Время от времени спрашивать у GitHub, не вышла ли FABULA новее, и показывать зелёную стрелку в боковой панели, когда вышла. Ни о вас, ни о вашей машине, ни о вашей версии ничего не отправляется. Выключено — запрос не делается вовсе.",
   "sidebar.help": "Помощь",
   "sidebar.workspaces.enable": "Включить рабочие пространства",
   "sidebar.workspaces.disable": "Отключить рабочие пространства",

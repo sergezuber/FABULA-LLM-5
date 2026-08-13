@@ -179,6 +179,54 @@ export function isLoopbackURL(baseURL: string): boolean {
   return leadingZeros && g[5] === 0xffff && (g[6]! >>> 8) === 127
 }
 
+// The newest PUBLISHED release, for /fabula/update. Never throws, never says "up to date": it either
+// names a release or answers null with the reason it could not.
+//
+// CACHED, and the cache is the politeness. A window that reopens, a reload, a second client — each
+// would otherwise be another request to somebody else's server for an answer that changes a few times
+// a week. `FABULA_UPDATE_TTL_MS` tunes it; the failure is cached too, briefly, so an offline machine
+// does not retry on every render.
+//
+// The User-Agent is not optional and not tracking: api.github.com answers 403 to a request without one.
+// It carries the product name and nothing else — no version, no platform, no identifier — because the
+// version this build is running is precisely what the reader has not agreed to publish.
+const UPDATE_TTL_MS = Number(process.env["FABULA_UPDATE_TTL_MS"]) || 6 * 60 * 60 * 1000
+const UPDATE_FAIL_TTL_MS = 5 * 60 * 1000
+let updateCache: { at: number; value: { release: { version: string; url: string } | null; reason?: string } } | undefined
+
+export async function fabulaLatestRelease(
+  now: number = Date.now(),
+): Promise<{ release: { version: string; url: string } | null; reason?: string }> {
+  if (process.env["FABULA_UPDATE_CHECK"] === "0") return { release: null, reason: "disabled by FABULA_UPDATE_CHECK=0" }
+  const ttl = updateCache?.value.release ? UPDATE_TTL_MS : UPDATE_FAIL_TTL_MS
+  if (updateCache && now - updateCache.at < ttl) return updateCache.value
+  const repo = process.env["FABULA_UPDATE_REPO"] || "sergezuber/FABULA-LLM-5"
+  // The API host is a parameter for two reasons that happen to be the same reason: a fork behind GitHub
+  // Enterprise has a different one, and a test that reaches the real github.com is measuring somebody
+  // else's uptime. With it, the check is exercised against a REAL local server rather than a stubbed
+  // fetch — the same choice the rest of this repository makes about mocks.
+  const api = process.env["FABULA_UPDATE_API"] || "https://api.github.com"
+  const value = await (async () => {
+    const res = await fetch(`${api}/repos/${repo}/releases/latest`, {
+      headers: { "user-agent": "FABULA", accept: "application/vnd.github+json" },
+      signal: AbortSignal.timeout(5000),
+    }).catch((e) => ({ ok: false as const, status: 0, error: e }))
+    if (!("ok" in res) || !res.ok) return { release: null, reason: `could not ask: ${"status" in res ? res.status : 0}` }
+    const body = await (res as Response).json().catch(() => undefined)
+    const version = body && typeof body.tag_name === "string" ? body.tag_name : undefined
+    const url = body && typeof body.html_url === "string" ? body.html_url : undefined
+    if (!version || !url) return { release: null, reason: "the answer named no release" }
+    return { release: { version, url } }
+  })()
+  updateCache = { at: now, value }
+  return value
+}
+
+/** Test seam: the cache is module state, and a test that cannot clear it measures the previous test. */
+export function fabulaResetUpdateCache() {
+  updateCache = undefined
+}
+
 // "Nobody is listening on this machine's port" — the one transport failure that is an ANSWER rather
 // than a missed question, used by /fabula/models-served to hide a local runtime that is not running.
 //
@@ -598,6 +646,29 @@ export const GlobalRoutes = lazy(() =>
           state: Global.Path.state,
           log: Global.Path.log,
         }),
+    )
+    // FABULA: what release is PUBLISHED. It deliberately does not say whether an update is available —
+    // the running version is `FABULA_VERSION`, which lives in the frontend bundle and is the number the
+    // reader sees in the sidebar footer, so the comparison happens there (`context/update-check.ts`)
+    // rather than becoming a second definition of "which version am I".
+    //
+    // THE ONLY OUTBOUND REQUEST THIS APPLICATION MAKES ON ITS OWN, and the caller is what gates it: the
+    // sidebar asks only when the reader has left the check on. Nothing about the machine, the user or
+    // the running version travels — a plain GET, plus the User-Agent header GitHub's API rejects
+    // requests without. `FABULA_UPDATE_CHECK=0` refuses at the engine as well, for an installation that
+    // must never reach the network whatever a client asks; `FABULA_UPDATE_REPO` points a fork at its own.
+    //
+    // Fail-open in the quiet direction: any failure answers `release: null` with a reason, and a null
+    // draws nothing. A network blip must never render as "you are up to date" NOR as a false update.
+    .get(
+      "/fabula/update",
+      describeRoute({
+        summary: "Latest published release",
+        description: "Tag and page of the newest published release, or null when it could not be asked.",
+        operationId: "fabula.update",
+        responses: { 200: { description: "Release" } },
+      }),
+      async (c) => c.json(await fabulaLatestRelease()),
     )
     // FABULA: plugin enable/disable backed by the same fabula-state.json convention the
     // plugins' own self-gating reads (lib/manage.ts). Toggles apply on the next engine start.

@@ -752,6 +752,11 @@ export const dict = {
   "sidebar.menu.toggle": "Toggle menu",
   "sidebar.nav.projectsAndSessions": "Projects and sessions",
   "sidebar.settings": "Settings",
+  "sidebar.update": "Update available",
+  "sidebar.update.tooltip": "FABULA {{version}} has been published — open the release page",
+  "settings.updateCheck": "Check for updates",
+  "settings.updateCheck.description":
+    "Ask GitHub once in a while whether a newer FABULA has been published, and show a green arrow in the sidebar when there is one. Nothing about you, your machine or your version is sent. Off means no request is made at all.",
   "sidebar.help": "Help",
   "sidebar.workspaces.enable": "Enable workspaces",
   "sidebar.workspaces.disable": "Disable workspaces",

@@ -92,6 +92,8 @@ import {
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { AllChatsList } from "./layout/sidebar-all-chats"
 import { FABULA_VERSION } from "@/data/fabula-changelog"
+import { updateNotice, type PublishedRelease } from "@/context/update-check"
+import { updateCheckEnabled } from "@/context/update-pref"
 import { SidebarContent } from "./layout/sidebar-shell"
 
 export default function Layout(props: ParentProps) {
@@ -2055,6 +2057,27 @@ export default function Layout(props: ParentProps) {
     },
   }
 
+  // FABULA: is a newer release published? Deliberately OUT here rather than inside SidebarPanel, which
+  // is instantiated three times (mobile, desktop, hover-peek) — a resource created in there would ask
+  // once per instance for one answer.
+  //
+  // The SOURCE is the reader's switch, so with the check off Solid never calls the fetcher and nothing
+  // leaves the machine; turning it back on refetches by itself. `initialValue` is not decoration: a
+  // resource created in the "pending" state registers with the app-wide <Suspense> AT CREATION, whatever
+  // anyone reads, which is the send-flicker defect this file already paid for once.
+  const [publishedRelease] = createResource(
+    updateCheckEnabled,
+    async () => {
+      const res = await fetch("/global/fabula/update").catch(() => undefined)
+      if (!res?.ok) return null
+      const body = (await res.json().catch(() => undefined)) as { release?: PublishedRelease } | undefined
+      return body?.release ?? null
+    },
+    { initialValue: null },
+  )
+  // The running version enters here and nowhere else — it is the same constant the footer prints.
+  const updateAvailable = createMemo(() => updateNotice(publishedRelease.latest ?? null, FABULA_VERSION))
+
   const SidebarPanel = (panelProps: {
     project: Accessor<LocalProject | undefined>
     mobile?: boolean
@@ -2168,6 +2191,24 @@ export default function Layout(props: ParentProps) {
               <Icon name="settings-gear" size="small" class="shrink-0 text-icon-base" />
               <span class="min-w-0 flex-1 truncate text-left">{language.t("sidebar.settings")}</span>
             </button>
+            {/* FABULA: shown ONLY when a newer release really exists — an indicator that is always
+                there is furniture, and one that lights up for a version already installed teaches the
+                reader to ignore it. The green is the semantic icon token, so it follows the theme. */}
+            <Show when={updateAvailable()}>
+              {(notice) => (
+                <button
+                  type="button"
+                  data-component="sidebar-update"
+                  class="w-full h-8 rounded-lg inline-flex shrink-0 items-center gap-2 px-2.5 text-[13px] text-text-strong hover:bg-surface-raised-base-hover transition-colors cursor-pointer"
+                  title={language.t("sidebar.update.tooltip", { version: notice().version })}
+                  onClick={() => platform.openLink(notice().url)}
+                >
+                  <Icon name="download" size="small" class="shrink-0 text-icon-success-base" />
+                  <span class="min-w-0 flex-1 truncate text-left">{language.t("sidebar.update")}</span>
+                  <span class="ml-auto shrink-0 text-[11px] font-normal text-text-weak">v{notice().version}</span>
+                </button>
+              )}
+            </Show>
           </div>
           <div class="shrink-0 flex items-center pb-2 pl-0.5">
             <div class="flex h-7 w-fit items-center rounded-full bg-surface-base p-0.5">

@@ -224,6 +224,10 @@ An optional **proof economy** builds on the receipt — publish to a content-add
 - Deleting a chat purges its messages, artifacts, and caches — nothing is retained by the app.
 - The app wipes WebKit caches on quit; secrets live only in gitignored `.env` / `*.key` files.
 - No telemetry, no account, no phone-home.
+- One outbound request, and you can switch it off: FABULA asks GitHub which release is newest so the
+  sidebar can show a green arrow when a newer one exists. It sends nothing about you, your machine or
+  the version you run — GitHub sees a plain request for a public page. Settings ▸ General turns it off,
+  and off means no request is made at all. FABULA never downloads or installs anything on its own.
 
 ## Community
 

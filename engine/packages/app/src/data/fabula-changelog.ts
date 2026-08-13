@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.220.0"
+export const FABULA_VERSION = "0.221.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,28 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.221.0",
+    date: "2026-08-13",
+    items: [
+      {
+        ru: "В боковой панели загорается зелёная стрелка, когда вышла версия новее вашей. Раньше узнать об этом было неоткуда: унаследованный механизм проверки обновлений в этой сборке НЕ РАБОТАЛ НИКОГДА — он требует, чтобы приложение умело скачать и поставить обновление само, а объект платформы таких умений не объявляет, поэтому опрос выходил первой же строкой. Пункт меню «Проверить обновления» на macOS честно отвечал, что проверки нет by design.",
+        en: "A green arrow appears in the sidebar when a newer version has been published. There was previously no way to learn this: the inherited update mechanism NEVER RAN in this build — it requires the application to download and install an update itself, and the platform object declares no such ability, so the poll returned on its first line. The macOS «Check for Updates» menu item said plainly that there was no check by design.",
+      },
+      {
+        ru: "Скачивать и ставить FABULA по-прежнему ничего не будет: сборка идёт из исходников, поэтому стрелка ведёт на страницу релиза, а не тянет бинарник за вашей спиной. Реализация ОДНА — маршрут в движке плюс значок во фронтенде; ни в macOS-хосте, ни в оболочке для Linux и Windows кода не прибавилось, поэтому три платформы получают ровно одно поведение, а не три похожих.",
+        en: "FABULA still downloads and installs nothing: the build is managed from source, so the arrow leads to the release page rather than pulling a binary behind your back. There is ONE implementation — an engine route plus a frontend indicator; neither the macOS host nor the Linux/Windows shell gained any code, so the three platforms get exactly one behaviour rather than three similar ones.",
+      },
+      {
+        ru: "Это единственный запрос, который приложение делает наружу само, и он выключается. Не отправляется ничего ни о вас, ни о машине, ни о версии, которую вы запустили: GitHub видит обычный запрос публичной страницы, а заголовок User-Agent несёт только имя продукта — без него API отвечает отказом. Переключатель в Настройках ▸ Общие гасит запрос у источника, а `FABULA_UPDATE_CHECK=0` запрещает его в самом движке. Ответ переиспользуется шесть часов, неудача — пять минут, чтобы машина без сети не долбилась на каждой отрисовке. Раздел «Приватность» на всех трёх языках переписан честно: обещание «никаких обращений наружу» больше не было бы правдой.",
+        en: "It is the only request the application makes outward on its own, and it can be switched off. Nothing about you, your machine or the version you run is sent: GitHub sees a plain request for a public page, and the User-Agent header carries the product name alone — without one the API refuses. The switch in Settings ▸ General stops the request at its source, and `FABULA_UPDATE_CHECK=0` refuses it inside the engine. An answer is reused for six hours and a failure for five minutes, so a machine with no network does not retry on every render. The Privacy section in all three languages now says this plainly: the promise of no outbound calls would no longer have been true.",
+      },
+      {
+        ru: "Сравнение версий числовое, а не строковое, и это здесь не педантизм: как строки «0.9.0» больше, чем «0.10.0», а минорный номер этого проекта не имеет потолка и давно перевалил за двести — строковое сравнение ошибалось бы чаще, чем попадало. Всё, что нельзя сравнить наверняка (суффиксы вроде `-rc1` и штамп сборки движка), не даёт уведомления вовсе: пропущенное уведомление стоит читателю более поздней установки, а ложное отправляет его пересобирать актуальное дерево и приучает не смотреть на значок.",
+        en: "Versions are compared numerically, not as strings, and that is not pedantry here: as strings «0.9.0» sorts above «0.10.0», and this project's minor number has no ceiling and is long past two hundred — a string comparison would be wrong more often than right. Anything that cannot be compared with certainty (a `-rc1` suffix, the engine's own build stamp) produces no notice at all: a missed notice costs the reader a later update, while a false one sends them to rebuild a tree that is already current and teaches them to ignore the indicator.",
+      },
+    ],
+  },
   {
     version: "0.220.0",
     date: "2026-08-13",

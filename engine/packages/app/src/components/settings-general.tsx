@@ -12,6 +12,7 @@ import { useParams } from "@solidjs/router"
 import { useLanguage } from "@/context/language"
 import { usePermission } from "@/context/permission"
 import { usePlatform } from "@/context/platform"
+import { updateCheckEnabled, setUpdateCheckEnabled } from "@/context/update-pref"
 import {
   monoDefault,
   monoFontFamily,
@@ -286,6 +287,17 @@ export const SettingsGeneral: Component = () => {
         >
           <div data-action="settings-auto-accept-permissions">
             <Switch checked={accepting()} disabled={!dir()} onChange={toggleAccept} />
+          </div>
+        </SettingsRow>
+
+        {/* FABULA: the ONE outbound request the application makes on its own. The switch is the gate —
+            with it off the sidebar never asks, so nothing is sent rather than sent and discarded. */}
+        <SettingsRow
+          title={language.t("settings.updateCheck")}
+          description={language.t("settings.updateCheck.description")}
+        >
+          <div data-action="settings-update-check">
+            <Switch checked={updateCheckEnabled()} onChange={(v) => setUpdateCheckEnabled(v)} />
           </div>
         </SettingsRow>
 

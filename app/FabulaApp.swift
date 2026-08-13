@@ -936,9 +936,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
         // is the one thing the release-hygiene rule forbids in a tracked file: a person who clones this
         // repo must get an English app.
         let ru = uiLang == "ru"
+        // The second sentence used to say there is no update check by design. There is one now — it
+        // lives in the engine and the sidebar, so every platform gets the same behaviour and this host
+        // gains no code of its own. What stays true is that nothing is installed automatically: a build
+        // managed from source is updated by rebuilding it.
         alert.informativeText = ru
-            ? "Движок: \(engineVersion)\n\nЭта сборка управляется исходниками — обновление выполняется пересборкой (см. README проекта). Автоматической проверки обновлений нет by design."
-            : "Engine: \(engineVersion)\n\nThis build is managed from source — updating means rebuilding it (see the project README). There is no update check by design."
+            ? "Движок: \(engineVersion)\n\nЭта сборка управляется исходниками: обновление выполняется пересборкой (см. README проекта). Когда выходит версия новее, в боковой панели загорается зелёная стрелка со ссылкой на релиз; сама FABULA ничего не скачивает и не ставит. Проверку можно выключить в Настройках."
+            : "Engine: \(engineVersion)\n\nThis build is managed from source: updating means rebuilding it (see the project README). When a newer version is published a green arrow appears in the sidebar, linking to the release; FABULA downloads and installs nothing on its own. The check can be switched off in Settings."
         alert.alertStyle = .informational
         alert.runModal()
     }

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.226.0"
+export const FABULA_VERSION = "0.227.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,24 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.227.0",
+    date: "2026-08-13",
+    items: [
+      {
+        ru: "Модель, которой у шлюза нет, больше не сохраняется молча. При сохранении своего провайдера FABULA спрашивает endpoint, какие модели он отдаёт, и если введённого id среди них нет — форма остаётся открытой и показывает список шлюза: «этот endpoint не отдаёт deepseek-v4-flash:max; он отдаёт: deepseek-v4-flash, …». Раньше ошибка приходила минутами позже, из середины хода, словами шлюза, и связать её с полем формы было нечем.",
+        en: "A model the gateway does not serve is no longer saved in silence. On save, FABULA asks the endpoint which models it serves, and if a typed id is not among them the form stays open and shows the gateway's own list: «this endpoint does not serve deepseek-v4-flash:max; it serves: deepseek-v4-flash, …». The error used to arrive minutes later, mid-turn, in the gateway's words, with nothing connecting it to a form field.",
+      },
+      {
+        ru: "Проверка спрашивает, а не угадывает по виду строки: двоеточие в id — не признак ошибки, у Ollama `llama3:8b` совершенно законен. Авторитетен только сам endpoint, поэтому endpoint, который не отвечает или не перечисляет моделей, сохраняет форму ровно как прежде.",
+        en: "The check asks rather than pattern-matches: a colon in an id is not a defect — Ollama's `llama3:8b` is perfectly legitimate. Only the endpoint is authoritative about its own catalogue, so one that does not answer, or lists nothing, saves exactly as before.",
+      },
+      {
+        ru: "Отдельно ЗАМЕРЕНО, что движок тут ни при чём: подставной шлюз записал, какую модель у него просят, и FABULA попросила `deepseek-v4-flash` и с вариантом «max», и без него. Идентификатор уходит на провод дословно, вариант рассуждения едет параметрами запроса и к имени не приклеивается никогда.",
+        en: "Separately MEASURED that the engine was never the cause: a recording gateway logged the model it was asked for, and FABULA asked for `deepseek-v4-flash` both with the «max» variant and without it. The identifier goes on the wire verbatim; the reasoning variant travels as request options and is never appended to the name.",
+      },
+    ],
+  },
   {
     version: "0.226.0",
     date: "2026-08-13",

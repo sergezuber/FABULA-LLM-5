@@ -258,6 +258,8 @@ export const dict = {
 
   "provider.custom.title": "Свой endpoint",
   "provider.custom.models.probe": "Спросить endpoint",
+  "provider.custom.models.unknown":
+    "Этот endpoint не отдаёт {{missing}}. Он отдаёт: {{served}}. Исправьте id или нажмите «Спросить endpoint», чтобы заполнить список из него.",
   "provider.custom.models.probing": "Спрашиваю…",
   "provider.custom.models.probed": "Найдено моделей: {{count}} — названия можно поправить.",
   "settings.providers.section.own": "Добавить свою модель",

@@ -215,12 +215,41 @@ export function DialogCustomProvider(props: Props) {
     setProbeNote(language.t("provider.custom.models.probed", { count: String(body.models.length) }))
   }
 
-  const save = (e: SubmitEvent) => {
+  const save = async (e: SubmitEvent) => {
     e.preventDefault()
     if (saveMutation.isPending) return
 
     const result = validate()
     if (!result) return
+
+    // ASK THE ENDPOINT BEFORE SAVING. A gateway that does not serve a model id refuses minutes later,
+    // from inside a chat turn, in its own words — the owner met exactly that: his gateway allows
+    // `deepseek-v4-flash` and the field carried `deepseek-v4-flash:max`. When the endpoint ANSWERS it is
+    // authoritative about its own catalogue, so an id it does not list is caught here instead.
+    //
+    // Fail-open in both directions: an endpoint that cannot be asked, or one that lists nothing, saves
+    // exactly as before. A colon is NOT the test — `llama3:8b` is a legitimate Ollama tag — and the
+    // catalogue is, which is why this asks rather than pattern-matches.
+    const headers = Object.fromEntries(form.headers.filter((h) => h.key.trim()).map((h) => [h.key.trim(), h.value]))
+    const res = await fetch("/global/fabula/probe-models", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ baseURL: form.baseURL, apiKey: form.apiKey, headers }),
+    }).catch(() => undefined)
+    const body = (await res?.json().catch(() => undefined)) as { models?: string[] | null } | undefined
+    if (body?.models?.length) {
+      const served = new Set(body.models)
+      const missing = form.models.map((m) => m.id.trim()).filter((id) => id && !served.has(id))
+      if (missing.length) {
+        setProbeNote(
+          language.t("provider.custom.models.unknown", {
+            missing: missing.join(", "),
+            served: body.models.slice(0, 12).join(", "),
+          }),
+        )
+        return
+      }
+    }
     saveMutation.mutate(result)
   }
 

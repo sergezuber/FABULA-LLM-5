@@ -241,6 +241,8 @@ export const dict = {
 
   "provider.custom.title": "Your own endpoint",
   "provider.custom.models.probe": "Ask the endpoint",
+  "provider.custom.models.unknown":
+    "This endpoint does not serve {{missing}}. It serves: {{served}}. Fix the id, or press «Ask the endpoint» to fill the list from it.",
   "provider.custom.models.probing": "Asking…",
   "provider.custom.models.probed": "{{count}} model(s) found — names are yours to edit.",
   "settings.providers.section.own": "Add your own model",

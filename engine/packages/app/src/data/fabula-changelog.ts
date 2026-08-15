@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.228.0"
+export const FABULA_VERSION = "0.230.0"
 
 export type ChangelogEntry = {
   version: string
@@ -11,6 +11,40 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.230.0",
+    date: "2026-08-15",
+    items: [
+      {
+        ru: "Новая модель больше не может поставить машину на колени своим первым же запуском. Решатель окна научился цене кэша, замеряя её на живых запросах, — но пока НИ ОДНОГО такого замера нет, окно новой модели не поднимается выше «ступени измерения» (98 304 токена — ровно столько, сколько нужно самим калибровочным зондам). Причина — замерено 14 августа: модель, добавленная в этот же день, получила полный паспорт 262 144 по fit'у, построенному на показаниях при загрузке, — а эти показания на ленивом рантайме измеряют дрейф памяти, не кэш (fit дал 14 505 байт/токен против реальных ~65 536 — в 4.5 раза дешевле). Два ~200k-кэша одновременно подняли машину до 47 из 48 ГиБ. Теперь на ступени сразу берётся настоящий замер, и следующее переключение планирует окно по нему, а не по догадке.",
+        en: "A newly added model can no longer bring the machine to its knees on its first run. The window solver learns a model's cache cost from live requests — but until even ONE such reading exists, a new model's window never rises above the measurement rung (98 304 tokens — exactly what the calibration probes themselves need). The reason was measured on August 14: a model added that same day was granted its full 262 144 passport from a fit over load-time readings — which, on a lazy runtime, measure memory drift, not cache (the fit said 14 505 bytes/token against a real ~65 536, four and a half times too cheap). Two ~200k caches alive at once put the machine at 47 of 48 GiB. Now the real reading is taken right at the rung, and the next switch plans from it rather than from a guess.",
+      },
+    ],
+  },
+  {
+    version: "0.229.0",
+    date: "2026-08-13",
+    items: [
+      {
+        ru: "На Windows ответ был виден только после обновления страницы, а «размышление» зависало намертво. Живой поток событий чата (токены «размышления» и ответа) читался через fetch, а WebView2 отдаёт тело fetch-ответа одним куском и только в самом конце — пока соединение держится heartbeat'ом каждые 10 c, «в конце» означает «никогда». После рефреша интерфейс перечитывал уже готовое сообщение из базы — отсюда и ответ, появлявшийся только с обновлением. Тот же поток теперь читается через нативный EventSource: это отдельный загрузчик Chromium, не подверженный этой буферизации, и события идут по одному во всех вебвью — WKWebView, WebKitGTK и WebView2.",
+        en: "On Windows the answer appeared only after refreshing the page, with «thinking» frozen solid. The live chat event stream (the «thinking» and answer tokens) was read through fetch, and WebView2 delivers a fetch response body as a single chunk only at the very end — and while the connection is held open by a heartbeat every 10 s, «at the end» means «never». After a refresh the UI re-read the already-finished message from the database, which is why the answer showed up only with a reload. The same stream is now read through native EventSource: a separate Chromium loader that is not subject to this buffering, so events arrive one by one in every webview — WKWebView, WebKitGTK and WebView2.",
+      },
+      {
+        ru: "Причина измерена, а не угадана: Bun тут ни при чём (он корректно сбрасывает чанк за чанком, когда между записями есть await, — и не только на Windows), и фронтенд на macOS и Windows один и тот же. Отличался потребитель: WKWebView стримит fetch-ответ инкрементально, а WebView2 — нет. Удалённый сервер с паролем остаётся на прежнем fetch-ридере: EventSource не умеет отправлять Authorization-заголовок, а локальный движок на loopback работает без auth, так что смена пути касается только его.",
+        en: "The cause was measured, not guessed: Bun is not involved (it flushes chunk by chunk correctly when an await sits between writes — and not on Windows alone), and the frontend is identical on macOS and Windows. What differed was the consumer: WKWebView streams a fetch response incrementally, WebView2 does not. The password-protected remote server stays on the old fetch reader: EventSource cannot send an Authorization header, and the local loopback engine runs without auth, so the path change touches only it.",
+      },
+    ],
+  },
+  {
+    version: "0.229.0",
+    date: "2026-08-14",
+    items: [
+      {
+        ru: "Глубина рассуждения Qwen3.8 управляется штатной ручкой. Официальный гид Qwen (14.08.2026) объявил per-request параметр reasoning_effort с уровнями xhigh/medium/low — и он лёг в уже существующий декларативный механизм адаптера: две записи в reasoning-map.json, ноль строк кода. Уровни low/medium/high/xhigh транслируются в reasoning_effort, off и enabled — в chat_template_kwargs.enable_thinking. Запись закреплена тестом, включая контроль, что чужие модели по-прежнему проваливаются в таблицу «*» по уровню.",
+        en: "Qwen3.8's reasoning depth is driven by its official knob. The Qwen developers' guide (2026-08-14) announced the per-request reasoning_effort parameter with levels xhigh/medium/low — and it landed in the adapter's existing declarative mechanism: two entries in reasoning-map.json, zero lines of code. Levels low/medium/high/xhigh translate to reasoning_effort; off and enabled to chat_template_kwargs.enable_thinking. Pinned by a test, including the control that unrelated models still fall through to the «*» table per level.",
+      },
+    ],
+  },
+  {
     version: "0.228.0",
     date: "2026-08-13",
     items: [
@@ -19,7 +53,7 @@ export const CHANGELOG: ChangelogEntry[] = [
         en: "Settings ▸ General now shows the config FILES, not just the directories: «Providers» — the global config the app writes a provider you added into, and «Project» — the launch config. A click copies the path. Before, only «Data / Config / Logs» were there, and which file held your provider could not be learned from the app at all.",
       },
       {
-        ru: "Почему это понадобилось: путь к этому файлу не угадывается снаружи. Глобальная конфиг-папка на одной машине — настоящая директория, на другой — симлинк на клон, а сам клон лежит там, куда его положили. Выясняя, где записан корпоративный провайдер, мы потратили четыре обмена сообщениями на пути, верные на одной машине и неверные на другой. Приложение знает оба — пусть говорит.",
+        ru: "Почему это понадобилось: путь к этому файлу не угадывается снаружи. Глобальная конфигпапка на одной машине — настоящая директория, на другой — симлинк на клон, а сам клон лежит там, куда его положили. Выясняя, где записан корпоративный провайдер, мы потратили четыре обмена сообщениями на пути, верные на одной машине и неверные на другой. Приложение знает оба — пусть говорит.",
         en: "Why it was needed: that path is not guessable from outside. The global config directory is a real folder on one machine and a symlink to the checkout on another, and the checkout is wherever it was cloned. Establishing where a corporate provider was stored cost four exchanges on paths that were right on one machine and wrong on the other. The app knows both — it should say so.",
       },
     ],

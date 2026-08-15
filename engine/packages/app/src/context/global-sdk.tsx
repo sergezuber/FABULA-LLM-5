@@ -1,4 +1,4 @@
-import type { Event } from "@mimo-ai/sdk/v2/client"
+import type { Event, GlobalEvent } from "@mimo-ai/sdk/v2/client"
 import { createSimpleContext } from "@mimo-ai/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -12,6 +12,59 @@ import { useServer } from "./server"
 const abortError = z.object({
   name: z.literal("AbortError"),
 })
+
+// Read a same-origin `text/event-stream` through the browser's native EventSource. Each `data:` line is
+// the engine's event object (`{ directory?, payload }`); we yield it parsed, matching what the
+// fetch-based SDK stream yields. Reconnection, heartbeat-timeout and backoff stay owned by the caller:
+// EventSource's own auto-reconnect is suppressed (we `.close()` on any error and let the outer loop
+// reconnect), so this generator behaves like a single attempt that ends on error or abort.
+//
+// The pending/wake handoff is race-free because the Promise executor runs synchronously: between
+// observing an empty queue and installing `resolve`, no `onmessage` macrotask can interleave, so a
+// later message always finds `resolve` set and wakes the await.
+async function* eventSourceIterator(url: string, signal: AbortSignal): AsyncGenerator<GlobalEvent> {
+  const es = new EventSource(url)
+  const pending: GlobalEvent[] = []
+  let resolve: (() => void) | undefined
+  let finished = false
+  const wake = () => {
+    resolve?.()
+    resolve = undefined
+  }
+  es.onmessage = (e) => {
+    try {
+      pending.push(JSON.parse(e.data) as GlobalEvent)
+    } catch {
+      // A malformed frame is dropped, not fatal — the next well-formed one still arrives.
+    }
+    wake()
+  }
+  // On any transport error, end this attempt; the caller decides whether to retry.
+  es.onerror = () => {
+    finished = true
+    es.close()
+    wake()
+  }
+  const onAbort = () => {
+    finished = true
+    es.close()
+    wake()
+  }
+  signal.addEventListener("abort", onAbort, { once: true })
+  try {
+    while (!finished) {
+      while (pending.length) yield pending.shift() as GlobalEvent
+      if (finished) break
+      await new Promise<void>((r) => {
+        resolve = r
+      })
+    }
+  } finally {
+    finished = true
+    es.close()
+    signal.removeEventListener("abort", onAbort)
+  }
+}
 
 export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleContext({
   name: "GlobalSDK",
@@ -34,6 +87,25 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
 
     const currentServer = server.current
     if (!currentServer) throw new Error(language.t("error.globalSDK.noServerAvailable"))
+
+    // The engine origin when it is the loopback HTTP server the desktop shells load. On this origin the
+    // page and the event stream are same-origin and there is no auth, so the event stream can be read
+    // with the browser's native EventSource — which matters on Windows: WebView2 delivers a `fetch()`
+    // response body all-at-once (MicrosoftEdge/WebView2Feedback#3519), so a fetch-based SSE reader never
+    // sees an event until the connection closes, and ours is held open by a heartbeat. EventSource uses
+    // Chromium's dedicated event-stream loader, not the fetch ReadableStream path, so it streams
+    // event-by-event in WKWebView, WebKitGTK and WebView2 alike. The password-protected remote origin
+    // (EventSource cannot send an Authorization header) stays on fetch below.
+    const eventSourceOrigin = (() => {
+      try {
+        const url = new URL(currentServer.http.url)
+        const loopback = url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "::1"
+        if (url.protocol === "http:" && loopback) return new URL("/global/event", url).href
+      } catch {
+        // fall through
+      }
+    })()
+    const useEventSource = !!eventSourceOrigin
 
     const eventSdk = createSdkForServer({
       signal: abort.signal,
@@ -131,28 +203,39 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
         // oxlint-disable-next-line no-unmodified-loop-condition -- `started` is set to false by stop() which also aborts; both flags are checked to allow graceful exit
         while (!abort.signal.aborted && started) {
           attempt = new AbortController()
+          const attemptSignal = attempt.signal
           lastEventAt = Date.now()
           const onAbort = () => {
             attempt?.abort()
           }
           abort.signal.addEventListener("abort", onAbort)
           try {
-            const events = await eventSdk.global.event({
-              signal: attempt.signal,
-              onSseError: (error) => {
-                if (aborted(error)) return
-                if (streamErrorLogged) return
-                streamErrorLogged = true
-                console.error("[global-sdk] event stream error", {
-                  url: currentServer.http.url,
-                  fetch: eventFetch ? "platform" : "webview",
-                  error,
-                })
-              },
-            })
             let yielded = Date.now()
             resetHeartbeat()
-            for await (const event of events.stream) {
+            // On the loopback engine origin read the stream through native EventSource (Windows:
+            // WebView2 buffers a fetch() stream to all-at-once). The authenticated remote origin keeps
+            // the fetch-based SDK reader, which EventSource cannot authenticate.
+            const eventIterable: AsyncIterable<GlobalEvent> = useEventSource
+              ? eventSourceIterator(eventSourceOrigin as string, attemptSignal)
+              : {
+                  async *[Symbol.asyncIterator]() {
+                    const events = await eventSdk.global.event({
+                      signal: attemptSignal,
+                      onSseError: (error) => {
+                        if (aborted(error)) return
+                        if (streamErrorLogged) return
+                        streamErrorLogged = true
+                        console.error("[global-sdk] event stream error", {
+                          url: currentServer.http.url,
+                          fetch: eventFetch ? "platform" : "webview",
+                          error,
+                        })
+                      },
+                    })
+                    yield* events.stream
+                  },
+                }
+            for await (const event of eventIterable) {
               resetHeartbeat()
               streamErrorLogged = false
               const directory = event.directory ?? "global"

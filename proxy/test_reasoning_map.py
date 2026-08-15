@@ -168,3 +168,19 @@ def test_shipped_map_answers_every_level_for_a_model_that_has_an_entry():
             # Either the model overrides the level, or it inherits the star's answer — never nothing.
             if not own:
                 assert b == star, (model, lvl, b, star)
+
+
+def test_qwen38_official_reasoning_effort_knob():
+    """Qwen3.8's official per-request knob is reasoning_effort (levels xhigh/medium/low — the
+    Qwen developers' guide, 2026-08-14). The map entry is data; this pins that it exists and
+    lands the knob at the TOP LEVEL of the body, not under extra_body."""
+    import json, copy
+    mapping = json.load(open(os.path.join(HERE, "reasoning-map.json")))
+    body = {"model": "qwen3.8-27b", "messages": []}
+    out = adapter.apply_reasoning(copy.deepcopy(body), mapping, "xhigh", "openai-compatible")
+    assert out.get("reasoning_effort") == "xhigh", out
+    out = adapter.apply_reasoning(copy.deepcopy(body), mapping, "off", "openai-compatible")
+    assert out.get("chat_template_kwargs", {}).get("enable_thinking") is False, out
+    # An unrelated model still falls through to `*` — the per-LEVEL fall-through rule stays intact.
+    other = adapter.apply_reasoning({"model": "some-other", "messages": []}, mapping, "off", "openai-compatible")
+    assert other.get("extra_body", {}).get("thinking", {}).get("type") == "disabled", other

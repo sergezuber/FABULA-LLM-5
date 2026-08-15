@@ -148,11 +148,20 @@ export function weightsFromLmsPs(): { line: string; bytes: number }[] {
     })
     const rows: { line: string; bytes: number }[] = []
     for (const line of out.split("\n")) {
-      const m = line.match(/([\d.]+)\s*(GB|GiB|MB|MiB|KB|KiB|B)\b/i)
-      if (!m) continue
-      const n = Number(m[1])
-      if (!Number.isFinite(n) || n <= 0) continue
-      rows.push({ line, bytes: n * unitBytes(m[2]!) })
+      // The SIZE column is the only storage-scale quantity on an `lms ps` line — but not the only
+      // number-with-unit TEXT: a parameter count in the model NAME reads as one too (MEASURED
+      // 2026-08-15: "qwen3.8-27b-mlx" matched as 27 B, the || chain took that as known-positive
+      // weights, the real 15.15 GB on disk was never asked for, and the plan over-committed the
+      // machine by 14 GiB). Collect every match and keep the LARGEST in bytes: name debris is by
+      // construction smaller than any real model file, and a genuine size is the biggest storage
+      // number on its line.
+      const matches = [...line.matchAll(/([\d.]+)\s*(GB|GiB|MB|MiB|KB|KiB|B)\b/gi)]
+      const best = matches
+        .map((m) => Number(m[1]) * unitBytes(m[2]!))
+        .filter((b) => Number.isFinite(b) && b > 0)
+        .sort((a, b) => b - a)[0]
+      if (!(best > 0)) continue
+      rows.push({ line, bytes: best })
     }
     return rows
   } catch {
@@ -571,6 +580,29 @@ const inFlight = new Map<string, Promise<EnsureResult>>()
 export const OVERSHOOT_MARGIN = 0.15
 
 /**
+ * The highest window that may be granted on load-time evidence ALONE — before even one request-time
+ * reading exists for the model.
+ *
+ * MEASURED 2026-08-14, live on a 48 GB Mac with a freshly added MLX model: the load-time footprints
+ * were 16384→9.12 GB, 32768→8.50 GB (the footprint FELL on a doubling — drift, not cache),
+ * 65536→11.25 GB, 262144→12.61 GB. The fit through them reported 14,505 B/token while the model's
+ * real cache cost is ~65,536 (16 full-attention layers × 4 KV heads × head dim 256 × fp16) — 4.5×
+ * the fit. The plan therefore granted the full 262,144 passport, the runtime grew two ~200k-token
+ * caches at once (retention plus in-flight), and the machine sat at 47 of 48 GiB until the owner
+ * killed it by hand. On a lazy runtime a load-time fit prices DRIFT; the documented guard (refuse a
+ * negative slope) only catches drift that happens to fall — drift that happens to rise reads as a
+ * cheap cache and unlocks exactly the window the machine cannot pay for.
+ *
+ * The number is not a guess about caches: it is the smallest window at which the request-time
+ * calibration itself can run — its large probe is 2.6 × MIN_SIGNAL_TOKENS (see calibrateCost), and
+ * the third floor is headroom for output and drift. A window granted without samples is therefore a
+ * MEASUREMENT rung: it exists to make the real reading possible, and the next switch plans from that
+ * reading rather than from this cap.
+ */
+export const MAX_UNCALIBRATED_WINDOW =
+  Math.ceil((3 * MIN_SIGNAL_TOKENS) / DEFAULT_POLICY.quantumTokens) * DEFAULT_POLICY.quantumTokens
+
+/**
  * How many concurrent request slots to provision the runtime with.
  *
  * MEASURED 2026-07-26: `parallel N` does not divide the window — one request of 131 021 tokens went
@@ -752,9 +784,13 @@ export async function ensureLoadedAtPlannedWindow(
 
     // Prefer the request-time readings: they measure the quantity being governed. The load-time fit is
     // kept as the fallback for a runtime that really does pre-allocate its cache — refusing to model
-    // that would tie this file to one serving stack.
-    const sampled = fitCostFromSamples(readSamples()[modelId] ?? [])
-    const cost = sampled.bytesPerToken > 0 ? sampled : fitCost(store[modelId] ?? [])
+    // that would tie this file to one serving stack. Which of the two spoke is remembered: a window
+    // granted on the load-time fit alone is capped (see MAX_UNCALIBRATED_WINDOW), because on a lazy
+    // runtime that fit prices drift, not cache.
+    const samples = readSamples()[modelId] ?? []
+    const sampled = fitCostFromSamples(samples)
+    const fromSamples = sampled.bytesPerToken > 0
+    const cost = fromSamples ? sampled : fitCost(store[modelId] ?? [])
     if (!(cost.bytesPerToken > 0)) {
       // Cold start. If it is already loaded, this reading plus the next one at a different window will
       // give us the line — so wait rather than load blind. If it is NOT loaded, letting the serving
@@ -768,12 +804,18 @@ export async function ensureLoadedAtPlannedWindow(
       // deadlock one layer down — no baseline, no footprint, no reading, no step, forever.
       const basis = { windowTokens: me.loadedWindow || 0, totalBytes: 1 }
       const free = Math.max(0, totalBytes() - usedBytes() - DEFAULT_POLICY.systemReserveBytes)
-      const second = basis.windowTokens > 0 ? safeSecondWindow(basis, free, me.passport) : 0
-      if (!second) {
+      // The doubling never climbs past the measurement rung: a window nobody has measured at is exactly
+      // what MAX_UNCALIBRATED_WINDOW exists to prevent, whether it arrives by plan or by ladder.
+      const second = basis.windowTokens > 0
+        ? Math.min(safeSecondWindow(basis, free, me.passport), MAX_UNCALIBRATED_WINDOW)
+        : 0
+      if (!(second > basis.windowTokens)) {
         return {
           acted: false,
           window: me.loadedWindow,
-          reason: `cache cost for ${modelId} not learned yet (${cost.reason}); no safe second window to measure at`,
+          reason:
+            `cache cost for ${modelId} not learned yet (${cost.reason}); no window above the measurement ` +
+            `rung to take one at (loaded ${basis.windowTokens || "nothing"}, rung ${MAX_UNCALIBRATED_WINDOW})`,
         }
       }
       if (opts.quiet && !(await opts.quiet())) {
@@ -860,6 +902,16 @@ export async function ensureLoadedAtPlannedWindow(
     })
 
     if (!plan.fits) return { acted: false, window: me.loadedWindow, plan, reason: plan.reason }
+
+    // A window computed from load-time readings alone is not trusted with its own size. On a lazy
+    // runtime those readings carry no cache term, so the fit prices drift — measured 2026-08-14, a
+    // drift fit four and a half times under the truth granted a full passport and put the machine at
+    // 47 of 48 GiB. The grant is capped at the measurement rung and the real reading is taken THERE,
+    // so the next switch plans from a measurement instead of a guess.
+    const grant = fromSamples ? plan.tokens : Math.min(plan.tokens, MAX_UNCALIBRATED_WINDOW)
+    let note = !fromSamples && grant < plan.tokens
+      ? `; capped at ${grant} of ${plan.tokens} because no request-time reading exists for this model yet — the cap is the window the calibration needs, so the next switch plans from a real measurement`
+      : ""
     // A window ABOVE the ceiling is not a preference to respect, it is a provisioning the machine cannot
     // pay for — and the damage is silent. MEASURED 2026-07-26: this model sat at 262144 against a
     // computed ceiling of 135168, and the Mac lived at 0.6 GiB free with 18 GiB compressed and 8.8 GiB
@@ -869,9 +921,9 @@ export async function ensureLoadedAtPlannedWindow(
     // The margin exists so a ceiling that breathes with free memory cannot cause a reload every time a
     // browser tab opens — and every reload throws away the whole prefix cache. Only a window that
     // over-shoots by more than the margin is worth the reload it costs.
-    const over = me.loadedWindow > plan.tokens * (1 + OVERSHOOT_MARGIN)
-    if (me.state === "loaded" && me.loadedWindow >= plan.tokens && !over) {
-      return { acted: false, window: me.loadedWindow, plan, reason: `already at ${me.loadedWindow}; ${plan.reason}` }
+    const over = me.loadedWindow > grant * (1 + OVERSHOOT_MARGIN)
+    if (me.state === "loaded" && me.loadedWindow >= grant && !over) {
+      return { acted: false, window: me.loadedWindow, plan, reason: `already at ${me.loadedWindow}; ${plan.reason}${note}` }
     }
 
     // A reload discards every cached prefix, so a live turn pays for it. Wait for quiet when the caller
@@ -881,11 +933,11 @@ export async function ensureLoadedAtPlannedWindow(
         acted: false,
         window: me.loadedWindow,
         plan,
-        reason: `would raise ${me.loadedWindow} -> ${plan.tokens}, but the machine never went quiet; leaving it alone`,
+        reason: `would raise ${me.loadedWindow} -> ${grant}, but the machine never went quiet; leaving it alone`,
       }
     }
 
-    const r = await lmsLoad(modelId, plan.tokens, opts.loadTimeoutMs ?? 180_000)
+    const r = await lmsLoad(modelId, grant, opts.loadTimeoutMs ?? 180_000)
     if (!r.ok) {
       return { acted: false, window: me.loadedWindow, plan, reason: `load failed: ${r.out.trim().slice(0, 300)}` }
     }
@@ -912,7 +964,7 @@ export async function ensureLoadedAtPlannedWindow(
     //
     // So the result now states the refusal and prices it, rather than reporting a number nobody honoured.
     const got = after?.loadedWindow ?? 0
-    const overshoot = got > 0 && plan.tokens > 0 ? got / plan.tokens : 1
+    const overshoot = got > 0 && grant > 0 ? got / grant : 1
     if (got > 0 && overshoot > 1 + OVERSHOOT_MARGIN) {
       const perTok = cost.bytesPerToken || 0
       const needGiB = perTok > 0 ? ((weights + got * perTok) / 1024 ** 3).toFixed(1) : "?"
@@ -921,18 +973,28 @@ export async function ensureLoadedAtPlannedWindow(
         window: got,
         plan,
         reason:
-          `the runtime REFUSED the window: asked for ${plan.tokens}, it loaded at ${got} ` +
+          `the runtime REFUSED the window: asked for ${grant}, it loaded at ${got} ` +
           `(${overshoot.toFixed(2)}x the plan). Nothing here can lower it — that model's own configuration ` +
           `outranks the load flag. At the measured cost this provisioning needs ${needGiB} GiB, and the ` +
           `machine is sized for ${((totalBytes() - DEFAULT_POLICY.systemReserveBytes) * DEFAULT_POLICY.commitFraction / 1024 ** 3).toFixed(1)} GiB.`,
       }
     }
 
+    // THE POINT OF THE CAPPED RUNG: take the real reading now, at a window the calibration's probes fit
+    // in, so the next switch plans from a measurement. A calibration that does not land is reported as
+    // such — the next switch retries it, and until one lands the window stays at the rung.
+    if (!fromSamples && grant < plan.tokens) {
+      const cal = await calibrateCost(modelId)
+      note += cal.ok
+        ? `; calibration at ${grant} recorded the real cost (${cal.reason}) — the next switch plans from it`
+        : `; calibration at ${grant} did not land and is retried on the next switch`
+    }
+
     return {
       acted: true,
-      window: got || plan.tokens,
+      window: got || grant,
       plan,
-      reason: `${me.loadedWindow && plan.tokens < me.loadedWindow ? "lowered" : "raised"} ${me.loadedWindow || "unloaded"} -> ${after?.loadedWindow ?? plan.tokens}: ${plan.reason}`,
+      reason: `${me.loadedWindow && grant < me.loadedWindow ? "lowered" : "raised"} ${me.loadedWindow || "unloaded"} -> ${after?.loadedWindow ?? grant}: ${plan.reason}${note}`,
     }
   })()
 

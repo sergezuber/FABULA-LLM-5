@@ -7,7 +7,7 @@ import { shellPathLiteral } from "./platform/shell"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs"
-import { ensureLoadedAtPlannedWindow, readServed, residentsOther, syncEngineLimit, plannedSlots, recordKvSample, readSamples, calibrateCost, unitBytes } from "./modelload"
+import { ensureLoadedAtPlannedWindow, readServed, residentsOther, syncEngineLimit, plannedSlots, recordKvSample, readSamples, calibrateCost, unitBytes, weightsFromLmsPs, weightsBytesOf } from "./modelload"
 import { fitCostFromSamples } from "./kvcost"
 import { writeMarkerScript } from "./platform/shell"
 
@@ -130,6 +130,29 @@ describe("weights as the runtime PRINTS them", () => {
     expect(Math.abs(parsed - 21_950_414_309) / 21_950_414_309).toBeLessThan(0.001)
     // The binary reading of the same string is 1.5 GiB of weights that do not exist.
     expect(21.95 * 1024 ** 3 - parsed).toBeGreaterThan(1.5 * GIB)
+  })
+
+  // MEASURED 2026-08-15: a model named `qwen3.8-27b-mlx` had its weights read as 27 BYTES. The parser
+  // scanned the whole `lms ps` line for a number-with-unit, and the parameter count in the NAME —
+  // "27b" — matched as 27 B. The || chain treats 27 as known-positive, so the real 15.15 GB on disk
+  // was never asked for, the weights left the budget entirely, and the plan over-committed the machine
+  // by 14 GiB. Any model with its size in its name (`35b`, `8b`, …) hits the same debris.
+  test("a parameter count in the model NAME is not a size: the SIZE column wins", () => {
+    const MARKER = join(tmpdir(), `lms-27b-${process.pid}.sh`)
+    process.env.FABULA_LMS_BIN = writeMarkerScript(MARKER, `#!/bin/sh
+[ "$1" = ps ] && echo "qwen3.8-27b-mlx    qwen3.8-27b-mlx    IDLE    15.15 GB    167936    1    Local"
+exit 0
+`)
+    try {
+      const rows = weightsFromLmsPs()
+      expect(rows).toHaveLength(1)
+      expect(rows[0]!.bytes).toBeCloseTo(15.15 * 1e9, -7)
+      // And the caller that matters: the model's weights, not its name.
+      expect(weightsBytesOf("qwen3.8-27b-mlx")).toBeCloseTo(15.15 * 1e9, -7)
+    } finally {
+      delete process.env.FABULA_LMS_BIN
+      rmSync(MARKER, { force: true })
+    }
   })
 })
 
@@ -376,6 +399,96 @@ describe("request-time cache cost", () => {
     // At ~108 900 B/token the ceiling cannot reach the passport; at the load-time line it easily would.
     expect(r.plan!.ceilingTokens).toBeLessThan(262144)
   }, 15000)
+})
+
+// ── The uncalibrated window cap ──────────────────────────────────────────────
+// MEASURED 2026-08-14, live on a 48 GB Mac: a freshly added MLX model collected load-time footprints
+// 16384→9.12 GB, 32768→8.50 GB (the footprint FELL on a doubling — drift, not cache), 65536→11.25 GB,
+// 262144→12.61 GB. The fit through them reported 14,505 B/token against a real ~65,536, the plan granted
+// the full 262,144 passport, and two ~200k-token caches alive at once put the machine at 47 of 48 GiB.
+// On a lazy runtime a load-time fit prices drift; drift that happens to RISE reads as a cheap cache and
+// the negative-slope guard never fires. Until a request-time reading exists, the window must not rise
+// above the rung the calibration itself needs.
+describe("no request-time reading, no window above the measurement rung", () => {
+  // The marker models the runtime: `ps` answers a weight only while loaded, unload clears it, load
+  // records argv and sets it — the same shape the over-sized-window test uses, because a stub that
+  // reports the model forever makes the second-copy guard fire on a world that does not exist.
+  const ARGV = join(tmpdir(), `lms-cap-argv-${process.pid}.txt`)
+  const MARKER = join(tmpdir(), `lms-cap-${process.pid}.sh`)
+  const STATE = join(tmpdir(), `lms-cap-state-${process.pid}`)
+  const SAMPLES = join(tmpdir(), `kvs-cap-${process.pid}.json`)
+
+  beforeEach(() => {
+    rmSync(ARGV, { force: true })
+    rmSync(STATE, { force: true })
+    process.env.FABULA_KVSAMPLE_FILE = SAMPLES
+    rmSync(SAMPLES, { force: true })
+    const body = `#!/bin/sh
+[ "$1" = load ] && printf '%s\\n' "$@" >> ${shellPathLiteral(ARGV)} && echo loaded > ${shellPathLiteral(STATE)}
+[ "$1" = unload ] && rm -f ${shellPathLiteral(STATE)}
+[ "$1" = ps ] && [ -f ${shellPathLiteral(STATE)} ] && echo "kat  kat  LOADED  22.00 GB  262144  1  Local"
+exit 0
+`
+    process.env.FABULA_LMS_BIN = writeMarkerScript(MARKER, body)
+  })
+  afterEach(() => {
+    delete process.env.FABULA_LMS_BIN
+    delete process.env.FABULA_KVSAMPLE_FILE
+    for (const f of [ARGV, MARKER, STATE, SAMPLES]) rmSync(f, { force: true })
+  })
+
+  test("the cap is derived from the calibration's own needs, not typed", async () => {
+    const { MAX_UNCALIBRATED_WINDOW } = await import("./modelload")
+    // Three signal floors: the large probe is 2.6x the floor (see calibrateCost), the rest is headroom
+    // for output and drift. 3 x 32768 lands exactly on the 4096 quantum.
+    expect(MAX_UNCALIBRATED_WINDOW).toBe(3 * 32768)
+  })
+
+  test("a load-time-only fit cannot grant a window above the rung", async () => {
+    // The drift line from the incident, in miniature: a rising fit that is far too cheap (21,845 B/token),
+    // so the computed ceiling towers over the passport and only the cap stands between it and the load.
+    writeFileSync(STORE, JSON.stringify({ kat: [
+      { windowTokens: 32768, totalBytes: 24 * GIB },
+      { windowTokens: 131072, totalBytes: 26 * GIB },
+    ] }))
+    serve([KAT("loaded", 32768, 22 * GIB)])
+    const r = await ensureLoadedAtPlannedWindow("kat", { loadTimeoutMs: 20000 })
+    expect(r.acted, `declined to act: ${r.reason}`).toBe(true)
+    const argv = readFileSync(ARGV, "utf8")
+    expect(argv).toContain("98304")
+    expect(argv).not.toContain("262144")
+    expect(r.reason).toContain("98304")
+  }, 32000)
+
+  test("a real request-time reading lifts the cap — the plan is trusted once measured", async () => {
+    // The same too-cheap load-time line, plus ONE request-time sample at ~108,900 B/token: the sample
+    // takes precedence, the ceiling falls below the passport but stays above the rung, and the load
+    // goes to the COMPUTED window, not the cap.
+    writeFileSync(STORE, JSON.stringify({ kat: [
+      { windowTokens: 32768, totalBytes: 24 * GIB },
+      { windowTokens: 131072, totalBytes: 26 * GIB },
+    ] }))
+    process.env.FABULA_KVSAMPLE_FILE = SAMPLES
+    writeFileSync(SAMPLES, JSON.stringify({ kat: [{ contextTokens: 131021, kvBytes: Math.round(12.59 * GIB) }] }))
+    serve([KAT("loaded", 32768, 22 * GIB)])
+    const r = await ensureLoadedAtPlannedWindow("kat", { loadTimeoutMs: 30000 })
+    expect(r.acted, `declined to act: ${r.reason}`).toBe(true)
+    expect(r.plan!.tokens).toBeGreaterThan(98304)
+    const argv = readFileSync(ARGV, "utf8")
+    expect(argv).toContain(String(r.plan!.tokens))
+    expect(argv).not.toContain("98304")
+  }, 45000)
+
+  test("the cold-start ladder never climbs past the rung", async () => {
+    // No readings at all, sitting at 65536: the doubling would ask for 131072, but a rung nobody has
+    // measured at is exactly what the cap exists to prevent.
+    serve([KAT("loaded", 65536, 22 * GIB)])
+    const r = await ensureLoadedAtPlannedWindow("kat", { loadTimeoutMs: 20000 })
+    expect(r.acted, `declined to act: ${r.reason}`).toBe(true)
+    const argv = readFileSync(ARGV, "utf8")
+    expect(argv).toContain("98304")
+    expect(argv).not.toContain("131072")
+  }, 32000)
 })
 
 describe("a window above the ceiling is corrected, not respected", () => {

@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.230.0"
+export const FABULA_VERSION = "0.231.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.231.0",
+    date: "2026-08-15",
+    items: [
+      {
+        ru: "«Сессия уже занята» больше не выглядит как ошибка. Некоторые движки обслуживают одну сессию строго по очереди и на второй запрос отвечают «session … is already in flight» — это состояние, а не поломка: оно проходит само за секунду, и вы к нему непричастны. Раньше такой ответ доезжал до вас красной карточкой с кнопкой «Повторить». Теперь адаптер пережидает занятость сам, с нарастающей паузой (0,25 с с удвоением до 4 с), и вы просто получаете ответ. Ждать — не значит замалчивать: если сессия занята дольше отведённого окна (по умолчанию минута), отказ всё равно доходит до вас, потому что занятая минуту сессия — это уже настоящая проблема. Выключатель FABULA_BUSY_RETRY_WINDOW=0 возвращает прежнее поведение в точности.",
+        en: "«Session already busy» no longer looks like an error. Some runtimes serve one session strictly in turn and answer a second request with «session … is already in flight» — a state, not a failure: it clears itself within a second and you did nothing to cause it. Until now that answer reached you as a red card with a Retry button. The adapter now waits it out itself, with a widening pause (0.25 s doubling to 4 s), and you simply get your answer. Waiting is not swallowing: if the session stays busy past the allotted window (a minute by default) the refusal still reaches you, because a session busy for a minute is a real problem. FABULA_BUSY_RETRY_WINDOW=0 restores the previous behaviour exactly.",
+      },
+    ],
+  },
   {
     version: "0.230.0",
     date: "2026-08-15",

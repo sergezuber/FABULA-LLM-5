@@ -147,6 +147,17 @@ point every request passes:
    and the offending volatile block is named) versus `content-break` versus growth/shrink.
    `FABULA_CACHE_BREAK_CLASS=0` restores the previous line.
 
+8. **Waiting out a busy session.** Some runtimes serialize per *session* rather than
+   globally and answer a second request with HTTP 409 (`session … is already in flight`).
+   That is a state, not a failure: passed through, it reaches the reader as a red error
+   card with a Retry button, for a condition that clears itself in a second and that they
+   did nothing to cause. The adapter retries the open with exponential backoff (0.25s
+   doubling to 4s) for `FABULA_BUSY_RETRY_WINDOW` (60s), then lets the 409 travel exactly
+   as before — waiting is not swallowing, and a session still busy after a minute is a real
+   problem worth surfacing. This is the admission gate's idea one layer down: the gate
+   serializes when *we* know the runtime is busy, this waits when the *runtime* says so.
+   `FABULA_BUSY_RETRY_WINDOW=0` restores the previous behaviour.
+
 **Chat streaming passes through token-by-token** (now watchdog-guarded); only the
 *non-streaming* structured responses are additionally buffered and rewritten. An optional
 **cloud provider — NVIDIA** (OpenAI-compatible) — is available for the opt-in heavy-step

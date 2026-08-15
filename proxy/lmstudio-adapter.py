@@ -367,6 +367,9 @@ PORT = int(os.environ.get("ADAPTER_PORT", "1235"))
 FIRST_TOKEN_TIMEOUT = float(os.environ.get("FABULA_FIRST_TOKEN_TIMEOUT", "300")) # sec to the FIRST byte (prefill) -> abort
 STREAM_IDLE_TIMEOUT = float(os.environ.get("FABULA_STREAM_IDLE_TIMEOUT", "120"))  # sec of zero bytes AFTER first -> abort read
 STREAM_RETRIES = int(os.environ.get("FABULA_STREAM_RETRIES", "1"))               # retry once if it stalls before the 1st byte
+# How long to wait out an upstream that reports the session busy (HTTP 409) before surfacing it.
+# Seconds; 0 disables the wait and restores the pre-change behaviour exactly.
+BUSY_RETRY_WINDOW = float(os.environ.get("FABULA_BUSY_RETRY_WINDOW", "60"))
 UPSTREAM_TIMEOUT = float(os.environ.get("FABULA_UPSTREAM_TIMEOUT", "900"))        # hard ceiling (fallback; idle watchdog fires first)
 MAX_OUTPUT_TOKENS = int(os.environ.get("FABULA_MAX_OUTPUT_TOKENS", "0"))          # >0: clamp request max_tokens (cap runaway)
 # This adapter always speaks OpenAI-compatible to LM Studio; the map still keys by apiKind so the
@@ -757,11 +760,41 @@ class Handler(BaseHTTPRequestHandler):
                                        headers=self._fwd_headers(), method=method)
             return urllib.request.urlopen(r, timeout=timeout)
 
+        # 409 IS A STATE, NOT A FAILURE. A runtime that serialises per session answers "session … is
+        # already in flight" with HTTP 409 when a second request reaches the same session while a turn
+        # is running (MTPLX `EngineSessionBusy`). Passing that through paints a red error card with a
+        # Retry button in front of the reader — for a condition that resolves by itself in seconds and
+        # that they did nothing to cause. The correct answer to "busy" is to WAIT, which is what this
+        # adapter's admission gate already does for concurrency; this is the same idea one layer down,
+        # for a runtime that enforces it per session rather than globally.
+        #
+        # Bounded and fail-loud at the end: once BUSY_RETRY_WINDOW is spent the 409 travels exactly as
+        # it did before, because a session still busy a minute later is a real problem the reader must
+        # see. Waiting is not swallowing — proven in both directions by proxy/test_busy_retry.py.
+        def _open_waiting_out_busy():
+            deadline = time.time() + BUSY_RETRY_WINDOW
+            delay = 0.25
+            while True:
+                try:
+                    return _open_upstream(FIRST_TOKEN_TIMEOUT)
+                except urllib.error.HTTPError as e:
+                    if e.code != 409 or time.time() >= deadline:
+                        raise
+                    # Read and discard so the connection is released before sleeping.
+                    try:
+                        e.read()
+                    except Exception:
+                        pass
+                    sys.stderr.write("[fabula-adapter] upstream busy (409) — waiting %.2fs\n" % delay)
+                    sys.stderr.flush()
+                    time.sleep(delay)
+                    delay = min(delay * 2, 4.0)
+
         try:
             # Open with the FIRST-TOKEN (prefill) budget for BOTH paths; each path drops the socket
             # to the smaller inter-token idle once the first byte lands (see set_read_timeout).
             _t_open = time.time()
-            resp = _open_upstream(FIRST_TOKEN_TIMEOUT)
+            resp = _open_waiting_out_busy()
             _gap_prev = None
         except urllib.error.HTTPError as e:
             data = e.read()

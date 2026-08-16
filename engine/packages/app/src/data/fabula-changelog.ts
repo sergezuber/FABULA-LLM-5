@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.232.0"
+export const FABULA_VERSION = "0.233.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.233.0",
+    date: "2026-08-16",
+    items: [
+      {
+        ru: "Адаптер представляется движку тем, кто он есть. Некоторые рантаймы включают реальное поведение по личности клиента: MTPLX открывает безусловное межсессионное восстановление кэша подсказок только клиенту с именем «opencode» — а библиотека под движком представлялась своим именем, и каждая новая сессия попадала в слабую ветку, пересчитывая заново до 48 секунд подсказки, 94.6% которой уже были посчитаны. Движок FABULA — форк OpenCode, так что заголовок — констатация факта: с ним то же восстановление заняло 1.1 секунды. Вызов, назвавший себя сам, не переопределяется; FABULA_CLIENT_HINT= (пустое) убирает заголовок совсем.",
+        en: "The adapter introduces itself to the runtime as what it is. Some runtimes key real behaviour on the client's identity: MTPLX enables its unconditional cross-session prompt-cache restore only for a client named «opencode» — and the library under the engine introduced itself by its own name, so every new session landed in the weak branch, recomputing up to 48 seconds of a prompt that was 94.6% already computed. The FABULA engine is an OpenCode fork, so the header states a fact: with it the same restore took 1.1 seconds. A caller that names itself is never overridden; FABULA_CLIENT_HINT= (empty) removes the header entirely.",
+      },
+    ],
+  },
   {
     version: "0.232.0",
     date: "2026-08-16",

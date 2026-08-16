@@ -370,6 +370,9 @@ STREAM_RETRIES = int(os.environ.get("FABULA_STREAM_RETRIES", "1"))              
 # How long to wait out an upstream that reports the session busy (HTTP 409) before surfacing it.
 # Seconds; 0 disables the wait and restores the pre-change behaviour exactly.
 BUSY_RETRY_WINDOW = float(os.environ.get("FABULA_BUSY_RETRY_WINDOW", "60"))
+# The client identity we declare upstream (see _fwd_headers). Empty string disables the header.
+CLIENT_HINT = os.environ.get("FABULA_CLIENT_HINT", "opencode")
+
 UPSTREAM_TIMEOUT = float(os.environ.get("FABULA_UPSTREAM_TIMEOUT", "900"))        # hard ceiling (fallback; idle watchdog fires first)
 MAX_OUTPUT_TOKENS = int(os.environ.get("FABULA_MAX_OUTPUT_TOKENS", "0"))          # >0: clamp request max_tokens (cap runaway)
 # This adapter always speaks OpenAI-compatible to LM Studio; the map still keys by apiKind so the
@@ -551,10 +554,25 @@ class Handler(BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length", 0) or 0)
         return self.rfile.read(n) if n else b""
 
+    # WHO WE ARE, DECLARED ONCE. Some runtimes key real behaviour on the client's identity, and a
+    # client that declares nothing gets the weakest branch. MTPLX is the measured case: three
+    # conditions of its cache policy all require the hint to be exactly "opencode" — with it the
+    # cross-session block-prefix restore is enabled UNCONDITIONALLY (mtplx/generation.py
+    # `_opencode_compact_tool_history_policy`); without it that path falls back to an env-decided
+    # default, so a new session re-prefills its whole prompt. Measured here: ~2.2 misses per task at
+    # ~48s each, on prompts two sessions share 94.6% of.
+    #
+    # This is a statement of fact, not a costume: the engine IS a fork of the OpenCode terminal
+    # agent, and the tool contract and prompt shape reaching the runtime are OpenCode's. A caller
+    # that has its own opinion still wins — the header is only supplied when absent.
+    # FABULA_CLIENT_HINT="" removes it entirely.
     def _fwd_headers(self):
-        return {k: v for k, v in self.headers.items()
-                if k.lower() not in ("host", "content-length", "accept-encoding",
-                                     "x-fabula-reasoning", "x-fabula-schema")}
+        out = {k: v for k, v in self.headers.items()
+               if k.lower() not in ("host", "content-length", "accept-encoding",
+                                    "x-fabula-reasoning", "x-fabula-schema")}
+        if CLIENT_HINT and not any(k.lower() in ("x-mtplx-client", "x-client-name") for k in out):
+            out["X-MTPLX-Client"] = CLIENT_HINT
+        return out
 
     def _proxy(self, method):
         body = self._read_body()

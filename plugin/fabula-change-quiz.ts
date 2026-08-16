@@ -54,12 +54,17 @@ export const FabulaChangeQuiz: Plugin = async () =>
           const answers = typeof args?.answers === "string" ? args.answers.trim() : ""
           try {
             if (!answers) {
-              const r = await callAux(quizPrompt(diff), { maxTokens: 500, timeoutMs: 120000 })
+              const r = await callAux(quizPrompt(diff), { maxTokens: 1500, timeoutMs: 120000 })
               return { output: `CHANGE-QUIZ — answer these about YOUR diff, then call change_quiz again with \`answers\`:\n\n${r.text.trim()}`, metadata: { phase: "questions", provider: r.provider } }
             }
-            const g = await callAux(gradePrompt(diff, answers), { maxTokens: 400, timeoutMs: 120000 })
-            const { passed, detail } = parseGrade(g.text)
+            const g = await callAux(gradePrompt(diff, answers), { maxTokens: 1200, timeoutMs: 120000 })
+            const { passed, verdict, detail } = parseGrade(g.text)
             if (passed) stateFor(sid).passed = true
+            // A grade with NO verdict line is the INSTRUMENT failing (truncation/garbage), not the
+            // examinee — measured 2026-08-16, treating it as FAIL open-looped the agent to the 900s
+            // watchdog. Same degrade as an unreachable aux: self-explain, no retry demanded.
+            if (verdict === "unreadable")
+              return { output: "change_quiz: the grader's reply carried no verdict (truncated?). Explain your diff yourself: what it does, what you preserved, the riskiest edge case.", metadata: { passed: false, unreadable: true } }
             return { output: (passed ? "✅ change_quiz PASS — you understand your change; you may claim done.\n\n" : "❌ change_quiz FAIL — you don't yet understand your change; re-read the diff and try again.\n\n") + detail, metadata: { passed } }
           } catch (e: any) {
             return `change_quiz: aux model unreachable (${e?.message || e}). Explain your diff yourself: what it does, what you preserved, the riskiest edge case.`

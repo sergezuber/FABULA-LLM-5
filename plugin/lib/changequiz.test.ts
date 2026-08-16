@@ -81,3 +81,22 @@ d2("quiz prompts demand terseness on both sides", () => {
     e2(gradePrompt("--- a\n+++ b", "a1")).toContain("ONLY the two lines")
   })
 })
+
+// ── The tri-state verdict, pinned by the 2026-08-16 forensics ────────────────────────────────────
+// 27 of 27 "fails" in one bench window were TRUNCATIONS (an output clamp below the model's
+// un-switchable reasoning), several cut mid-sentence while approving the answers; the binary parser
+// filed each as FAIL and the agent open-looped to the watchdog. A missing verdict is "unreadable" —
+// never a fail. A PRESENT "VERDICT: FAIL" stays a real, fail-closed fail.
+d2("parseGrade distinguishes a real fail from a truncated grade", () => {
+  t2("explicit FAIL is a fail", () => {
+    const g = parseGrade("VERDICT: FAIL\nWHY: Q1 wrong")
+    e2(g.verdict).toBe("fail"); e2(g.passed).toBe(false)
+  })
+  t2("a truncated no-verdict reply is unreadable, not a fail", () => {
+    const g = parseGrade("Looking at the answers, Q1 correctly identifies the pop()→")
+    e2(g.verdict).toBe("unreadable"); e2(g.passed).toBe(false)
+  })
+  t2("explicit PASS still passes", () => {
+    e2(parseGrade("VERDICT: PASS\nWHY: all correct").verdict).toBe("pass")
+  })
+})

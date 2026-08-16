@@ -55,13 +55,21 @@ export function gradePrompt(diff: string, answers: string): string {
   ].join("\n")
 }
 
-/** Parse the grade reply → { passed, detail }. Fail-closed: no clear PASS ⇒ not passed. */
-export function parseGrade(text: string): { passed: boolean; detail: string } {
+/** Parse the grade reply → { passed, verdict, detail }. Fail-closed for REAL verdicts: no clear PASS ⇒
+ * not passed. But a reply with NO verdict line at all is "unreadable", NOT a fail — and the distinction
+ * is load-bearing, paid for on 2026-08-16: an output clamp smaller than the model's un-switchable
+ * reasoning cut every grade BEFORE its VERDICT line (27 of 27 "fails" in one bench window were
+ * truncations, several cut mid-sentence while APPROVING the answers), the fail-closed parser turned
+ * each into ❌ FAIL, and every FAIL re-entered the agent — an open-loop retry with no corrective signal
+ * that only the 900s watchdog ended. Wall time across 12 runs was ordered EXACTLY by fail count.
+ * An instrument failure must not be recorded as the examinee's failure. */
+export function parseGrade(text: string): { passed: boolean; verdict: "pass" | "fail" | "unreadable"; detail: string } {
   const t = typeof text === "string" ? text : ""
   const m = t.match(/VERDICT:\s*(PASS|FAIL)/i)
   const passed = !!m && m[1].toUpperCase() === "PASS"
+  const verdict = m ? (passed ? "pass" : "fail") : "unreadable"
   const wm = t.match(/WHY:\s*([\s\S]*)$/i)
-  return { passed, detail: (wm ? wm[1] : t).trim().slice(0, 800) }
+  return { passed, verdict, detail: (wm ? wm[1] : t).trim().slice(0, 800) }
 }
 
 export const CHANGE_QUIZ_STEER =

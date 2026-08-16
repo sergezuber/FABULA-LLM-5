@@ -410,6 +410,24 @@ describe("session.llm system prompt — memory-instructions guard", () => {
         // (5) MEMORY.md exception still present
         expect(allSys).toContain("MEMORY.md")
         expect(allSys).toContain("User states a project-level rule")
+
+        // (6) CONSTANT FIRST, VARIABLE LAST — the session id is named ONLY in the closing block.
+        //
+        // WHY THIS IS PINNED. A prompt cache matches on a PREFIX, so the first byte that differs
+        // between two sessions voids every byte after it. The session id used to open this section,
+        // with ~2,100 tokens of session-independent instructions behind it, so every new chat
+        // re-prefilled all of them. Measured on this stack: a second session's first call went from
+        // 120s to 5.8s once the id moved to the end (19,412 of 21,300 tokens restored instead of
+        // 2,048). Moving it back forward costs that again, silently — nothing else would fail.
+        //
+        // The assertion is about POSITION, not presence: the id may appear only after the header of
+        // the closing block, so whatever precedes that header is byte-identical across sessions.
+        const pathsHeader = allSys.indexOf("## Paths for THIS session")
+        expect(pathsHeader).toBeGreaterThan(-1)
+        const idBeforeClosingBlock = allSys.slice(0, pathsHeader).includes(sessionID)
+        expect(idBeforeClosingBlock).toBe(false)
+        // …and it really is named there, or the instructions above would point at nothing.
+        expect(allSys.slice(pathsHeader)).toContain(sessionID)
       },
     })
   })

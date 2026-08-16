@@ -137,13 +137,21 @@ function buildMemoryInstructions(sessionID: SessionID, projectID: ProjectID, mem
   const checkpointFile = path.join(memoryRoot, "sessions", sessionID, "checkpoint.md")
   const sessionMemoryDir = path.join(memoryRoot, "sessions", sessionID)
   const globalMemoryFile = path.join(memoryRoot, "global", "MEMORY.md")
+  // CONSTANT FIRST, VARIABLE LAST. A prefix cache matches on a PREFIX, so the session id — the only
+  // thing here that differs between two sessions of the same project — is named ONCE, in a block
+  // appended at the very END (see SESSION_PATHS below). It used to sit in the first bullet, and the
+  // ~2,100 tokens of instructions that follow it were therefore re-prefilled by every new session:
+  // measured on a 21.5k prefix, two sessions shared only the first 18,365 tokens where they could
+  // have shared 20,400, and the runtime's near-prefix restore (which tolerates a gap of a few tokens)
+  // could not fire at all. The bullets below refer to the paths by NAME; the names are resolved in
+  // that closing block.
   return `# Memory system
 
 You have a persistent file-based memory system. Four file types:
 
 - Project memory at \`${memoryFile}\` — persistent across all sessions in this project. Contains: project context, rules, architecture decisions, durable cross-task knowledge.
-- Session checkpoint at \`${checkpointFile}\` — current session's structured state, written ONLY by the checkpoint-writer subagent. 11 sections covering active intent, next action, directives, task tree, current work, files, learnings, errors, live resources, design decisions, and open notes. Task content lives inside §4 Task tree and §5 Current work.
-- Per-task progress at \`${path.join(sessionMemoryDir, "tasks", "<id>", "progress.md")}\` — writer-derived splitover from session-level progress.md (not LLM-written). When you spawn a subagent on a task, the subagent may be handed this path for reading; you do not maintain it.
+- Session checkpoint at the SESSION CHECKPOINT path given at the end of this section — current session's structured state, written ONLY by the checkpoint-writer subagent. 11 sections covering active intent, next action, directives, task tree, current work, files, learnings, errors, live resources, design decisions, and open notes. Task content lives inside §4 Task tree and §5 Current work.
+- Per-task progress at \`<SESSION MEMORY DIR>/tasks/<id>/progress.md\` — writer-derived splitover from session-level progress.md (not LLM-written). When you spawn a subagent on a task, the subagent may be handed this path for reading; you do not maintain it.
 - Global memory at \`${globalMemoryFile}\` — user-level preferences and cross-project feedback that persist across all projects. Auto-injected into rebuild context under the "## Global memory" header when present.
 
 The checkpoint writer is the sole curator of the structured files. You don't maintain them mid-task — the writer extracts everything from the conversation at checkpoint events.
@@ -159,7 +167,7 @@ These are exceptions, not the norm. The writer covers most extraction at checkpo
 
 ## Notes scratchpad
 
-You have a single legal scratchpad at \`${path.join(sessionMemoryDir, "notes.md")}\`. Append entries to it when you want to record:
+You have a single legal scratchpad at \`<SESSION MEMORY DIR>/notes.md\`. Append entries to it when you want to record:
 
 - A quote (from the user, an article, a known engineer) that has lasting value but isn't a task-specific decision
 - An unresolved question — something you noticed but won't answer this turn
@@ -212,6 +220,14 @@ If a dump shows "⚠️ Truncated at ~N tokens. Read(<path>, offset=L) for the r
 Memory entries name functions, files, flags, paths — those are CLAIMS about a point in time when they were written. Verify before acting on a specific name.
 
 Don't ask the user about something memory may already record.
+
+## Paths for THIS session
+
+Everything above is identical for every session in this project; only the two lines below name the
+current one. Wherever this section says SESSION CHECKPOINT or \`<SESSION MEMORY DIR>\`, use these:
+
+- SESSION MEMORY DIR: \`${sessionMemoryDir}\`
+- SESSION CHECKPOINT: \`${checkpointFile}\`
 `
 }
 

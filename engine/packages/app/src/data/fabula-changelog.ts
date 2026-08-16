@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.231.0"
+export const FABULA_VERSION = "0.232.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.232.0",
+    date: "2026-08-16",
+    items: [
+      {
+        ru: "Первый вызов в новом чате перестал платить за то, что уже посчитано. Инструкции по памяти называли идентификатор текущей сессии в САМОМ НАЧАЛЕ, а дальше шли ещё две тысячи токенов текста, одинакового для всех сессий проекта. Кэш подсказок сверяется по началу запроса, поэтому расхождение в первой строке обесценивало всё, что за ней: каждый новый чат пересчитывал их заново. Теперь путь к файлам текущей сессии назван ОДИН раз, отдельным блоком в конце раздела, а сам раздел одинаков для всех — общая часть выросла с 18 365 до примерно 20 400 токенов из 20 506.",
+        en: "The first call in a new chat no longer pays for what has already been computed. The memory instructions named the current session's id at the very START, and some two thousand tokens of text identical across every session of the project followed it. A prompt cache matches on the beginning of a request, so a divergence in the first line voided everything after it and each new chat recomputed it from scratch. The session's paths are now named ONCE, in a closing block, and the section above it is identical for every session — the shared part grows from 18,365 to about 20,400 tokens of 20,506.",
+      },
+    ],
+  },
   {
     version: "0.231.0",
     date: "2026-08-15",

@@ -16,6 +16,13 @@ export function quizPrompt(diff: string): string {
     "  Q2. What did it deliberately NOT change / preserve (an existing behavior a careless edit would break)?",
     "  Q3. What is the riskiest edge case or input for this change, and how does it behave there?",
     "Output ONLY the three questions, numbered Q1/Q2/Q3, each specialized to the actual diff. No answers.",
+    // ONE sentence per answer, demanded up front. The answer turn is a full model generation, and on
+    // any model in the socket its cost is proportional to its length; measured 2026-08-16, a task spent
+    // ~1,800 tokens of quiz answers across two failed cycles — more than its actual code edit — while
+    // the grader needs substance, not volume. Terseness is REQUESTED here and honoured in gradePrompt,
+    // or the two prompts would punish the very shape this one asks for.
+    "End with this line, verbatim:",
+    "  Answer each question in ONE sentence. Substance decides, not length.",
     "",
     "=== DIFF ===",
     (diff || "(empty diff)").trim().slice(0, 12000),
@@ -29,7 +36,14 @@ export function gradePrompt(diff: string, answers: string): string {
     "You are STRICTLY grading whether these answers prove real understanding of the code change (diff).",
     "Grade against the DIFF, not plausibility. An answer that is vague, generic, or contradicts the diff",
     "FAILS. All three must be substantively correct and specific to THIS change to pass.",
-    "Reply EXACTLY in this shape:",
+    // Terse-but-correct PASSES — stated to the grader because the questions now demand one-sentence
+    // answers, and a grader left to its own taste reads brevity as vagueness. Substance and length are
+    // different axes; only the first is being examined.
+    "A terse answer that is CORRECT and specific PASSES — grade substance, never length.",
+    // And the verdict must be the whole reply. Measured 2026-08-16: the grade turn opened with prose
+    // ('Let me carefully grade each…') before the machine-readable verdict — paid for at generation
+    // speed on every cycle, read by nothing.
+    "Reply with ONLY the two lines below — no preamble, no commentary before or after:",
     "VERDICT: PASS   (or)   VERDICT: FAIL",
     "WHY: <one line per question: correct / what's wrong>",
     "",

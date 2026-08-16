@@ -54,10 +54,10 @@ export const FabulaChangeQuiz: Plugin = async () =>
           const answers = typeof args?.answers === "string" ? args.answers.trim() : ""
           try {
             if (!answers) {
-              const r = await callAux(quizPrompt(diff), { maxTokens: 1500, timeoutMs: 120000 })
+              const r = await callAux(quizPrompt(diff), { maxTokens: 500, timeoutMs: 120000 })
               return { output: `CHANGE-QUIZ — answer these about YOUR diff, then call change_quiz again with \`answers\`:\n\n${r.text.trim()}`, metadata: { phase: "questions", provider: r.provider } }
             }
-            const g = await callAux(gradePrompt(diff, answers), { maxTokens: 1200, timeoutMs: 120000 })
+            const g = await callAux(gradePrompt(diff, answers), { maxTokens: 400, timeoutMs: 120000 })
             const { passed, detail } = parseGrade(g.text)
             if (passed) stateFor(sid).passed = true
             return { output: (passed ? "✅ change_quiz PASS — you understand your change; you may claim done.\n\n" : "❌ change_quiz FAIL — you don't yet understand your change; re-read the diff and try again.\n\n") + detail, metadata: { passed } }

@@ -241,7 +241,22 @@ export const layer = Layer.effect(
         // Opt into the adapter's strict verdict grammar (proxy pick_object_schema): only the goal
         // judge wants the {ok,reason} shape enforced at the grammar level — every other
         // generateObject caller gets the permissive default so its own JSON shape isn't clobbered.
-        headers: { "X-Fabula-Schema": "verdict" },
+        //
+        // `X-Fabula-Reasoning: off` is the same channel asking the runtime for no reasoning pass.
+        // The judge reads a transcript and returns {ok, reason} — MEASURED 2026-08-16 over 74 real
+        // judge calls, the reasoning pass cost 552 output tokens and 20.0s of decode against 151
+        // tokens and 9.4s without it, for the same prompts on the same machine, while the verdict
+        // schema below is what actually constrains the answer. This is HARNESS meta-work; the
+        // agent's own turns keep their reasoning pass (turning it off globally was measured to make
+        // every task slower, not faster — see plugin/lib/reasoning.ts).
+        //
+        // The env switch mirrors `metaReasoningLevel()` in that file BY NAME because the two live in
+        // different build graphs and cannot share the function; an unknown header is ignored by any
+        // server, so a runtime that does not honour the level degrades to the previous behaviour.
+        headers: {
+          "X-Fabula-Schema": "verdict",
+          ...(process.env["FABULA_AUX_NO_REASONING"] === "0" ? {} : { "X-Fabula-Reasoning": "off" }),
+        },
       } satisfies Parameters<typeof generateObject>[0]
 
       if (isOpenaiOauth) {

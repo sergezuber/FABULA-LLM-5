@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.233.0"
+export const FABULA_VERSION = "0.235.0"
 
 export type ChangelogEntry = {
   version: string
@@ -11,12 +11,36 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.235.0",
+    date: "2026-08-17",
+    items: [
+      {
+        ru: "Ускорение из прошлой версии теперь действительно доезжает до движка модели — и замерено. Два заголовка, которые FABULA шлёт, оказались взаимоисключающими: один называет себя, чтобы движок включил межсессионный кэш, второй просит не тратить обдумывание на служебный вопрос. Но движок, узнав имя, забирает управление генерацией себе целиком — и просьбу выбрасывал. Теперь запрос, который просит не обдумывать, имени не называет: заголовки обслуживают разные виды вызовов и не мешают друг другу. Замер на живом приложении, четыре задачи, каждая прогнана обеими настройками подряд: 903 секунды против 1490, то есть на 39% быстрее; проверочные тесты зелёные во всех восьми прогонах. На одной задаче из четырёх разницы не вышло — там проверочный экзамен просто не запускался, и экономить было нечего.",
+        en: "The speed-up from the previous version now actually reaches the model engine — and it is measured. Two headers FABULA sends turned out to be mutually exclusive: one names itself so the engine enables its cross-session cache, the other asks it not to spend deliberation on a housekeeping question. But an engine that recognises the name takes generation control entirely into its own hands — and discarded the request. Now a request that asks for no deliberation does not give the name: the headers serve different kinds of call and no longer collide. Measured on the live app, four tasks, each run under both settings back to back: 903 seconds against 1490, i.e. 39% faster; the verification tests are green in all eight runs. On one task of the four there was no difference — the comprehension check simply never fired there, so there was nothing to save.",
+      },
+    ],
+  },
+  {
+    version: "0.234.0",
+    date: "2026-08-16",
+    items: [
+      {
+        ru: "Обвязка перестала обдумывать собственные служебные вопросы. Пока вы ждёте ответ, FABULA успевает задать модели ещё несколько вопросов от себя: составить проверочные вопросы по вашему изменению, оценить ответы на них, решить, выполнена ли цель. Все три — короткие служебные ответы, но модель обдумывала каждый так же основательно, как саму задачу. По собственному журналу движка это 1172, 802 и 552 токена против 144, 89 и 151 без обдумывания — на тех же вопросах и той же машине, около 72 секунд ожидания на задачу там, где генерация занимала три четверти всего времени. Теперь служебные вопросы задаются без обдумывания, а работа над вашей задачей обдумывается как прежде — это важно: выключить обдумывание везде было измеримо ХУЖЕ (403/598/454/900 с против 276/381/321/306 с). FABULA_AUX_NO_REASONING=0 возвращает прежнее поведение.",
+        en: "The harness stopped deliberating over its own housekeeping questions. While you wait, FABULA asks the model a few questions of its own: write comprehension questions about your change, grade the answers, decide whether the goal is met. All three are short housekeeping answers, yet the model was deliberating over each as thoroughly as over the task itself. By the engine's own request log that is 1172, 802 and 552 tokens against 144, 89 and 151 without deliberation — same questions, same machine, about 72 seconds of your waiting per task on a run where generation was three quarters of the clock. Housekeeping questions are now asked without it, while work on your task deliberates exactly as before — which matters: turning deliberation off everywhere measured WORSE (403/598/454/900s against 276/381/321/306s). FABULA_AUX_NO_REASONING=0 restores the previous behaviour.",
+      },
+      {
+        ru: "Новая сессия перестала пересчитывать чужой одинаковый текст. Рабочий каталог и пути к файлам памяти стояли почти в самом начале системной подсказки, а за ними — навыки и файлы инструкций, одинаковые для всех сессий. Кэш сверяется по началу запроса, поэтому смена проекта обесценивала всё, что стояло дальше: первый вызов пересчитывал около 11 200 токенов за 26-29 секунд, восстанавливая ровно 3 151. Все переменные значения — каталог, проект, сессия — теперь названы одним блоком в самом конце подсказки, и всё, что выше, одинаково побайтно.",
+        en: "A new session no longer recomputes text it already shares. The working directory and the memory file paths sat almost at the start of the system prompt, with the skills and instruction files — identical across every session — behind them. A cache matches on the beginning of a request, so switching project voided everything that followed: the first call recomputed about 11,200 tokens in 26-29 seconds while restoring exactly 3,151. Every per-session value — directory, project, session — is now named in one block at the very end, and everything above it is byte-identical.",
+      },
+    ],
+  },
+  {
     version: "0.233.0",
     date: "2026-08-16",
     items: [
       {
-        ru: "Адаптер представляется движку тем, кто он есть. Некоторые рантаймы включают реальное поведение по личности клиента: MTPLX открывает безусловное межсессионное восстановление кэша подсказок только клиенту с именем «opencode» — а библиотека под движком представлялась своим именем, и каждая новая сессия попадала в слабую ветку, пересчитывая заново до 48 секунд подсказки, 94.6% которой уже были посчитаны. Движок FABULA — форк OpenCode, так что заголовок — констатация факта: с ним то же восстановление заняло 1.1 секунды. Вызов, назвавший себя сам, не переопределяется; FABULA_CLIENT_HINT= (пустое) убирает заголовок совсем.",
-        en: "The adapter introduces itself to the runtime as what it is. Some runtimes key real behaviour on the client's identity: MTPLX enables its unconditional cross-session prompt-cache restore only for a client named «opencode» — and the library under the engine introduced itself by its own name, so every new session landed in the weak branch, recomputing up to 48 seconds of a prompt that was 94.6% already computed. The FABULA engine is an OpenCode fork, so the header states a fact: with it the same restore took 1.1 seconds. A caller that names itself is never overridden; FABULA_CLIENT_HINT= (empty) removes the header entirely.",
+        ru: "Адаптер представляется движку тем, кто он есть. Некоторые рантаймы включают реальное поведение по личности клиента: некоторые рантаймы открывают безусловное межсессионное восстановление кэша подсказок только клиенту, назвавшему себя определённым именем — а библиотека под движком представлялась своим, и каждая новая сессия попадала в слабую ветку, пересчитывая заново до 48 секунд подсказки, 94.6% которой уже были посчитаны. Имя, которое шлёт адаптер, — констатация факта о форме запроса, а не костюм: с ним то же восстановление заняло 1.1 секунды. Вызов, назвавший себя сам, не переопределяется; FABULA_CLIENT_HINT= (пустое) убирает заголовок совсем.",
+        en: "The adapter introduces itself to the runtime as what it is. Some runtimes key real behaviour on the client's identity: some runtimes enable their unconditional cross-session prompt-cache restore only for a client that names itself a particular way — and the library under the engine introduced itself by its own name, so every new session landed in the weak branch, recomputing up to 48 seconds of a prompt that was 94.6% already computed. The name the adapter sends is a statement of fact about the shape of the request, not a costume: with it the same restore took 1.1 seconds. A caller that names itself is never overridden; FABULA_CLIENT_HINT= (empty) removes the header entirely.",
       },
     ],
   },

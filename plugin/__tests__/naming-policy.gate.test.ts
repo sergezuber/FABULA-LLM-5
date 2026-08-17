@@ -39,6 +39,12 @@ const CONTRACT_TOKENS = [
   "packages/opencode", "/opencode/src",
   // OpenCode contracts kept inert (localStorage keys / build envs / deep-link scheme) + the source scrubber
   "opencode.global.dat", "VITE_OPENCODE", "opencode://", "/OpenCode/g", "indexOf('OpenCode')",
+  // The client-identity VALUE the adapter puts on the wire, and the runtime symbol that reads it.
+  // Not a brand claim and not renameable: a serving runtime fingerprints this exact literal to
+  // enable its unconditional cross-session prefix restore, and any other string silently selects
+  // the weak branch (measured 2026-08-16: ~2.2 misses per task at ~48s each). Narrow on purpose —
+  // the QUOTED literal and the symbol name only, so ordinary prose is still caught.
+  '"opencode"', "_opencode_compact_tool_history_policy", "FABULA_CLIENT_HINT",
   // external plugin-bundle format (its own on-disk path + env-var names)
   ".claude-plugin", ".codex-plugin", "CLAUDE_PLUGIN_ROOT",
   // engine's own claude-import data markers (foreign sessions), not FABULA authorship

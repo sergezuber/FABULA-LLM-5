@@ -562,15 +562,38 @@ class Handler(BaseHTTPRequestHandler):
     # default, so a new session re-prefills its whole prompt. Measured here: ~2.2 misses per task at
     # ~48s each, on prompts two sessions share 94.6% of.
     #
-    # This is a statement of fact, not a costume: the engine IS a fork of the OpenCode terminal
-    # agent, and the tool contract and prompt shape reaching the runtime are OpenCode's. A caller
-    # that has its own opinion still wins — the header is only supplied when absent.
+    # This is a statement of fact, not a costume: the tool contract and the prompt shape that
+    # actually reach the runtime are the ones this identifier names — that is exactly what the
+    # runtime is fingerprinting. A caller with its own opinion still wins: the header is only
+    # supplied when absent.
     # FABULA_CLIENT_HINT="" removes it entirely.
+    # THE TWO HEADERS ARE MUTUALLY EXCLUSIVE ON A MANAGED SURFACE, and the identity wins.
+    #
+    # MEASURED 2026-08-16 in the runtime's own log: a client_hint equal to the "opencode" literal came with
+    # `client_controls_allowed=False` in 230 of 230 requests, no exceptions, while the same day's
+    # anonymous `ai_sdk_agent` requests were allowed in 581 of 581. Read out of MTPLX 2.7.1's source,
+    # that is deliberate and not escapable: `_client_controls_allowed` returns False the moment
+    # `_app_managed_client_hint` matches — BEFORE it looks at the per-request opt-in header — and its
+    # own docstring says a managed surface is "ALWAYS server-owned either way". So a request that
+    # declares this identity may not also decide its own generation policy, and `enable_thinking`
+    # from such a request is received and discarded (`_thinking_enabled_for_request` falls back to
+    # the server's setting when controls are not allowed).
+    #
+    # A request that DECLARES A REASONING LEVEL is therefore not given the identity. The two serve
+    # different call classes and nothing is lost by the split: the identity buys the cross-session
+    # restore of a tool-carrying agent transcript, and a call that declares a level is the harness's
+    # own short meta-work — no tools, a prompt of a few hundred tokens, unique each time (it quotes
+    # the current diff), so there is no shared transcript for that policy to restore.
+    #
+    # Keyed on the PER-REQUEST declaration only, never on `FABULA_REASONING_LEVEL`: that env var is a
+    # machine-wide default, and letting it strip the identity would silently cost every agent turn
+    # the cache win the identity exists for.
     def _fwd_headers(self):
         out = {k: v for k, v in self.headers.items()
                if k.lower() not in ("host", "content-length", "accept-encoding",
                                     "x-fabula-reasoning", "x-fabula-schema")}
-        if CLIENT_HINT and not any(k.lower() in ("x-mtplx-client", "x-client-name") for k in out):
+        if (CLIENT_HINT and not getattr(self, "_declared_reasoning", False)
+                and not any(k.lower() in ("x-mtplx-client", "x-client-name") for k in out)):
             out["X-MTPLX-Client"] = CLIENT_HINT
         return out
 
@@ -593,6 +616,13 @@ class Handler(BaseHTTPRequestHandler):
                         j["response_format"] = pick_object_schema(self.headers.get("X-Fabula-Schema"))
                         changed = True
                     # FIX 3: declarative reasoning-level body patches (config-driven)
+                    # PER-REQUEST declaration only (header or body marker), read BEFORE the marker is
+                    # stripped — the env default deliberately does not count. See _fwd_headers.
+                    self._declared_reasoning = bool(
+                        (self.headers.get("X-Fabula-Reasoning") or "").strip()
+                        or (isinstance(j, dict) and isinstance(j.get("extra_body"), dict)
+                            and str(j["extra_body"].get("fabula_reasoning") or "").strip())
+                    )
                     level = resolve_level(self.headers, j)
                     if level or (isinstance(j.get("extra_body"), dict)
                                  and "fabula_reasoning" in j["extra_body"]):

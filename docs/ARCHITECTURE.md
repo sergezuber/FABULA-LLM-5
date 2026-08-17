@@ -115,6 +115,22 @@ point every request passes:
    `FABULA_CONTEXT_WINDOW` goes stale the first time a model is reloaded, and left unset (the
    normal case) the classification would never fire at all. Set it only to override.
 
+   The `off` level has **one definition**, under `*`, and it sets every spelling an
+   open-weight runtime might read (a top-level flag, the chat-template keyword argument, and
+   the hosted-API shape) rather than betting on one. A runtime that honours none of them is
+   left exactly as before.
+
+   **The harness's own meta-calls declare `off`; the agent's work never does.** Writing three
+   comprehension questions about a diff, grading three short answers, and deciding whether a
+   stopping condition holds are short structured judgements, and a reasoning pass spent on
+   them is pure latency: measured over the serving runtime's own request log, those three
+   cost 1172, 802 and 552 output tokens with the pass and 144, 89 and 151 without it — the
+   same prompts on the same machine. Turning reasoning off *globally* is a different thing
+   and is measurably worse: without it the agent needs more steps and loses far more than the
+   tokens save. So the declaration is made per call class — one definition in
+   `plugin/lib/reasoning.ts`, with the engine's goal judge sending the same header — and
+   `FABULA_AUX_NO_REASONING=0` restores the previous wire byte for byte.
+
    The diagnostic log is **bounded**: past `FABULA_ADAPTER_LOG_MAX` (20 MB) the adapter copies
    it to `<path>.1` and truncates in place — in place, because launchd opened that file with
    `O_APPEND` and renaming it would leave the process writing where nobody is reading. A client
@@ -157,6 +173,24 @@ point every request passes:
    problem worth surfacing. This is the admission gate's idea one layer down: the gate
    serializes when *we* know the runtime is busy, this waits when the *runtime* says so.
    `FABULA_BUSY_RETRY_WINDOW=0` restores the previous behaviour.
+
+9. **Who the client says it is — and when it must not say.** Some runtimes key real behaviour
+   on the client's identity, and a client that declares nothing lands in the weakest branch:
+   measured here, ~2.2 prefix-cache misses per task at ~48s each, on prompts two sessions
+   shared 94.6% of, against 1.1s once the adapter declares itself. The value is
+   `FABULA_CLIENT_HINT` (empty string removes the header), and a caller that names itself is
+   never overridden — the adapter only fills silence.
+
+   That identity and a per-request reasoning declaration are **mutually exclusive**, and the
+   adapter enforces the split. A runtime that recognises the identity as a *managed surface*
+   takes generation policy away from the client entirely — measured, 230 of 230 such requests
+   came back with client controls revoked — so a request carrying both has its reasoning
+   declaration received and discarded. A request that declares a level therefore is not given
+   the identity. Nothing is lost by the split: the identity buys the cross-session restore of
+   a tool-carrying agent transcript, while a call that declares a level is short meta-work
+   with no tools and a prompt unique to each turn. It keys on the **per-request** declaration
+   only, never the machine-wide `FABULA_REASONING_LEVEL` default — that would strip the
+   identity from every agent turn and cost the cache win it exists for.
 
 **Chat streaming passes through token-by-token** (now watchdog-guarded); only the
 *non-streaming* structured responses are additionally buffered and rewritten. An optional

@@ -15,9 +15,23 @@
     ]
    }
   },
+  "_comment_off": "ONE definition of 'no reasoning pass', for every model the adapter fronts. It sets THREE spellings because the open-weight runtimes read different ones and only the local runtime is behind this adapter (cloud endpoints in the aux chain are called directly and never see these fields, so an unknown-parameter 400 is not reachable): top-level enable_thinking is what MTPLX's chat path reads FIRST (server/openai.py::_thinking_enabled_for_request, verified in 2.7.1 source), chat_template_kwargs.enable_thinking is its documented fallback and the vLLM/SGLang/LM-Studio spelling, and extra_body.thinking.type covers the hosted-API spelling some backends expose. A runtime that honours none of them is left exactly as before. Per-model 'off' entries were REMOVED so this stays the only definition — the per-level fallthrough in apply_reasoning reaches it for any model.",
   "off": {
    "openai-compatible": {
     "set": [
+     {
+      "path": [
+       "enable_thinking"
+      ],
+      "value": false
+     },
+     {
+      "path": [
+       "chat_template_kwargs",
+       "enable_thinking"
+      ],
+      "value": false
+     },
      {
       "path": [
        "extra_body",
@@ -115,19 +129,6 @@
     ]
    }
   },
-  "off": {
-   "openai-compatible": {
-    "set": [
-     {
-      "path": [
-       "chat_template_kwargs",
-       "enable_thinking"
-      ],
-      "value": false
-     }
-    ]
-   }
-  },
   "enabled": {
    "openai-compatible": {
     "set": [
@@ -191,19 +192,6 @@
     ]
    }
   },
-  "off": {
-   "openai-compatible": {
-    "set": [
-     {
-      "path": [
-       "chat_template_kwargs",
-       "enable_thinking"
-      ],
-      "value": false
-     }
-    ]
-   }
-  },
   "enabled": {
    "openai-compatible": {
     "set": [
@@ -219,19 +207,6 @@
   }
  },
  "mtplx-qwen36-27b-native-mtp": {
-  "off": {
-   "openai-compatible": {
-    "set": [
-     {
-      "path": [
-       "chat_template_kwargs",
-       "enable_thinking"
-      ],
-      "value": false
-     }
-    ]
-   }
-  },
   "low": {
    "openai-compatible": {
     "set": [

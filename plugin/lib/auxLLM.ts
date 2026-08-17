@@ -3,6 +3,7 @@
 // Pure chain resolver (testable) + async callAux with fallback.
 
 import { chatBody, extractText, cloudEndpointsAllowed, localInferenceBase } from "./moa"
+import { reasoningHeaders } from "./reasoning"
 
 export interface AuxEndpoint { name: string; url: string; model: string; headers: Record<string, string> }
 
@@ -48,10 +49,16 @@ export interface AuxResult { text: string; provider: string }
 type FetchLike = typeof fetch
 
 /** Run a cheap LLM subtask, trying each endpoint in order until one answers. Throws if none reachable. */
-export async function callAux(prompt: string, opts: { maxTokens?: number; fetchImpl?: FetchLike; timeoutMs?: number } = {}): Promise<AuxResult> {
+/**
+ * `reasoning` declares the reasoning level this call needs — see `lib/reasoning.ts` for the measured
+ * reason a HARNESS META call passes `metaReasoningLevel()` here and the agent's own work never does.
+ * Omitted, the request goes out exactly as it did before the option existed.
+ */
+export async function callAux(prompt: string, opts: { maxTokens?: number; fetchImpl?: FetchLike; timeoutMs?: number; reasoning?: string } = {}): Promise<AuxResult> {
   const fetchImpl = opts.fetchImpl || fetch
   const maxTokens = opts.maxTokens ?? 512
   const timeoutMs = opts.timeoutMs ?? 60000
+  const reasoning = reasoningHeaders(opts.reasoning)
   for (const p of auxChain(process.env)) {
     try {
       let model = p.model
@@ -69,7 +76,7 @@ export async function callAux(prompt: string, opts: { maxTokens?: number; fetchI
         const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), timeoutMs)
         try {
           const r = await fetchImpl(p.url, {
-            method: "POST", headers: { "Content-Type": "application/json", ...p.headers },
+            method: "POST", headers: { "Content-Type": "application/json", ...p.headers, ...reasoning },
             body: JSON.stringify(chatBody(model, prompt, maxTokens)), signal: ctl.signal,
           } as any)
           if (r.ok) { const text = extractText(await r.json()); if (text) return { text, provider: p.name } }

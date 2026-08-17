@@ -184,3 +184,45 @@ def test_qwen38_official_reasoning_effort_knob():
     # An unrelated model still falls through to `*` — the per-LEVEL fall-through rule stays intact.
     other = adapter.apply_reasoning({"model": "some-other", "messages": []}, mapping, "off", "openai-compatible")
     assert other.get("extra_body", {}).get("thinking", {}).get("type") == "disabled", other
+
+
+def test_off_speaks_the_dialect_the_runtime_actually_reads():
+    """The `off` level is what a HARNESS META call asks for (plugin/lib/reasoning.ts). It has to
+    land in the field the serving runtime READS, or it is a knob nobody turns.
+
+    MEASURED 2026-08-16: not one of the 993 logged requests carried a client-set enable_thinking
+    (`request_enable_thinking_override` was False in every single one), and the level's only patch
+    was `extra_body.thinking.type` — a hosted-API spelling no open-weight runtime reads. Read
+    out of MTPLX 2.7.1's own source, `server/openai.py::_thinking_enabled_for_request` takes
+    top-level `enable_thinking` FIRST and `chat_template_kwargs.enable_thinking` as its fallback.
+    So the patch must carry the top-level spelling; the other two are there for the runtimes that
+    read those instead."""
+    import json, copy
+    mapping = json.load(open(os.path.join(HERE, "reasoning-map.json")))
+    for model in ("mtplx-qwen36-27b-native-mtp", "qwen3.8-27b", "kat-coder-v2.5-dev-optiq", "never-seen-before"):
+        out = adapter.apply_reasoning({"model": model, "messages": []}, mapping, "off", "openai-compatible")
+        assert out.get("enable_thinking") is False, (model, out)
+        assert out.get("chat_template_kwargs", {}).get("enable_thinking") is False, (model, out)
+        assert out.get("extra_body", {}).get("thinking", {}).get("type") == "disabled", (model, out)
+
+
+def test_off_has_exactly_one_definition():
+    """Two tables answering one question drift — this repo's most-repeated defect. `off` is defined
+    in `*` and nowhere else, so every model gets the same answer by construction."""
+    import json
+    mapping = json.load(open(os.path.join(HERE, "reasoning-map.json")))
+    owners = [m for m, levels in mapping.items() if isinstance(levels, dict) and "off" in levels]
+    assert owners == ["*"], owners
+
+
+def test_a_call_that_declares_nothing_is_untouched():
+    """Fail-open: the agent's own turns declare no level, and their body must go out byte-identical
+    — the reasoning pass is what makes the agent solve the task (globally disabling it was measured
+    to make every bench task SLOWER, 403/598/454/900s against 276/381/321/306s)."""
+    import json, copy
+    mapping = json.load(open(os.path.join(HERE, "reasoning-map.json")))
+    body = {"model": "mtplx-qwen36-27b-native-mtp", "messages": [{"role": "user", "content": "hi"}], "temperature": 0.4}
+    before = copy.deepcopy(body)
+    assert adapter.resolve_level({}, body) is None or os.environ.get("FABULA_REASONING_LEVEL")
+    adapter.apply_reasoning(body, mapping, None, "openai-compatible")
+    assert body == before, body

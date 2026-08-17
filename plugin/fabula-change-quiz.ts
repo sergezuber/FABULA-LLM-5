@@ -10,6 +10,7 @@ import { tool } from "@mimo-ai/plugin"
 import { gate } from "./lib/manage"
 import { EDIT_TOOLS, BASH_TOOLS, BASH_EDIT_MARKER, editUnits } from "./lib/edittools"
 import { callAux } from "./lib/auxLLM"
+import { metaReasoningLevel } from "./lib/reasoning"
 import { spawn } from "node:child_process"
 import { quizPrompt, gradePrompt, parseGrade, newQuizState, shouldSteerQuiz, shouldInjectQuizReminder, CHANGE_QUIZ_STEER, CHANGE_QUIZ_REMINDER, type QuizState } from "./lib/changequiz"
 import { isSourceFile } from "./lib/unknowns"
@@ -53,11 +54,17 @@ export const FabulaChangeQuiz: Plugin = async () =>
           if (!diff.trim()) return "change_quiz: no uncommitted change detected (git diff HEAD is empty) — nothing to quiz."
           const answers = typeof args?.answers === "string" ? args.answers.trim() : ""
           try {
+            // Both calls are HARNESS META-WORK — authoring three questions about a diff and grading
+            // three short answers against it. `lib/reasoning.ts` carries the measurement: with the
+            // reasoning pass on they cost 1 172 and 802 output tokens (49.5s + 27.0s of decode); with
+            // it off, 144 and 89 (9.1s + 6.1s) — for the same prompts on the same machine. The
+            // agent's OWN work keeps its reasoning pass; only these two give it up.
+            const reasoning = metaReasoningLevel()
             if (!answers) {
-              const r = await callAux(quizPrompt(diff), { maxTokens: 1500, timeoutMs: 120000 })
+              const r = await callAux(quizPrompt(diff), { maxTokens: 1500, timeoutMs: 120000, reasoning })
               return { output: `CHANGE-QUIZ — answer these about YOUR diff, then call change_quiz again with \`answers\`:\n\n${r.text.trim()}`, metadata: { phase: "questions", provider: r.provider } }
             }
-            const g = await callAux(gradePrompt(diff, answers), { maxTokens: 1200, timeoutMs: 120000 })
+            const g = await callAux(gradePrompt(diff, answers), { maxTokens: 1200, timeoutMs: 120000, reasoning })
             const { passed, verdict, detail } = parseGrade(g.text)
             if (passed) stateFor(sid).passed = true
             // A grade with NO verdict line is the INSTRUMENT failing (truncation/garbage), not the

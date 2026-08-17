@@ -14,7 +14,7 @@ import type { MessageV2 } from "./message-v2"
 import { shadowFor, wrapShadowCall } from "./belt"
 import { computeProvenance, publishProvenance, lastUserInputText, hashInputText } from "./provenance"
 import { Plugin } from "@/plugin"
-import { SystemPrompt } from "./system"
+import { SystemPrompt, sessionPathsBlock } from "./system"
 import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
 import { Bus } from "@/bus"
@@ -132,27 +132,24 @@ export const persistentRetrySchedule = Schedule.exponential("500 millis", 2).pip
  * `memoryRoot` is the same absolute root returned by Memory.root(), so these
  * paths match the files used by checkpoint restore and memory/task detection.
  */
-function buildMemoryInstructions(sessionID: SessionID, projectID: ProjectID, memoryRoot: string): string {
-  const memoryFile = path.join(memoryRoot, "projects", projectID, "MEMORY.md")
-  const checkpointFile = path.join(memoryRoot, "sessions", sessionID, "checkpoint.md")
-  const sessionMemoryDir = path.join(memoryRoot, "sessions", sessionID)
-  const globalMemoryFile = path.join(memoryRoot, "global", "MEMORY.md")
-  // CONSTANT FIRST, VARIABLE LAST. A prefix cache matches on a PREFIX, so the session id — the only
-  // thing here that differs between two sessions of the same project — is named ONCE, in a block
-  // appended at the very END (see SESSION_PATHS below). It used to sit in the first bullet, and the
-  // ~2,100 tokens of instructions that follow it were therefore re-prefilled by every new session:
-  // measured on a 21.5k prefix, two sessions shared only the first 18,365 tokens where they could
-  // have shared 20,400, and the runtime's near-prefix restore (which tolerates a gap of a few tokens)
-  // could not fire at all. The bullets below refer to the paths by NAME; the names are resolved in
-  // that closing block.
+function buildMemoryInstructions(projectID: ProjectID, memoryRoot: string): string {
+  // CONSTANT FIRST, VARIABLE LAST. A prefix cache matches on a PREFIX, so anything that differs
+  // between two sessions must appear as late as possible. The session id used to sit in the first
+  // bullet (measured on a 21.5k prefix, two sessions then shared 18,365 tokens where they could
+  // have shared 20,400, and the runtime's near-prefix restore could not fire at all). The project
+  // id embedded in the project-memory path had the same effect one section earlier: measured
+  // 2026-08-16 on bench sessions (request-log-8000.jsonl), cross-session restore stopped at exactly
+  // the static head (3,151 tokens) because the FIRST bullet of this section diverged — every bench
+  // task runs in a fresh throwaway project. Both ids are now named by ROLE only; the <session-paths>
+  // block appended at the very end of the system prompt resolves them (see buildSystemArray).
   return `# Memory system
 
 You have a persistent file-based memory system. Four file types:
 
-- Project memory at \`${memoryFile}\` — persistent across all sessions in this project. Contains: project context, rules, architecture decisions, durable cross-task knowledge.
-- Session checkpoint at the SESSION CHECKPOINT path given at the end of this section — current session's structured state, written ONLY by the checkpoint-writer subagent. 11 sections covering active intent, next action, directives, task tree, current work, files, learnings, errors, live resources, design decisions, and open notes. Task content lives inside §4 Task tree and §5 Current work.
+- Project memory at the PROJECT MEMORY path given in <session-paths> at the end of the system prompt — persistent across all sessions in this project. Contains: project context, rules, architecture decisions, durable cross-task knowledge.
+- Session checkpoint at the SESSION CHECKPOINT path given in <session-paths> — current session's structured state, written ONLY by the checkpoint-writer subagent. 11 sections covering active intent, next action, directives, task tree, current work, files, learnings, errors, live resources, design decisions, and open notes. Task content lives inside §4 Task tree and §5 Current work.
 - Per-task progress at \`<SESSION MEMORY DIR>/tasks/<id>/progress.md\` — writer-derived splitover from session-level progress.md (not LLM-written). When you spawn a subagent on a task, the subagent may be handed this path for reading; you do not maintain it.
-- Global memory at \`${globalMemoryFile}\` — user-level preferences and cross-project feedback that persist across all projects. Auto-injected into rebuild context under the "## Global memory" header when present.
+- Global memory at \`${path.join(memoryRoot, "global", "MEMORY.md")}\` (one file for the whole machine, identical in every session) — user-level preferences and cross-project feedback that persist across all projects. Auto-injected into rebuild context under the "## Global memory" header when present.
 
 The checkpoint writer is the sole curator of the structured files. You don't maintain them mid-task — the writer extracts everything from the conversation at checkpoint events.
 
@@ -220,14 +217,6 @@ If a dump shows "⚠️ Truncated at ~N tokens. Read(<path>, offset=L) for the r
 Memory entries name functions, files, flags, paths — those are CLAIMS about a point in time when they were written. Verify before acting on a specific name.
 
 Don't ask the user about something memory may already record.
-
-## Paths for THIS session
-
-Everything above is identical for every session in this project; only the two lines below name the
-current one. Wherever this section says SESSION CHECKPOINT or \`<SESSION MEMORY DIR>\`, use these:
-
-- SESSION MEMORY DIR: \`${sessionMemoryDir}\`
-- SESSION CHECKPOINT: \`${checkpointFile}\`
 `
 }
 
@@ -315,21 +304,44 @@ const live: Layer.Layer<
       const isSystemActor = input.agentID
         ? yield* actorReg.isSystemSpawned(SessionID.make(input.sessionID), input.agentID)
         : false
+      const projectID =
+        (yield* Effect.try({
+          try: () => Instance.current?.project?.id as ProjectID | undefined,
+          catch: () => undefined,
+        }).pipe(Effect.orElseSucceed(() => undefined))) ?? ProjectID.global
+      // Bootstrap the memory.md → MEMORY.md migration at session start so a
+      // legacy lowercase file is renamed before the agent's first direct
+      // Edit/Write (which would otherwise miss it on a case-sensitive FS, or
+      // create an uppercase sibling and orphan the legacy content). The two
+      // checkpoint-flow call sites cover the writer/rebuild paths; this covers
+      // the "agent edits MEMORY.md before any checkpoint" path. Idempotent.
+      yield* Effect.promise(() => migrateProjectMemory(projectID)).pipe(Effect.ignore)
+      const memoryRoot = yield* memory.root()
       if (!isSystemActor) {
-        const projectID =
-          (yield* Effect.try({
-            try: () => Instance.current?.project?.id as ProjectID | undefined,
-            catch: () => undefined,
-          }).pipe(Effect.orElseSucceed(() => undefined))) ?? ProjectID.global
-        // Bootstrap the memory.md → MEMORY.md migration at session start so a
-        // legacy lowercase file is renamed before the agent's first direct
-        // Edit/Write (which would otherwise miss it on a case-sensitive FS, or
-        // create an uppercase sibling and orphan the legacy content). The two
-        // checkpoint-flow call sites cover the writer/rebuild paths; this covers
-        // the "agent edits MEMORY.md before any checkpoint" path. Idempotent.
-        yield* Effect.promise(() => migrateProjectMemory(projectID)).pipe(Effect.ignore)
-        system.push(buildMemoryInstructions(SessionID.make(input.sessionID), projectID, yield* memory.root()))
+        system.push(buildMemoryInstructions(projectID, memoryRoot))
       }
+      // <session-paths> goes LAST: every per-session value (working directory, project id, session
+      // id) resolves here, so the whole system prompt above it is byte-identical across sessions.
+      // Actors get it too — the working directory is not memory-specific. See session/system.ts
+      // for why these lines left the <env> block at the top.
+      const envPaths = yield* Effect.try({
+        try: () => ({
+          directory: Instance.current?.directory ?? Instance.directory,
+          worktree: Instance.current?.worktree ?? Instance.worktree,
+          vcsGit: (Instance.current?.project ?? Instance.project).vcs === "git",
+        }),
+        catch: () => undefined,
+      }).pipe(Effect.orElseSucceed(() => undefined))
+      system.push(
+        sessionPathsBlock({
+          directory: envPaths?.directory ?? process.cwd(),
+          worktree: envPaths?.worktree ?? envPaths?.directory ?? process.cwd(),
+          vcsGit: envPaths?.vcsGit ?? false,
+          projectMemoryFile: path.join(memoryRoot, "projects", projectID, "MEMORY.md"),
+          sessionMemoryDir: path.join(memoryRoot, "sessions", input.sessionID),
+          checkpointFile: path.join(memoryRoot, "sessions", input.sessionID, "checkpoint.md"),
+        }),
+      )
 
       const header = system[0]
       yield* plugin.trigger(

@@ -411,23 +411,36 @@ describe("session.llm system prompt — memory-instructions guard", () => {
         expect(allSys).toContain("MEMORY.md")
         expect(allSys).toContain("User states a project-level rule")
 
-        // (6) CONSTANT FIRST, VARIABLE LAST — the session id is named ONLY in the closing block.
+        // (6) CONSTANT FIRST, VARIABLE LAST — every per-session value lives ONLY in <session-paths>.
         //
         // WHY THIS IS PINNED. A prompt cache matches on a PREFIX, so the first byte that differs
         // between two sessions voids every byte after it. The session id used to open this section,
         // with ~2,100 tokens of session-independent instructions behind it, so every new chat
         // re-prefilled all of them. Measured on this stack: a second session's first call went from
         // 120s to 5.8s once the id moved to the end (19,412 of 21,300 tokens restored instead of
-        // 2,048). Moving it back forward costs that again, silently — nothing else would fail.
+        // 2,048). The project id in the project-memory path had the same effect one bullet earlier
+        // (bench sessions of 2026-08-16 restored exactly the 3,151-token static head and diverged at
+        // the first bullet, because every bench task is a fresh project), and the working directory
+        // diverged even earlier from the <env> block. All three now resolve in <session-paths>,
+        // appended as the LAST system element. Moving any of them back forward costs a full
+        // re-prefill of everything behind it, silently — nothing else would fail.
         //
-        // The assertion is about POSITION, not presence: the id may appear only after the header of
-        // the closing block, so whatever precedes that header is byte-identical across sessions.
-        const pathsHeader = allSys.indexOf("## Paths for THIS session")
+        // The assertion is about POSITION, not presence: the ids and the working directory may
+        // appear only after the <session-paths> header, so whatever precedes it is byte-identical
+        // across sessions of the same model and day.
+        const pathsHeader = allSys.indexOf("<session-paths>")
         expect(pathsHeader).toBeGreaterThan(-1)
-        const idBeforeClosingBlock = allSys.slice(0, pathsHeader).includes(sessionID)
-        expect(idBeforeClosingBlock).toBe(false)
-        // …and it really is named there, or the instructions above would point at nothing.
-        expect(allSys.slice(pathsHeader)).toContain(sessionID)
+        const beforePaths = allSys.slice(0, pathsHeader)
+        expect(beforePaths.includes(sessionID)).toBe(false)
+        // …and they really are named there, or the instructions above would point at nothing.
+        const pathsBlock = allSys.slice(pathsHeader)
+        expect(pathsBlock).toContain(sessionID)
+        expect(pathsBlock).toContain("Working directory:")
+        expect(pathsBlock).toContain("PROJECT MEMORY:")
+        // the memory section above refers to paths by ROLE, never by embedding the project path
+        // (the only embedded memory path is the machine-constant global one, which has no
+        // "projects" component — so seeing one before <session-paths> means an id leaked forward)
+        expect(beforePaths.includes(`${path.sep}projects${path.sep}`)).toBe(false)
       },
     })
   })

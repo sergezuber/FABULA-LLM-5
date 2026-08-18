@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.235.0"
+export const FABULA_VERSION = "0.236.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.236.0",
+    date: "2026-08-18",
+    items: [
+      {
+        ru: "Приложение больше не может занять памяти больше, чем у машины есть. Перед загрузкой модели FABULA считает, какое окно контекста машина потянет — и в этом расчёте место, уже занятое системой, браузером и всем остальным, было записано КОНСТАНТОЙ в 6 ГБ, сколько бы там ни было занято на самом деле. На 48-гигабайтном Mac, где было занято около 19, расчёт разрешил окно, пик которого требует 34 ГБ при 28 свободных: разговор рос в окно, которое машина не могла удержать, и на середине задачи всё вставало намертво. Теперь занятость измеряется, а не предполагается — ровно так, как это уже делалось для дискретных видеокарт. На той же машине это даёт окно, которое помещается с запасом. Объявленный минимум сохранён: на секунду притихшая машина не покупает себе лишнего.",
+        en: "The app can no longer commit more memory than the machine has. Before loading a model FABULA works out what context window the machine can hold — and in that arithmetic the space already taken by the system, the browser and everything else was written down as a CONSTANT 6 GB, however much was really in use. On a 48 GB Mac holding about 19, it authorised a window whose peak needs 34 GB against 28 free: the conversation grew into a window the machine could not hold, and everything froze solid halfway through the task. The occupancy is now measured rather than assumed — exactly as it already was for discrete graphics cards. On the same machine that yields a window which fits with room to spare. The declared minimum stays: a machine that happens to be quiet for a second buys itself nothing extra.",
+      },
+    ],
+  },
   {
     version: "0.235.0",
     date: "2026-08-17",

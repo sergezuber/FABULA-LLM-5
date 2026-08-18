@@ -207,11 +207,21 @@ describe("planWindow — concurrent slots", () => {
 describe("policyFor: the machine gets a policy, or an honest refusal — never someone else's numbers", () => {
   const GIB = 1024 ** 3
 
-  test("unified memory keeps the numbers that were measured on it", () => {
-    expect(policyFor({ kind: "unified", totalBytes: 48 * GIB, usedBytes: 20 * GIB })).toEqual(DEFAULT_POLICY)
-    // A CPU-only pool has the same shape — one pool the system can reclaim from — so the same numbers mean
-    // the same thing there.
-    expect(policyFor({ kind: "cpu-only", totalBytes: 32 * GIB, usedBytes: 8 * GIB })).toEqual(DEFAULT_POLICY)
+  test("unified memory keeps the JUDGEMENTS measured on it, and reads the reserve off the machine", () => {
+    // The commit fraction, the floor and the quantum are the numbers measured on unified memory and they
+    // transfer unchanged. The reserve does NOT: it stands for what the desktop holds, and that is a
+    // reading — the same one the device branch below already takes. Pinning it to the constant is what
+    // let a 48 GB Mac holding 19 GiB be planned as though it held 6 (measured 2026-08-18).
+    const busy = policyFor({ kind: "unified", totalBytes: 48 * GIB, usedBytes: 20 * GIB })!
+    expect(busy.commitFraction).toBe(DEFAULT_POLICY.commitFraction)
+    expect(busy.floorTokens).toBe(DEFAULT_POLICY.floorTokens)
+    expect(busy.quantumTokens).toBe(DEFAULT_POLICY.quantumTokens)
+    expect(busy.systemReserveBytes).toBe(20 * GIB)
+    // A CPU-only pool has the same shape — one pool the system can reclaim from — so it reads the same way.
+    const cpu = policyFor({ kind: "cpu-only", totalBytes: 32 * GIB, usedBytes: 8 * GIB })!
+    expect(cpu.systemReserveBytes).toBe(8 * GIB)
+    // Below the declared floor the floor still wins: a momentarily quiet machine buys no extra licence.
+    expect(policyFor({ kind: "unified", totalBytes: 48 * GIB, usedBytes: 1 * GIB })).toEqual(DEFAULT_POLICY)
   })
 
   test("a discrete card gets a plan, and its reserve is MEASURED rather than judged", () => {
@@ -286,5 +296,48 @@ describe("a device's commitment is its own declared judgement", () => {
   test("a pool nobody described is refused, not approximated", () => {
     expect(policyFor({ kind: "unknown", totalBytes: 24 * 1024 ** 3, usedBytes: 0 })).toBeNull()
     expect(policyFor({ kind: "discrete-vram", totalBytes: 0, usedBytes: 0 })).toBeNull()
+  })
+})
+
+describe("policyFor: unified memory reserves what the machine actually holds", () => {
+  const GiB = 1024 ** 3
+
+  // THE CASE THAT TOOK THE MACHINE DOWN, 2026-08-18. A 48 GB Mac holding ~19 GiB was planned as if it
+  // held 6, and the window that came out peaked above what was free. The numbers here are the measured
+  // ones: 48 GB total, 19 GiB in use by the desktop, 15.13 GB of weights, 236,286 B per token.
+  const TOTAL = 48 * GiB
+  const HELD = 19 * GiB
+  const WEIGHTS = 15.13e9
+  const PER_TOKEN = 236286
+
+  test("a busy machine is planned smaller than an idle one", () => {
+    const busy = policyFor({ kind: "unified", totalBytes: TOTAL, usedBytes: HELD })!
+    const idle = policyFor({ kind: "unified", totalBytes: TOTAL, usedBytes: 3 * GiB })!
+    expect(busy.systemReserveBytes).toBeGreaterThan(idle.systemReserveBytes)
+    // The idle machine keeps the declared floor rather than dropping below it: a snapshot of quiet is
+    // not a licence to commit more than the policy ever intended.
+    expect(idle.systemReserveBytes).toBe(DEFAULT_POLICY.systemReserveBytes)
+  })
+
+  test("the window it authorises fits in the memory that was actually free", () => {
+    const policy = policyFor({ kind: "unified", totalBytes: TOTAL, usedBytes: HELD })!
+    const plan = planWindow({
+      policy, passportTokens: 262144, totalBytes: TOTAL,
+      weightsBytes: WEIGHTS, bytesPerToken: PER_TOKEN, slots: 1,
+    })
+    // MEASURED ON THIS MACHINE: a context's PEAK occupancy is 15.9 GiB + 0.171 GiB per 1000 tokens
+    // (five points, monotone, intercept = the weights). The old flat reserve produced 106,496 tokens,
+    // which peaks at 34.1 GiB against 28.6 GiB free. Whatever this plan is, its peak must fit.
+    const peakGiB = 15.9 + 0.171 * (plan.tokens / 1000)
+    const freeGiB = (TOTAL - HELD) / GiB
+    expect(plan.fits).toBe(true)
+    expect(peakGiB).toBeLessThan(freeGiB)
+    expect(plan.tokens).toBeLessThan(106496)
+  })
+
+  test("an unmeasured machine is planned exactly as before", () => {
+    // usedBytes 0 means "did not measure", never "nothing is in use" — platform/memory.ts says so, and a
+    // machine we cannot read must not be planned more aggressively than the declared floor.
+    expect(policyFor({ kind: "unified", totalBytes: TOTAL, usedBytes: 0 })).toEqual(DEFAULT_POLICY)
   })
 })

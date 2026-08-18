@@ -880,9 +880,21 @@ export async function ensureLoadedAtPlannedWindow(
     // is not a description of a machine but the absence of one — and a plan built on it would be a guess
     // wearing a measurement's clothes. Before this, a user with a graphics card got no plan at all.
     const reading = memoryReading()
+    // WHAT THE POOL HOLDS THAT THIS PLAN DOES NOT ALREADY COUNT. `planWindow` subtracts the other
+    // residents and this model's own weights as their own terms, so handing it the raw occupancy would
+    // charge for them twice and shrink every window on a machine that is merely already serving. The
+    // figure the policy wants is the REST: the desktop, the browser, the editor — everything that will
+    // still be there after this model is reloaded. On a device the driver's `used` is already exactly
+    // that, so only the unified reading needs the subtraction.
+    const otherResidentBytes = residentsOther(served, modelId).reduce((n, r) => n + Math.max(0, Number(r.bytes) || 0), 0)
+    const ownWeightsHeld = me.loadedWindow > 0 ? weights : 0
     const pool = reading.kind === "discrete-vram"
       ? { kind: reading.kind, totalBytes: reading.total, usedBytes: reading.used }
-      : { kind: reading.kind, totalBytes: totalBytes(), usedBytes: usedBytes() }
+      : {
+          kind: reading.kind,
+          totalBytes: totalBytes(),
+          usedBytes: Math.max(0, usedBytes() - otherResidentBytes - ownWeightsHeld),
+        }
     const policy = policyFor(pool)
     if (!policy) {
       return { acted: false, window: me.loadedWindow, reason: noPolicyReason(pool) }

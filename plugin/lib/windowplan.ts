@@ -151,7 +151,27 @@ export const DEVICE_COMMIT_FRACTION = 0.9
  */
 export function policyFor(source: PolicySource): WindowPolicy | null {
   if (source.kind === "unknown") return null
-  if (source.kind === "unified" || source.kind === "cpu-only") return DEFAULT_POLICY
+  if (source.kind === "unified" || source.kind === "cpu-only") {
+    // WHAT THE DESKTOP HOLDS IS A READING, NOT A CONSTANT — and this branch used to be the only place
+    // that did not take it. The device branch below reserves `held + headroom` because a card's driver
+    // reports what is already allocated; on unified memory the desktop shares the very same pool, so the
+    // same question is not merely valid, it is the one that decides whether a plan is survivable.
+    //
+    // MEASURED 2026-08-18, on the session that took the machine down. A flat 6 GiB reserve on a 48 GB
+    // Mac holding ~19 GiB authorised a 106,496-token window. The peak cost of a context is
+    // 15.9 GiB + 0.171 GiB per 1000 tokens (fitted from five points on this machine, r-squared aside the
+    // trend is monotone and the intercept is the weights), so that window peaks at 34.1 GiB against
+    // 28.6 GiB free — the machine cannot hold the window its own planner authorised. The conversation
+    // then grows into it and dies on the way. Reading the occupancy instead yields ~53k tokens here,
+    // which peaks at 25.0 GiB and fits.
+    //
+    // The floor stays: `held` is a snapshot and a momentarily quiet machine must not buy a window that a
+    // busy one cannot keep. `usedBytes` of 0 means "did not measure" (see platform/memory.ts) and takes
+    // the declared floor unchanged, so a machine we cannot read is planned exactly as before.
+    const held = Number.isFinite(source.usedBytes) && source.usedBytes > 0 ? source.usedBytes : 0
+    if (!held) return DEFAULT_POLICY
+    return { ...DEFAULT_POLICY, systemReserveBytes: Math.max(DEFAULT_POLICY.systemReserveBytes, held) }
+  }
   // Device memory: the reserve is MEASURED (what is already held) plus declared headroom.
   if (!Number.isFinite(source.totalBytes) || source.totalBytes <= 0) return null
   const held = Number.isFinite(source.usedBytes) && source.usedBytes > 0 ? source.usedBytes : 0

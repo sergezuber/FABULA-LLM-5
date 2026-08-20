@@ -48,6 +48,35 @@ start)
     [ -d "$path" ] && ln -sfn "$path" "$MODEL_DIR/$id" || echo "  ! нет модели: $path"
   done <<< "$MODELS"
 
+  # ПОТОЛОК ПАМЯТИ РАНТАЙМА. Его сторож сравнивает «занято ВСЕЙ машиной + модель» с этим числом, а не
+  # со своим собственным расходом — процесс сервера при этом держит десятые доли гигабайта. Пришпиленные
+  # по умолчанию 32 ГБ ниже того, что машина реально может заплатить: на 48-гигабайтной 20-гигабайтная
+  # модель не влезала, стоило открыть браузер (живой отказ 2026-08-20: «projected 36.47GB would exceed
+  # the dynamic memory ceiling 32.00GB, current: 16.52GB»). Число берётся НЕ с потолка, а из той же
+  # политики, которой FABULA считает окно модели (plugin/lib/windowplan.ts DEFAULT_POLICY): всего минус
+  # системный резерв, умножить на долю, которую машине можно закоммитить. Одно определение — один ответ.
+  echo "-- потолок памяти рантайма по политике FABULA"
+  "$OMLX_PY" - "$(sysctl -n hw.memsize)" <<'CEIL'
+import json, os, sys
+tot = int(sys.argv[1])
+SYSTEM_RESERVE = 6 * 1024 ** 3   # windowplan.ts DEFAULT_POLICY.systemReserveBytes
+COMMIT_FRACTION = 0.90           # windowplan.ts DEFAULT_POLICY.commitFraction
+ceiling = round((tot - SYSTEM_RESERVE) * COMMIT_FRACTION / 2 ** 30, 1)
+p = os.path.expanduser("~/.omlx/settings.json")
+if os.path.exists(p):
+    d = json.load(open(p)); m = d.setdefault("memory", {})
+    old = m.get("memory_guard_custom_ceiling_gb")
+    if old != ceiling:
+        m["memory_guard_custom_ceiling_gb"] = ceiling
+        m.setdefault("memory_guard_tier", "custom")
+        json.dump(d, open(p, "w"), indent=2)
+        print(f"   потолок {old} -> {ceiling} ГиБ (машина {tot / 2 ** 30:.0f} ГиБ)")
+    else:
+        print(f"   потолок уже {ceiling} ГиБ")
+else:
+    print("   ! ~/.omlx/settings.json нет — пропускаю")
+CEIL
+
   echo "-- настройки DFlash для каждой модели"
   "$OMLX_PY" - "$CTX" "$DRAFT" <<'PY'
 import json, os, sys, shutil

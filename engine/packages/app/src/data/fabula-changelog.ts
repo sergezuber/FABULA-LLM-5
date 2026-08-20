@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.242.0"
+export const FABULA_VERSION = "0.243.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.243.0",
+    date: "2026-08-20",
+    items: [
+      {
+        ru: "Ускоритель больше не отказывается загрузить модель, когда памяти на самом деле хватает. Его сторож памяти сравнивает «занято всей машиной плюс модель» с потолком, а потолок стоял на 32 ГБ независимо от того, сколько памяти в машине. На сорокавосьмигигабайтной этого хватало ровно до момента, когда открыт браузер: двадцатигигабайтная модель переставала влезать, и вместо ответа приходила ошибка про превышение потолка — хотя свободного места было достаточно. Теперь потолок вычисляется из той же политики, которой FABULA считает окно модели: объём машины минус запас для системы, умноженный на долю, которую можно занять. Одно правило — один ответ, и на машине любого размера оно даёт своё число.",
+        en: "The accelerator no longer refuses to load a model when there is in fact enough memory. Its memory guard compares «what the whole machine is using, plus the model» against a ceiling, and that ceiling was pinned at 32 GB regardless of how much memory the machine has. On a forty-eight gigabyte one that held right up until a browser was open: a twenty gigabyte model stopped fitting and an error about exceeding the ceiling arrived instead of an answer, with room to spare. The ceiling is now derived from the same policy FABULA uses to size a model's window: the machine's memory less a reserve for the system, times the share that may be committed. One rule, one answer, and it yields its own number on a machine of any size.",
+      },
+    ],
+  },
   {
     version: "0.242.0",
     date: "2026-08-20",

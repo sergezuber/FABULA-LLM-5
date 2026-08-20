@@ -145,7 +145,7 @@ async function gather(dir: string, nowMs: number): Promise<ProjectFacts> {
   // the local model's KV-cache of the large, static system+tools prefix — forcing a full ~67k-token
   // re-prefill EACH step (measured 2026-07-06: a stable system reuses cache ≈0.3s vs ≈13-75s cold).
   // The model can run `git status` itself when it needs the working set. Keeping the prefix byte-stable
-  // is the single biggest per-step speedup on local models. (Measured cache probe in private-bench/.)
+  // is the single biggest per-step speedup on local models. (Measured with a cache probe.)
   const branch = (await git(dir, ["rev-parse", "--abbrev-ref", "HEAD"])).trim()
   if (branch) facts.branch = branch
   // verify command (cheap: one readdir + maybe package.json)
@@ -252,13 +252,31 @@ export const FabulaContext: Plugin = async (input: any) => {
         // pinned English onto a Russian conversation and the reader got an English answer (measured live
         // 2026-07-28: «о чем книга?» answered in English). A turn whose text parts are all synthetic is
         // skipped; the steer lands on the reader's own words.
-        const last = [...messages]
-          .reverse()
-          .find(
-            (m: any) =>
-              (m?.info?.role ?? m?.role) === "user" &&
-              (Array.isArray(m?.parts) ? m.parts : []).some((p: any) => typeof p?.text === "string" && !p?.synthetic),
-          )
+        // ПИН СТАВИТСЯ КАЖДОМУ пользовательскому сообщению, а не только последнему.
+        //
+        // ИЗМЕРЕНО 2026-08-20: раньше подсказка дописывалась к текущему сообщению и НЕ сохранялась,
+        // поэтому на следующем ходу то же сообщение уходило уже без неё:
+        //   ход1: {"role":"user","content":"Одним словом: альфа\n\n[Write the entire answer in Russian…]"}
+        //   ход2: {"role":"user","content":"Одним словом: альфа"}
+        // История переставала совпадать с тем, что модель уже видела, — расхождение на 48-м символе
+        // первого же сообщения, то есть сразу за системной частью. Префикс-кэш сравнивает С НАЧАЛА,
+        // поэтому дальше этой точки не совпадало НИЧЕГО: каждый ход перечитывал ~30 000 токенов заново
+        // (80-93с на ход). Соседний блок в этом же файле лечит ровно этот класс тем же способом —
+        // напоминание сделали неизменной частью истории, а не переписыванием байтов в её начале.
+        // Подсказка детерминирована от текста сообщения, поэтому применение её ко всем даёт побайтно
+        // одинаковую историю на любом ходу.
+        const userMsgs = messages.filter(
+          (m: any) =>
+            (m?.info?.role ?? m?.role) === "user" &&
+            (Array.isArray(m?.parts) ? m.parts : []).some((p: any) => typeof p?.text === "string" && !p?.synthetic),
+        )
+        const last = userMsgs[userMsgs.length - 1]
+        for (const m of userMsgs) {
+          const ps = Array.isArray(m?.parts) ? m.parts : []
+          const tp = [...ps].reverse().find((p: any) => typeof p?.text === "string" && !p?.synthetic)
+          if (!tp) continue
+          if (!String(tp.text).includes("[Write the entire answer in ")) tp.text += languageSteer(String(tp.text))
+        }
         const parts = last?.parts
         if (!Array.isArray(parts)) return
         const textPart = [...parts].reverse().find((p: any) => typeof p?.text === "string" && !p?.synthetic)

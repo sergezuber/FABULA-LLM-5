@@ -8,6 +8,7 @@
 //
 // The numbers below are the REAL measured ones, not invented fixtures.
 import { describe, test, expect } from "bun:test"
+import { readFileSync } from "fs"
 import { rescaleAboveBaseline, resolveThresholds, defaultThresholdsFor } from "../../src/session/prune"
 
 const WINDOW = 131_072
@@ -69,5 +70,39 @@ describe("thresholds are measured against the room the conversation actually has
       expect(scaled[0]).toBeGreaterThan(prefix)
       expect(scaled[scaled.length - 1]).toBeLessThan(WINDOW)
     }
+  })
+})
+
+describe("the thresholds and the baseline must live in the SAME space", () => {
+  // MEASURED BYPASS (2026-08-18). `defaultThresholdsFor` produces fractions of `usable()`, but the
+  // baseline and the count it is compared against are RAW totals. Passing `usable()` as the room made
+  // `baseline >= windowSize` true on the failing configuration (48,027 >= 29,632), so the rescale
+  // returned the ABSOLUTE thresholds untouched and the largest of them (16,632) was crossed by the
+  // prompt alone. That sets `maxCrossed`, and prompt.ts reads it as
+  // `overflowCheck(...) || maxThresholdCrossed(...)` — so the compaction fix was bypassed entirely
+  // and did nothing in production. The room has to be measured where the baseline lives.
+  const CONTEXT = 69_632
+  const USABLE = 29_632 // context − 20,000 output − 20,000 summary
+  const BASELINE = 48_027 // smallest real turn total of the failing session
+  const RESOLVED = resolveThresholds(defaultThresholdsFor(USABLE), USABLE)
+
+  test("the defect: with one space the rescale degenerates and the prompt crosses the top threshold", () => {
+    expect(rescaleAboveBaseline(RESOLVED, USABLE, BASELINE)).toEqual(RESOLVED)
+    expect(BASELINE).toBeGreaterThanOrEqual(RESOLVED[RESOLVED.length - 1]!)
+  })
+
+  test("with the room measured where the baseline lives, nothing is crossed by the prompt", () => {
+    const scaled = rescaleAboveBaseline(RESOLVED, USABLE, BASELINE, CONTEXT)
+    for (const t of scaled) expect(t).toBeGreaterThan(BASELINE)
+    expect(scaled[scaled.length - 1]!).toBeLessThan(CONTEXT)
+  })
+
+  test("prune passes the room window — the wiring, not just the rule", () => {
+    // The pure function above is correct either way; what makes it reach production is the 4th
+    // argument at the call site. Read it, so removing it fails here instead of in a live session.
+    const src = readFileSync(new URL("../../src/session/prune.ts", import.meta.url), "utf8")
+    const call = src.match(/rescaleAboveBaseline\(resolved,[^)]*\)/)
+    expect(call).not.toBeNull()
+    expect(call![0]).toContain("baselineWindow(input.model)")
   })
 })

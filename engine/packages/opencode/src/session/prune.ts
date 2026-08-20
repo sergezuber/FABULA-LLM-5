@@ -7,7 +7,8 @@ import { Log } from "../util"
 import { Config } from "@/config"
 import { NotFoundError } from "@/storage"
 import { Effect, Layer, Context } from "effect"
-import { pressureLevel, usable } from "./overflow"
+import { baselineWindow, pressureLevel, tokenCount, usable } from "./overflow"
+import { observeBaseline, rescaleAboveBaseline } from "./prompt-baseline"
 import { trace } from "./trace"
 import { SessionStatus } from "./status"
 import { foregroundBusy, waitExpired, POLL_MS } from "./background-defer"
@@ -115,15 +116,7 @@ export function parseThreshold(s: string, windowSize: number): number {
  * the model or the belt and it re-derives itself. A baseline at or above the window degrades to the old
  * absolute thresholds rather than producing nonsense.
  */
-export function rescaleAboveBaseline(
-  thresholds: readonly number[],
-  windowSize: number,
-  baseline: number,
-): number[] {
-  if (!(windowSize > 0) || !(baseline > 0) || baseline >= windowSize) return [...thresholds]
-  const room = windowSize - baseline
-  return thresholds.map((t) => Math.round(baseline + (t / windowSize) * room))
-}
+export { rescaleAboveBaseline }
 
 export function resolveThresholds(raw: readonly string[], windowSize: number, reserved?: number): number[] {
   const effectiveReserved = reserved ?? CHECKPOINT_RESERVED
@@ -172,6 +165,8 @@ export interface Interface {
     sessionID: SessionID
     model: Provider.Model
     tokens: MessageV2.Assistant["tokens"]
+    /** The slice these tokens belong to. The baseline is per-slice — see prompt-baseline.ts. */
+    agentID?: string
     lastAssistantTime?: number
     promptOps?: ActorPromptOps
   }) => Effect.Effect<void>
@@ -216,7 +211,7 @@ export const layer: Layer.Layer<
     // is re-sent every request and says nothing about how far the conversation has got. MEASURED, never
     // assumed, and self-correcting: a smaller observation lowers it, so a baseline first taken mid-session
     // (after a restart, say) repairs itself instead of delaying every later checkpoint.
-    const promptBaseline = new Map<SessionID, number>()
+    // Baseline lives in ./prompt-baseline so the compaction trigger measures the same quantity.
     // Per-session signal: the max threshold was just crossed; prompt.ts should
     // trigger discard+rebuild on the next loop iteration.
     const maxCrossed = new Set<SessionID>()
@@ -335,16 +330,19 @@ export const layer: Layer.Layer<
 
       const maxFailures = cfg.checkpoint?.max_writer_failures ?? MAX_WRITER_FAILURES
 
-      const currentTokens =
-        input.tokens.total ||
-        input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write
+      const currentTokens = tokenCount(input.tokens)
 
       // Track the session's irreducible prompt cost, then measure thresholds against the room the
       // CONVERSATION actually has rather than against a number the prompt alone already exceeds.
-      const seenBaseline = promptBaseline.get(input.sessionID)
-      const baseline = seenBaseline === undefined ? currentTokens : Math.min(seenBaseline, currentTokens)
-      promptBaseline.set(input.sessionID, baseline)
-      const thresholds = rescaleAboveBaseline(resolved, windowSize, baseline)
+      const baseline = observeBaseline(input.sessionID, currentTokens, input.agentID)
+      // The thresholds are fractions of `usable()`, but the baseline and `currentTokens` are RAW
+      // totals — two different spaces. Passing `usable()` as the room made `baseline >= windowSize`
+      // true on the measured configuration (48,027 >= 29,632), so the rescale DEGENERATED to the old
+      // absolute thresholds and the max one (16,632) was crossed by the prompt alone. That set
+      // `maxCrossed`, and `prompt.ts` reads it as `overflowCheck(...) || maxThresholdCrossed(...)` —
+      // so the compaction trigger was bypassed entirely and this whole correction did nothing in
+      // production. The room has to be measured where the baseline lives.
+      const thresholds = rescaleAboveBaseline(resolved, windowSize, baseline, baselineWindow(input.model))
       trace("ckpt.thresholds", { sid: input.sessionID, tokens: currentTokens, baseline, first: thresholds[0], last: thresholds[thresholds.length - 1] })
 
       const already = crossed.get(input.sessionID) ?? new Set<number>()
@@ -480,6 +478,7 @@ export const layer: Layer.Layer<
       sessionID: SessionID
       model: Provider.Model
       tokens: MessageV2.Assistant["tokens"]
+      agentID?: string
       lastAssistantTime?: number
       promptOps?: ActorPromptOps
     }) {
@@ -488,7 +487,7 @@ export const layer: Layer.Layer<
 
       if (!isCacheCold(input.model, input.lastAssistantTime)) return
 
-      const pressure = pressureLevel({ cfg, tokens: input.tokens, model: input.model })
+      const pressure = pressureLevel({ cfg, tokens: input.tokens, model: input.model, sessionID: input.sessionID, agentID: input.agentID })
       if (pressure === 0) return
       const level = pressure >= 2 ? 2 : 1
       log.info("pruning", { level })

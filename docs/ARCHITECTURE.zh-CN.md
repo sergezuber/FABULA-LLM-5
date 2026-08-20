@@ -134,7 +134,7 @@ FABULA-LLM-5 是一个**本地优先、面向 macOS 的自主编码智能体**�
 
 ## 3. 插件
 
-一共 40 个插件，每个文件导出一个 `Fabula*` 工厂。下面这张表只挑了有代表性的一部分（始终开启的核心）；每个插件、每件工具的完整现况 —— 包括六个默认关闭的**证明经济**插件（`registry`、`witness`、`daemon`、`relay`、`coordinator`、`buddy`）—— 都在 [`docs/PLUGINS.zh-CN.md`](PLUGINS.zh-CN.md) 里，那份文档由清单生成。
+一共 41 个插件，每个文件导出一个 `Fabula*` 工厂。下面这张表只挑了有代表性的一部分（始终开启的核心）；每个插件、每件工具的完整现况 —— 包括六个默认关闭的**证明经济**插件（`registry`、`witness`、`daemon`、`relay`、`coordinator`、`buddy`）—— 都在 [`docs/PLUGINS.zh-CN.md`](PLUGINS.zh-CN.md) 里，那份文档由清单生成。
 
 | 插件（文件）                | 工厂                 | 职责 |
 |----------------------------|---------------------|----------------|

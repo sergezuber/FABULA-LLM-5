@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.236.0"
+export const FABULA_VERSION = "0.239.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,38 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.239.0",
+    date: "2026-08-20",
+    items: [
+      {
+        ru: "Долгий разговор больше не перечитывает себя заново на каждом ходу. Когда вы пишете на русском, FABULA добавляет к вашему сообщению просьбу отвечать по-русски — и раньше эта просьба добавлялась только к самому свежему сообщению, а через ход то же сообщение уходило в модель уже без неё. Для модели это выглядело как переписанная задним числом история: расхождение начиналось на сорок восьмом символе первого же сообщения, а всё, что дальше, приходилось считать заново. Один ход занимал полторы минуты, из которых полторы уходило на повторное чтение того же самого. Теперь просьба стоит у каждого сообщения одинаково, история не меняется, и уже посчитанное переиспользуется. Замерено на живом приложении: ход сократился с полутора минут до пяти секунд, повторное чтение — с 53 секунд до двух.",
+        en: "A long conversation no longer re-reads itself on every turn. When you write in Russian, FABULA appends a request to answer in Russian to your message — and that request used to be attached only to the newest message, so one turn later the same message went to the model without it. To the model this looked like history rewritten after the fact: the divergence began at the forty-eighth character of the very first message, and everything after it had to be computed again. A single turn took a minute and a half, nearly all of it spent re-reading the same text. The request is now attached to every message alike, the history stays put, and what was already computed is reused. Measured on the live app: a turn fell from a minute and a half to five seconds, and the re-reading from 53 seconds to two.",
+      },
+      {
+        ru: "Список инструментов, который уходит модели в каждом запросе, перестал быть максимальным по умолчанию. Выбор набора делается по задаче, но на короткой просьбе различать нечего, и выбор скатывался к варианту «взять всё» — 113 инструментов и почти тридцать тысяч токенов описаний в каждом запросе. Теперь набор сокращён до сорока четырёх, а описания — до одиннадцати тысяч токенов; остальные инструменты никуда не делись и вызываются по имени, просто их описания не едут в каждый запрос. Само по себе это ускорило ход вдвое.",
+        en: "The list of tools sent to the model on every request is no longer maximal by default. The set is chosen per task, but a short request gives nothing to choose on, and the choice fell back to «take everything» — 113 tools and nearly thirty thousand tokens of descriptions in every request. The set is now forty-four and the descriptions eleven thousand tokens; the other tools are still there and still callable by name, their descriptions simply no longer travel with every request. On its own this halved the turn.",
+      },
+    ],
+  },
+  {
+    version: "0.238.0",
+    date: "2026-08-18",
+    items: [
+      {
+        ru: "Долгая задача больше не уходит в бесконечный круг сжатия и не встаёт намертво. Когда разговор перестаёт помещаться, FABULA сжимает его в краткую сводку и продолжает. Но порог, по которому принималось решение сжимать, считал ВЕСЬ запрос — включая системную часть и описания инструментов, которые уходят в модель заново каждый ход и к ходу разговора отношения не имеют. На узком окне эта неизменная часть одна пробивала порог: сжатие запускалось на первом же ходу, сжимать было нечего, следующий ход пробивал тот же порог — и так по кругу. Замерено на живой задаче «дай рецензию на книгу»: пять запусков сводки за полчаса, ни одной прочитанной главы, а поскольку сжатый разговор не совпадает с уже посчитанным, каждый ход заново перечитывал сорок девять тысяч токенов — скорость чтения упала в тридцать шесть раз, и задача умерла по таймауту. Теперь порог меряет РАЗГОВОР: неизменная часть измеряется у каждой сессии сама и из счёта вычитается. Плюс страховка: сжатие не запускается, если оно заведомо ничего не вернёт — когда сохраняемый им кусок больше всего разговора.",
+        en: "A long task no longer falls into an endless compaction cycle and freezes. When a conversation stops fitting, FABULA compacts it into a summary and carries on. But the threshold deciding when to compact counted the WHOLE request — including the system part and the tool descriptions, which are re-sent to the model every turn and say nothing about how far the conversation has got. On a narrow window that fixed part crossed the threshold on its own: compaction fired on the very first turn, had nothing to compact, and the next turn crossed the same threshold — round and round. Measured on a live \"write me a review of this book\" task: five summariser runs in half an hour, not one chapter read, and because a compacted conversation no longer matches what was already computed, every turn re-read forty-nine thousand tokens from scratch — reading speed fell thirty-six-fold and the task died on a timeout. The threshold now measures the CONVERSATION: the fixed part is measured per session and taken out of the count. Plus a safeguard: compaction does not fire when it provably cannot recover anything — when the slice it keeps is larger than the whole conversation.",
+      },
+      {
+        ru: "Та же починка доведена до конца после независимой проверки: в первом виде она до продукта не доезжала. Во-первых, у длинной задачи есть второй сторож — точки сохранения, — и его пороги считались в других единицах, чем измеряемая величина; из-за этого они вырождались, пробивались одним лишь неизменным началом запроса и запускали ту же обработку в обход исправленного порога. Во-вторых, вспомогательные проходы (разведка, писатель точек сохранения) делят номер сессии с основным разговором, а их запросы короче — и поскольку неизменная часть берётся как наименьшая из виденных, один фоновый проход сбивал её и возвращал круг. Теперь измерение ведётся отдельно для каждого слоя, а комната считается в тех же единицах, что и сам счёт. В-третьих, кусок разговора, который сжатие сохраняет дословно, тоже отмерялся от заражённой величины: он съедал почти всё, что сжатие освобождало, и следующее срабатывание наступало через один короткий ход. Отмеренный от реальной комнаты, он оставляет в шесть раз больше работы между сжатиями.",
+        en: "The same repair, carried to completion after independent verification found that in its first form it did not reach the product. First, a long task has a second guard — checkpoints — and its thresholds were counted in different units from the quantity being measured; they therefore degenerated, were crossed by the unchanging opening of the request alone, and triggered the same handling around the corrected threshold. Second, auxiliary passes (exploration, the checkpoint writer) share the session number with the main conversation and their requests are shorter — and because the unchanging part is taken as the smallest ever seen, one background pass pulled it down and brought the cycle back. The measurement is now kept per layer, and the room is counted in the same units as the count itself. Third, the slice of conversation that compaction keeps verbatim was also measured against the contaminated quantity: it consumed almost everything compaction freed, so the next firing arrived one short turn later. Measured against the real room, it leaves six times as much work between compactions.",
+      },
+      {
+        ru: "Сохранённые куски слишком длинного вывода больше не удаляются раньше срока. Когда вывод инструмента не помещается целиком, FABULA сохраняет полный текст в файл и предлагает его открыть; такие файлы хранятся неделю. Но время создания упаковывалось в поле на пять бит короче, чем нужно, и старшие биты молча терялись — расшифровка давала время с ошибкой почти в два года. Само по себе это сравнение бы пережило, беда в другом: ошибка НЕ постоянная, и два файла, созданные по разные стороны переполнения счётчика, менялись местами по возрасту. В такие дни чистка удаляла ровно те файлы, которые пользователю предложено открыть. Формат имён не тронут — он хранится и задаёт порядок; восстановлены потерянные биты по единственному доступному факту: файл создан в прошлом.",
+        en: "Saved chunks of over-long output are no longer deleted before their time. When a tool's output does not fit, FABULA saves the full text to a file and offers to open it; those files are kept for a week. But the creation time was packed into a field five bits too short, and the top bits were dropped in silence — the decode came out almost two years wrong. A comparison would have survived that on its own; the trouble is that the error is NOT constant, so two files created either side of a counter wrap swapped places by age. On those days the cleanup deleted exactly the files the reader had been told to open. The naming format is untouched — it is stored and it defines ordering; the lost bits are instead reconstructed from the one fact available: the file was created in the past.",
+      },
+    ],
+  },
   {
     version: "0.236.0",
     date: "2026-08-18",

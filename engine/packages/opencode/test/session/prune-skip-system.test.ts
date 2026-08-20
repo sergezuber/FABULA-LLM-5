@@ -111,10 +111,18 @@ describe("SessionPrune.fireCheckpoints — system-spawn skip", () => {
             lifecycle: "ephemeral",
           })
 
-          // Tokens above the 50% threshold.
+          // A REAL session's first turn is the prompt alone; the conversation grows on top of it.
+          // The fixture used to jump straight to 60,000 with nothing before it, which makes the
+          // measured baseline equal the count — a conversation of length ZERO — and a checkpoint that
+          // summarises nothing is exactly the waste the baseline work exists to stop. Prime the
+          // session with its prefix first, then send a turn that has genuinely grown past it.
+          const prefix = { input: 20_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
           const tokens = { input: 60_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
 
           // Call with the system-spawn actorID — guard should short-circuit.
+          // Prime the session's prefix first — see the note above the fixture.
+          yield* prune.fireCheckpoints({ sessionID: info.id, model, tokens: prefix, promptOps: {} as any, agentID: "checkpoint-writer-1" })
+
           yield* prune.fireCheckpoints({
             sessionID: info.id,
             model,
@@ -197,10 +205,18 @@ describe("SessionPrune.fireCheckpoints — system-spawn skip", () => {
             lifecycle: "ephemeral",
           })
 
-          // Tokens above the 50% threshold.
+          // A REAL session's first turn is the prompt alone; the conversation grows on top of it.
+          // The fixture used to jump straight to 60,000 with nothing before it, which makes the
+          // measured baseline equal the count — a conversation of length ZERO — and a checkpoint that
+          // summarises nothing is exactly the waste the baseline work exists to stop. Prime the
+          // session with its prefix first, then send a turn that has genuinely grown past it.
+          const prefix = { input: 20_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
           const tokens = { input: 60_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
 
           // Call with the explore subagent's agentID — new mode gate should skip.
+          // Prime the session's prefix first — see the note above the fixture.
+          yield* prune.fireCheckpoints({ sessionID: info.id, model, tokens: prefix, promptOps: {} as any, agentID: "explore-1" })
+
           yield* prune.fireCheckpoints({
             sessionID: info.id,
             model,
@@ -270,9 +286,13 @@ describe("SessionPrune.fireCheckpoints — system-spawn skip", () => {
           const info = yield* ssn.create({})
           const model = createModel({ context: 100_000, output: 32_000 })
 
+          const prefix = { input: 20_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
           const tokens = { input: 60_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
 
           // No agentID: control case — guard should not fire, enqueue runs.
+          // Prime the session's prefix first — see the note above the fixture.
+          yield* prune.fireCheckpoints({ sessionID: info.id, model, tokens: prefix, promptOps: {} as any, agentID: undefined })
+
           yield* prune.fireCheckpoints({
             sessionID: info.id,
             model,
@@ -354,10 +374,18 @@ describe("SessionPrune.fireCheckpoints — system-spawn skip", () => {
             lifecycle: "persistent",
           })
 
-          // Tokens above the 50% threshold.
+          // A REAL session's first turn is the prompt alone; the conversation grows on top of it.
+          // The fixture used to jump straight to 60,000 with nothing before it, which makes the
+          // measured baseline equal the count — a conversation of length ZERO — and a checkpoint that
+          // summarises nothing is exactly the waste the baseline work exists to stop. Prime the
+          // session with its prefix first, then send a turn that has genuinely grown past it.
+          const prefix = { input: 20_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
           const tokens = { input: 60_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
 
           // Call with the peer's agentID — peer is NOT a subagent, so it fires.
+          // Prime the session's prefix first — see the note above the fixture.
+          yield* prune.fireCheckpoints({ sessionID: info.id, model, tokens: prefix, promptOps: {} as any, agentID: "researcher-1" })
+
           yield* prune.fireCheckpoints({
             sessionID: info.id,
             model,

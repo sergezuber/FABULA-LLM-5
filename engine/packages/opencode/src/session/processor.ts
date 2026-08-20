@@ -542,7 +542,7 @@ export const layer: Layer.Layer<
               .pipe(Effect.ignore, Effect.forkIn(scope))
             if (
               !ctx.assistantMessage.summary &&
-              isOverflow({ cfg: yield* config.get(), tokens: usage.tokens, model: ctx.model })
+              isOverflow({ cfg: yield* config.get(), tokens: usage.tokens, model: ctx.model, sessionID: ctx.sessionID, agentID: ctx.assistantMessage.agentID })
             ) {
               ctx.needsOverflowHandling = true
             }

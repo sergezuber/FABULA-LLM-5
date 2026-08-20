@@ -201,7 +201,7 @@ MY_API_KEY=sk-...
 
 这些守卫守的是**三道门，不是一道**：能拦住某个工具的规则，经由 shell 做同一件事时照样拦得住；而没有容器的代码，会跑在操作系统的内核配置档之下 —— 前提是这个平台有一个：macOS 上是 Seatbelt，Linux 上是 bubblewrap。Windows 没有逐条命令的内核禁闭，那里的隔离就交给容器后端，`execute_code` 会照实说明，而不是装作有。让一个智能体去装一个开机启动项，它三道门都会伸手试 —— 不是要攻击什么，只是要把任务做完。
 
-完整地图 —— 40 个插件、90 个工具：[`docs/PLUGINS.md`](docs/PLUGINS.zh-CN.md)。
+完整地图 —— 41 个插件、90 个工具：[`docs/PLUGINS.md`](docs/PLUGINS.zh-CN.md)。
 
 凭证之上还能再搭一层可选的**证明经济** —— 发布到内容寻址的注册表、跨模型的见证认证、给团队协作用的证明树。默认关闭：[disrupt 层](docs/PLUGINS.zh-CN.md#颠覆层把-proof-of-done-变成一套证明经济实验性默认关闭)。
 

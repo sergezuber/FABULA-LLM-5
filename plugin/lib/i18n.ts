@@ -62,7 +62,13 @@ export const PLUGIN_I18N: Record<string, PluginI18n> = {
     nameRu: "Защита бюджета контекста",
     descEn: "Stops a single turn from outgrowing the model's context window. A 'read every chapter / all files' task loads the whole corpus into one context, and past the device's memory budget the model server crashes mid-answer ('the model has crashed … Exit code: null'). Near the window it tells the agent to summarise what it has read and drop the raw text; on a bulk-read request it steers to reading in batches with a running summary. Idle on normal turns, so it costs nothing until the context is genuinely large.",
     descRu: "Не даёт одному ходу перерасти контекстное окно модели. Задача «прочти все главы / все файлы» грузит весь корпус в один контекст, и за пределом памяти устройства сервер модели падает посреди ответа («модель упала … Exit code: null»). У границы окна велит агенту сжать прочитанное в сводку и выкинуть сырой текст; на запрос «прочитать всё» направляет читать порциями с накопительной сводкой. На обычных ходах бездействует — ничего не стоит, пока контекст не стал по-настоящему большим.",
-  },  window: {
+  },  dflash: {
+    name: "On-demand accelerated models",
+    nameRu: "Ускоренные модели по требованию",
+    descEn: "Pick a model marked ⚡ and its runtime comes up by itself, for that same request — nothing runs idle while you are not using it. The speed comes from speculative decoding, and the output is bit-identical to ordinary decoding, so there is no quality trade. Measured on this machine: 1.26-1.45x on coding tasks, 1.55x on a 32k context. Uses its own runtime on its own ports, so the ordinary path through LM Studio is untouched.",
+    descRu: "Выбираете модель со значком ⚡ — и нужный движок поднимается сам, к этому же запросу; вхолостую ничего не работает и при входе в систему не запускается. Ускорение даёт спекулятивное декодирование, а вывод при этом побитово тот же, что при обычном, — платить качеством не приходится. Замерено на этой машине: 1.26-1.45x на кодовых задачах, 1.55x на длинном контексте 32k. Работает на своём движке и своих портах, поэтому обычный путь через LM Studio не затрагивается.",
+  },
+  window: {
     name: "Context-window autoloader",
     nameRu: "Автоподбор окна контекста",
     descEn: "Loads the model at the widest context window it and this machine can hold — read from the model and measured on this Mac, never typed into a config. Switch models and the new one comes up at its own full size if it fits, or at the largest size your memory can hold if it does not.",

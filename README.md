@@ -214,7 +214,7 @@ Around the gates: web research, shell, sandboxed code execution, drift-tolerant 
 
 Those guards cover **three doors, not one**: a rule that stops a tool also stops the same thing through the shell, and code without a container runs under the OS kernel profile where the platform has one — Seatbelt on macOS, bubblewrap on Linux. Windows has no per-command kernel confinement, so there the container backend is the isolation, and `execute_code` says so rather than pretending otherwise. An agent asked to install a startup item will reach for all three — not to attack anything, but to finish its task.
 
-The full map — 40 plugins, 90 tools: [`docs/PLUGINS.md`](docs/PLUGINS.md).
+The full map — 41 plugins, 90 tools: [`docs/PLUGINS.md`](docs/PLUGINS.md).
 
 An optional **proof economy** builds on the receipt — publish to a content-addressed registry, cross-model witness attestation, a proof tree for team work. Off by default: [the disrupt layer](docs/PLUGINS.md#the-disrupt-layer--turning-a-proof-of-done-into-a-proof-economy-experimental-off-by-default).
 

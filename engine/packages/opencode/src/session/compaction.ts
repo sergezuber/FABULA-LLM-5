@@ -16,7 +16,7 @@ import { ModelID, ProviderID } from "@/provider/schema"
 import { detectRepeatedCharShingle } from "./prompt/text-ngram-detection"
 import { Effect, Layer, Context } from "effect"
 import { InstanceState } from "@/effect"
-import { isOverflow as overflow, usable } from "./overflow"
+import { isOverflow as overflow, usable, preserveRecentBudget } from "./overflow"
 import { mechanicalSummary, compactionMadeRoom, replacedSize, summarizerSpent } from "./compaction-fallback"
 import { planFold, foldContinuation } from "./compaction-fold"
 import { makeRuntime } from "@/effect/run-service"
@@ -62,20 +62,13 @@ export const PRUNE_MINIMUM = 20_000
 export const PRUNE_PROTECT = 40_000
 const PRUNE_PROTECTED_TOOLS = ["skill"]
 const DEFAULT_TAIL_TURNS = 2
-const MIN_PRESERVE_RECENT_TOKENS = 2_000
-const MAX_PRESERVE_RECENT_TOKENS = 8_000
 type Turn = {
   start: number
   end: number
   id: MessageID
 }
 
-function preserveRecentBudget(input: { cfg: Config.Info; model: Provider.Model }) {
-  return (
-    input.cfg.compaction?.preserve_recent_tokens ??
-    Math.min(MAX_PRESERVE_RECENT_TOKENS, Math.max(MIN_PRESERVE_RECENT_TOKENS, Math.floor(usable(input) * 0.25)))
-  )
-}
+
 
 function turns(messages: MessageV2.WithParts[]) {
   const result: Turn[] = []
@@ -99,6 +92,9 @@ export interface Interface {
   readonly isOverflow: (input: {
     tokens: MessageV2.Assistant["tokens"]
     model: Provider.Model
+    /** The session and slice these tokens belong to — the baseline is per-slice. */
+    sessionID?: string
+    agentID?: string
   }) => Effect.Effect<boolean>
   readonly prune: (input: { sessionID: SessionID; agentID?: string }) => Effect.Effect<void>
   readonly process: (input: {
@@ -145,8 +141,16 @@ export const layer: Layer.Layer<
     const isOverflow = Effect.fn("SessionCompaction.isOverflow")(function* (input: {
       tokens: MessageV2.Assistant["tokens"]
       model: Provider.Model
+      sessionID?: string
+      agentID?: string
     }) {
-      return overflow({ cfg: yield* config.get(), tokens: input.tokens, model: input.model })
+      return overflow({
+        cfg: yield* config.get(),
+        tokens: input.tokens,
+        model: input.model,
+        sessionID: input.sessionID,
+        agentID: input.agentID,
+      })
     })
 
     const estimate = Effect.fn("SessionCompaction.estimate")(function* (input: {
@@ -161,10 +165,12 @@ export const layer: Layer.Layer<
       messages: MessageV2.WithParts[]
       cfg: Config.Info
       model: Provider.Model
+      sessionID?: string
+      agentID?: string
     }) {
       const limit = input.cfg.compaction?.tail_turns ?? DEFAULT_TAIL_TURNS
       if (limit <= 0) return { head: input.messages, tail_start_id: undefined }
-      const budget = preserveRecentBudget({ cfg: input.cfg, model: input.model })
+      const budget = preserveRecentBudget({ cfg: input.cfg, model: input.model, sessionID: input.sessionID, agentID: input.agentID })
       const all = turns(input.messages)
       if (!all.length) return { head: input.messages, tail_start_id: undefined }
       const recent = all.slice(-limit)
@@ -303,6 +309,8 @@ export const layer: Layer.Layer<
         messages: history,
         cfg,
         model,
+        sessionID: input.sessionID,
+        agentID: input.agentID,
       })
       // Allow plugins to inject context or replace compaction prompt.
       const compacting = yield* plugin.trigger(
@@ -713,7 +721,19 @@ export const defaultLayer = Layer.suspend(() =>
 
 const { runPromise } = makeRuntime(Service, defaultLayer)
 
-export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
+/**
+ * NOTE: no caller anywhere in the repo (verified 2026-08-18 across src, plugin, sdk and app). It keeps
+ * the FULL contract — session AND agent slice — deliberately: the baseline that makes this trigger
+ * measure the conversation is per-slice, so a future caller naming only the session would silently
+ * inherit the pre-fix behaviour AND poison the main conversation's baseline with a subagent's smaller
+ * total. See session/prompt-baseline.ts.
+ */
+export async function isOverflow(input: {
+  tokens: MessageV2.Assistant["tokens"]
+  model: Provider.Model
+  sessionID?: string
+  agentID?: string
+}) {
   return runPromise((svc) => svc.isOverflow(input))
 }
 

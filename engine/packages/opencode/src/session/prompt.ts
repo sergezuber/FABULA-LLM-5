@@ -3229,7 +3229,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           // Memory flush nudge at high context pressure
           if (lastFinished && lastFinished.summary !== true && model) {
             const cfg = yield* config.get()
-            const pressure = pressureLevel({ cfg, tokens: lastFinished.tokens, model })
+            const pressure = pressureLevel({ cfg, tokens: lastFinished.tokens, model, sessionID, agentID: lastFinished.agentID })
             if (pressure >= 2) {
               // Inject the nudge as a PERSISTED synthetic part on the last user message. It used to be an
               // in-memory push: present on builds where the trigger held, gone when it did not — and in an
@@ -3362,7 +3362,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             !answered &&
             lastFinished &&
             lastFinished.summary !== true &&
-            (overflowCheck({ cfg: yield* config.get(), tokens: lastFinished.tokens, model }) ||
+            (overflowCheck({ cfg: yield* config.get(), tokens: lastFinished.tokens, model, sessionID, agentID: lastFinished.agentID }) ||
               (yield* prune.maxThresholdCrossed(sessionID)))
           ) {
             // Subagent overflow → per-actor compaction (lossy LLM summarization
@@ -4142,6 +4142,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               sessionID,
               model: lastModelForPrune,
               tokens: lastFinishedForPrune.tokens,
+              agentID: lastFinishedForPrune.agentID,
               lastAssistantTime: lastFinishedForPrune.time.completed,
               promptOps,
             })

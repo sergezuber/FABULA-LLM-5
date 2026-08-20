@@ -8,7 +8,7 @@
 в **Settings ▸ Plugins** и в таблице ниже.
 
 <p align="center">
-  <img src="assets/plugins.svg" alt="Все 40 плагинов FABULA по ролям — UNDERSTAND & PLAN, ACT ON THE WORLD, REMEMBER, PERCEIVE, GUARD EVERY CALL, VERIFY & SHIP (включая пол статического анализа для Go), WHEN THE MODEL FAILS (откат, эскалация), GROW, OWN THE STACK и disrupt-слой PROOF ECONOMY (registry, witness, daemon, relay, coordinator, buddy — по умолчанию выключены); ⚡ отмечает чистые хуки, которые срабатывают сами" width="880">
+  <img src="assets/plugins.svg" alt="Все 41 плагин FABULA по ролям — UNDERSTAND & PLAN, ACT ON THE WORLD, REMEMBER, PERCEIVE, GUARD EVERY CALL, VERIFY & SHIP (включая пол статического анализа для Go), WHEN THE MODEL FAILS (откат, эскалация), GROW, OWN THE STACK и disrupt-слой PROOF ECONOMY (registry, witness, daemon, relay, coordinator, buddy — по умолчанию выключены); ⚡ отмечает чистые хуки, которые срабатывают сами" width="880">
 </p>
 
 ## Что делает система

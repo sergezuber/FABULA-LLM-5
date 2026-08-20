@@ -272,7 +272,7 @@ Therefore:
 
 ## 3. The Plugins
 
-There are 40 plugins. Each file exports one `Fabula*` factory. The table below is a representative
+There are 41 plugins. Each file exports one `Fabula*` factory. The table below is a representative
 subset (the always-on core); the full, current map of every plugin and tool — including the six
 off-by-default **proof-economy** plugins (`registry`, `witness`, `daemon`, `relay`, `coordinator`,
 `buddy`) — lives in [`docs/PLUGINS.md`](PLUGINS.md), generated against the manifest.

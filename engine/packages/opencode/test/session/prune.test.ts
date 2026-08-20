@@ -295,6 +295,17 @@ describe("SessionPrune.fireCheckpoints writer-failure retry", () => {
     cache: { read: 0, write: 0 },
   })
 
+  // A REAL session's first turn is the prompt alone — system prompt plus tool schemas — and the
+  // conversation grows on top of it. A fixture that jumps straight to 60,000 with nothing before it
+  // makes the measured baseline EQUAL the count, i.e. a conversation of length zero, and a checkpoint
+  // that summarises nothing is the waste the baseline work exists to stop. Prime the prefix first.
+  const makePrefixTokens = () => ({
+    input: 15_000,
+    output: 0,
+    reasoning: 0,
+    cache: { read: 0, write: 0 },
+  })
+
   test("three writer failures retry below cap, stop at cap", async () => {
     const harness = makeRetryHarness()
     const promptOps = {} as any
@@ -306,6 +317,9 @@ describe("SessionPrune.fireCheckpoints writer-failure retry", () => {
         const ssn = yield* SessionNs.Service
         const info = yield* ssn.create({})
         const model = createModel({ context: 100_000, output: 32_000 })
+
+        // Prime the session's irreducible prefix — see makePrefixTokens.
+        yield* svc.fireCheckpoints({ sessionID: info.id, model, tokens: makePrefixTokens(), promptOps })
 
         // Pre-seed 3 failure outcomes — one per expected watcher.
         harness.outcomes.push("failure", "failure", "failure")
@@ -380,6 +394,9 @@ describe("SessionPrune.fireCheckpoints writer-failure retry", () => {
         const info = yield* ssn.create({})
         const model = createModel({ context: 100_000, output: 32_000 })
 
+        // Prime the session's irreducible prefix — see makePrefixTokens.
+        yield* svc.fireCheckpoints({ sessionID: info.id, model, tokens: makePrefixTokens(), promptOps })
+
         yield* status.set(info.id, { type: "busy" })
         yield* svc.fireCheckpoints({ sessionID: info.id, model, tokens: makeTokens(), promptOps })
 
@@ -440,6 +457,9 @@ describe("SessionPrune.fireCheckpoints writer-failure retry", () => {
         const ssn = yield* SessionNs.Service
         const info = yield* ssn.create({})
         const model = createModel({ context: 100_000, output: 32_000 })
+
+        // Prime the session's irreducible prefix — see makePrefixTokens.
+        yield* svc.fireCheckpoints({ sessionID: info.id, model, tokens: makePrefixTokens(), promptOps })
 
         // Phase 1: two failures, then success. Success does NOT clear
         // crossed (the checkpoint was written), so the next fire on the

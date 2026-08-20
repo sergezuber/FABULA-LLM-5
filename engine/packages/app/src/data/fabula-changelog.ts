@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.244.0"
+export const FABULA_VERSION = "0.245.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.245.0",
+    date: "2026-08-20",
+    items: [
+      {
+        ru: "Размышление вслух больше не выдаётся за ответ. Когда модель ничего не написала, её внутренние рассуждения переносятся в поле ответа, чтобы ход не пропал совсем, — приём полезный, но у него оказалась цена: штатная проверка «модель только думала» смотрит, есть ли текст, а текст после такого переноса есть. Ход, в котором ответа не было, читался как отвеченный, и проверка выполненности его принимала. Замерено: 64 токена на выходе, «ответ» в 204 символа, побайтно совпадающий с рассуждением рядом, начинающийся словами «пользователь хочет, чтобы я продолжил… дай-ка вспомню, на чём оборвалось». Теперь такой ход опознаётся по точному совпадению текста с рассуждением — не по словам, а по байтам, поэтому настоящий ответ, который всегда отличается, не задет — и работа продолжается вместо того, чтобы объявиться сделанной.",
+        en: "Thinking out loud is no longer passed off as an answer. When the model writes nothing, its reasoning is moved into the answer field so the turn is not lost outright — a useful fallback, but it turned out to have a price: the standing check for «the model only thought» looks for whether there is any text, and after that move there is. A turn that answered nothing read as a turn that answered, and the done-check accepted it. Measured: 64 output tokens, a 204-character «answer» byte-identical to the reasoning beside it, opening with «the user wants me to continue… let me recall where it broke off». Such a turn is now recognised by that exact identity — by bytes, not by wording, so a real answer, which always differs, is untouched — and the work carries on instead of declaring itself finished.",
+      },
+    ],
+  },
   {
     version: "0.244.0",
     date: "2026-08-20",

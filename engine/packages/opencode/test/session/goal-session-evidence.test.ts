@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
-import { goalAttemptProgressed, goalStopLayerFires, sessionShowsTaskEvidence, type ScanMessage , trajectoryFeatures, renderFeatureBlock} from "../../src/session/verify-gate"
+import { badDynamicsSignature, turnAnsweredOnlyWithItsReasoning, goalAttemptProgressed, goalStopLayerFires, sessionShowsTaskEvidence, type ScanMessage , trajectoryFeatures, renderFeatureBlock} from "../../src/session/verify-gate"
 
 /**
  * The conversational short-circuit of the goal stop-layer must be scoped to the SESSION,
@@ -316,5 +316,59 @@ describe("both call sites tell the layer whether the judge has spoken", () => {
   })
   test("it is read from the persisted react count, not invented", () => {
     expect(src).toMatch(/judgeRefusedThisTurn:\s*\(active\.react \?\? 0\) > 0/)
+  })
+})
+
+// MEASURED 2026-08-20 (ses_fe18b7baaffe…): 64 output tokens, a 204-character "answer" byte-identical to
+// the 204-character reasoning beside it — the model thinking out loud, moved into `content` by the
+// transport because it wrote no answer — and the judge accepted it as the finished work.
+describe("a monologue is not an answer", () => {
+  const mono = (t: string): ScanMessage => ({
+    role: "assistant",
+    parts: [{ type: "reasoning", text: t }, { type: "text", text: t }],
+  })
+  const answered = (): ScanMessage => ({
+    role: "assistant",
+    parts: [{ type: "reasoning", text: "let me work out what to say" }, { type: "text", text: "here is the answer" }],
+  })
+
+  test("MEASURED: the visible text is the reasoning verbatim — nothing was delivered", () => {
+    expect(turnAnsweredOnlyWithItsReasoning([user(), mono("The user wants me to continue…")])).toBe(true)
+  })
+
+  test("a real answer differs from the thinking beside it", () => {
+    expect(turnAnsweredOnlyWithItsReasoning([user(), answered()])).toBe(false)
+  })
+
+  test("a turn with no reasoning at all is untouched", () => {
+    expect(turnAnsweredOnlyWithItsReasoning([user(), assistantText()])).toBe(false)
+  })
+
+  test("whitespace either side does not hide the identity", () => {
+    expect(
+      turnAnsweredOnlyWithItsReasoning([
+        user(),
+        { role: "assistant", parts: [{ type: "reasoning", text: " plan " }, { type: "text", text: "plan" }] },
+      ]),
+    ).toBe(true)
+  })
+
+  test("the veto refuses a judge that called such a turn done", () => {
+    const f = trajectoryFeatures([user(), mono("thinking…")])
+    expect(f.answeredOnlyWithReasoning).toBe(true)
+    const v = badDynamicsSignature(f)
+    expect(v.veto).toBe(true)
+    expect(v.reason).toContain("no answer")
+  })
+
+  test("a delivered answer is NOT vetoed on this ground", () => {
+    expect(badDynamicsSignature(trajectoryFeatures([user(), answered()])).veto).toBe(false)
+  })
+})
+
+describe("the scan carries what the rule reads", () => {
+  const src = readFileSync(new URL("../../src/session/prompt.ts", import.meta.url), "utf8")
+  test("text and reasoning parts pass their text into the scan", () => {
+    expect(src).toMatch(/text:\s*p\.type === "text" \|\| p\.type === "reasoning" \? p\.text : undefined/)
   })
 })

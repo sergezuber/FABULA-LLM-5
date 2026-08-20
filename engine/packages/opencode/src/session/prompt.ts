@@ -2337,6 +2337,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               type: p.type,
               tool: p.tool,
               synthetic: p.synthetic,
+              // read only by turnAnsweredOnlyWithItsReasoning, which compares an answer against the
+              // reasoning beside it; carried by reference, so it costs nothing to pass along
+              text: p.type === "text" || p.type === "reasoning" ? p.text : undefined,
               metadata:
                 p.type === "tool"
                   ? {
@@ -2550,6 +2553,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               type: p.type,
               tool: p.tool,
               synthetic: p.synthetic,
+              // read only by turnAnsweredOnlyWithItsReasoning, which compares an answer against the
+              // reasoning beside it; carried by reference, so it costs nothing to pass along
+              text: p.type === "text" || p.type === "reasoning" ? p.text : undefined,
               metadata: p.type === "tool" ? { passed: p.state?.metadata?.passed } : undefined,
               // bash edits (sed -i / redirect / git apply) count as source edits — pass the command so
               // turnEvents can classify a tree-mutating bash call as an "edit" (verify-gate.bashEditsTree)

@@ -73,6 +73,8 @@ export interface ScanMessage {
     metadata?: { passed?: boolean; autoRewind?: unknown; notDone?: unknown } | null
     /** tool input (only `command` is read, for bash edit detection) */
     input?: { command?: string } | null
+    /** the part's own text — read ONLY for text and reasoning parts, to tell an answer from a monologue */
+    text?: string
     /** recorded failure text, when the call did not succeed */
     error?: string | null
   }>
@@ -362,6 +364,8 @@ export interface TrajectoryFeatures {
   unverifiedEdits: boolean
   /** Calls the HARNESS itself refused this turn (loop/budget guards). See isHarnessSteer. */
   harnessBlocked: number
+  /** the visible answer is the model's own reasoning verbatim — nothing was delivered */
+  answeredOnlyWithReasoning: boolean
 }
 
 /** The marker the guards stamp on a message they throw. Kept in step with plugin/lib/steer.ts, which is
@@ -396,7 +400,7 @@ export function trajectoryFeatures(messages: readonly ScanMessage[]): Trajectory
       if (md?.notDone != null) notDone++
     }
   }
-  return { verifyGreen, verifyRed, lastVerify, edits, rewinds, notDone, unverifiedEdits: needsForcedVerify(messages) , harnessBlocked }
+  return { verifyGreen, verifyRed, lastVerify, edits, rewinds, notDone, unverifiedEdits: needsForcedVerify(messages) , harnessBlocked, answeredOnlyWithReasoning: turnAnsweredOnlyWithItsReasoning(messages) }
 }
 
 /**
@@ -404,10 +408,44 @@ export function trajectoryFeatures(messages: readonly ScanMessage[]): Trajectory
  * not-done? Fires ONLY on hard, unambiguous signals so it never traps a genuine "done" (a clean green
  * trajectory is never vetoed). Order matters for a single honest `reason`.
  */
+// AN ANSWER THAT IS ONLY THE MODEL THINKING OUT LOUD IS NOT AN ANSWER.
+//
+// A reasoning model that produces no answer leaves `content` empty, and the transport then moves
+// `reasoning_content` into it so the turn is not lost — a deliberate, useful fallback (see the adapter's
+// second translation). The cost was invisible until measured: the engine's own think-only continuation
+// keys on the ABSENCE of a text part, and after that move a text part is present, so a turn that answered
+// nothing reads as a turn that answered. Measured live (ses_fe18b7baaffe…, 2026-08-20): 64 output tokens,
+// a 204-character "answer" byte-identical to the 204-character reasoning beside it, opening with "The
+// user wants me to continue exactly from where I left off… Let me recall what was cut off mid-sentence" —
+// and the judge accepted it as the finished work.
+//
+// The test is byte identity, not language: on the healthy turn of the same session the two differ
+// (1453 against 1258 characters), and any turn that really wrote something differs by construction. A
+// turn with no reasoning at all is untouched, so nothing about an ordinary model changes.
+export function turnAnsweredOnlyWithItsReasoning(messages: readonly ScanMessage[]): boolean {
+  let i = messages.length - 1
+  while (i >= 0 && messages[i].role !== "assistant") i--
+  if (i < 0) return false
+  const join = (kind: string) =>
+    messages[i].parts
+      .filter((p) => p.type === kind && !p.synthetic && typeof p.text === "string")
+      .map((p) => (p.text as string).trim())
+      .join("")
+  const text = join("text")
+  const reasoning = join("reasoning")
+  if (text.length === 0 || reasoning.length === 0) return false
+  return text === reasoning
+}
+
 export function badDynamicsSignature(
   f: TrajectoryFeatures,
   opts?: { hasVerifyCommand?: boolean },
 ): { veto: boolean; reason: string } {
+  if (f.answeredOnlyWithReasoning)
+    return {
+      veto: true,
+      reason: `the turn produced no answer — the visible text is the model's own reasoning verbatim, so nothing has been delivered yet`,
+    }
   if (f.lastVerify === "red")
     return { veto: true, reason: `the most recent verify_done was RED (${f.verifyRed} red / ${f.verifyGreen} green this turn) — the tests are not passing` }
   if (f.notDone > 0 && f.lastVerify !== "green")

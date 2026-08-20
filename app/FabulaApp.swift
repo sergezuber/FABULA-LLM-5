@@ -161,6 +161,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
         let content = UNMutableNotificationContent()
         content.title = title
         if !body.isEmpty { content.body = body }
+        // Named EXPLICITLY rather than left to the default. The default is a short system click, which
+        // after a long run reads as "something broke" rather than "done" — and left unnamed it also
+        // follows whatever the per-app notification setting happens to be, so two machines sound
+        // different for no reason anyone can see. FABULA_NOTIFY_SOUND changes it without a rebuild:
+        // any name from /System/Library/Sounds, "none" for silence, empty for the system default.
+        let soundName = ProcessInfo.processInfo.environment["FABULA_NOTIFY_SOUND"] ?? "Glass"
+        if soundName.lowercased() == "none" {
+            content.sound = nil
+        } else if !soundName.isEmpty {
+            content.sound = UNNotificationSound(named: UNNotificationSoundName("\(soundName).aiff"))
+        } else {
+            content.sound = .default
+        }
         if !href.isEmpty { content.userInfo = ["href": href] }
         let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(req)

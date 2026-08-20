@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.239.0"
+export const FABULA_VERSION = "0.242.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,36 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.242.0",
+    date: "2026-08-20",
+    items: [
+      {
+        ru: "Проверка, ради которой предыдущая правка и делалась, всё это время не могла сработать ни разу. Второй сторож — тот, что должен ловить обещание вместо работы сразу после сжатия — спрашивает, шла ли работа ДО границы. А список, который ему давали, начинается ровно на границе: всё, что было раньше, из него уже вырезано. То есть он искал то, чего в переданных ему данных быть не может, и всегда отвечал «нет». Проверки этого не замечали, потому что подавали ему полную историю, которой у него в работе никогда не бывает. Теперь ответ берётся на одно сообщение глубже — тем же обходом, которым строится само окно, и с остановкой сразу на нужном сообщении, так что чтение не дорожает. За ответом вдобавок не ходят там, где спрашивать не о чем: если сжатия в разговоре ещё не было, вопрос не задаётся вовсе — иначе он обходил бы всю историю на каждом ходу ради ответа «нет». Добавлена проверка, читающая исходник вызова: если однажды этот ответ перестанут передавать или перестанут ограничивать, она об этом скажет.",
+        en: "The check the previous change existed for could never once have fired. The second guard — the one meant to catch a promise standing in for work right after a compaction — asks whether work was in flight BEFORE the boundary. The list it was handed begins exactly at that boundary: everything earlier has already been cut away. So it was looking for something that could not be in the data it was given, and always answered «no». The tests never noticed, because they fed it a full history it never receives in practice. The answer is now read one message deeper, using the same walk the window itself is built from and stopping at that message, so reading costs no more than before. It is also not asked where there is nothing to ask about: a conversation that has never compacted is not walked at all, which it otherwise would be on every turn to answer «no». A check that reads the call site was added: if that answer ever stops being passed, or stops being bounded, it says so.",
+      },
+    ],
+  },
+  {
+    version: "0.241.0",
+    date: "2026-08-20",
+    items: [
+      {
+        ru: "Задача, которую пришлось сжать по дороге, больше не может закончиться на словах «сейчас приступлю». Когда разговор перерастает окно модели, FABULA сворачивает прочитанное в сводку и продолжает работу — но всё, что агент успел сделать, при этом уходит за границу и в видимом окне не остаётся ни одного вызова инструмента. Сторож, решающий, закончена ли работа, читал именно это окно и по нему заключал, что сессия ничего и не делала: остановку принимали без проверки, за ноль миллисекунд, и задача, которая ещё не начиналась, отчитывалась выполненной. Второй сторож, поставленный ровно на этот случай, тоже молчал: если голова разговора слишком велика, она сворачивается не одной сводкой, а несколькими подряд, и он, заглядывая ровно на шаг назад, видел не работу, а соседнюю сводку. Теперь граница сжатия — такой же признак идущей работы, как и точка восстановления, и обе проверки узнают её одинаково; а поиск работы за границей проходит сводки насквозь, сколько бы их ни было. Замерено на живой сессии: тринадцать вызовов инструментов до границы, ноль после — и оба сторожа теперь срабатывают.",
+        en: "A task that had to be compacted along the way can no longer end on «I'll get started now». When a conversation outgrows the model's window, FABULA folds what was read into a summary and carries on — but everything the agent had done moves behind that boundary, leaving the visible window with not a single tool call in it. The guard that decides whether the work is finished reads exactly that window, and concluded from it that the session had never worked: the stop was accepted without any check, in zero milliseconds, and a task that had not yet begun reported itself complete. The second guard, built for precisely this case, was silent too: an oversized head is folded not into one summary but into several in a row, and looking exactly one step back it saw another summary rather than the work. The compaction boundary is now a sign of work in progress just as a restore point is, and both checks recognise it the same way; the search for work behind the boundary now looks straight through the summaries, however many there are. Measured on a live session: thirteen tool calls before the boundary, zero after — and both guards now fire.",
+      },
+    ],
+  },
+  {
+    version: "0.240.0",
+    date: "2026-08-20",
+    items: [
+      {
+        ru: "У сообщения о завершении работы появился собственный звук. Раньше он не задавался вовсе, и система подставляла короткий щелчок — после долгой задачи он звучит скорее как «что-то сломалось», чем как «готово», и вдобавок на разных машинах получался разным, потому что зависел от настроек уведомлений для приложения. Теперь это мягкий колокольчик, названный явно. Сменить его можно без пересборки: FABULA_NOTIFY_SOUND принимает имя любого системного звука, «none» выключает звук совсем.",
+        en: "The finished-work notification has a sound of its own. It was never set, so the system supplied a short click — after a long task that reads as «something broke» rather than «done», and it also came out different on different machines because it followed each one's per-app notification setting. It is now a soft chime, named explicitly. Changing it needs no rebuild: FABULA_NOTIFY_SOUND takes the name of any system sound, and «none» turns the sound off.",
+      },
+    ],
+  },
   {
     version: "0.239.0",
     date: "2026-08-20",

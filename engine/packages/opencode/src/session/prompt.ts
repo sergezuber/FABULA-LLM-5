@@ -7,7 +7,7 @@ import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
 import { classifyAssistantStep } from "./classify"
 import * as InvalidOutput from "./invalid-output"
-import { needsForcedVerify, hasVerifyCommand, goalStopLayerFires, sessionShowsTaskEvidence, trajectoryFeatures, badDynamicsSignature, postCompactionStall, FORCE_VERIFY_REMINDER, FORCE_VERIFY_NOT_DONE, type ScanMessage, turnEndedWithAnswer } from "./verify-gate"
+import { isContextBoundaryPart, needsForcedVerify, hasVerifyCommand, goalStopLayerFires, sessionShowsTaskEvidence, trajectoryFeatures, badDynamicsSignature, postCompactionStall, FORCE_VERIFY_REMINDER, FORCE_VERIFY_NOT_DONE, type ScanMessage, turnEndedWithAnswer } from "./verify-gate"
 import { auditEntry, mcpSourceFor, schemaTokenBreakdown, renderBreakdown, type ToolAuditEntry } from "./tool-audit"
 import { beltFor, beltMasks, beltVisible, stashShadow, NEVER_MASK, type ShadowTool } from "./belt"
 import { readdir } from "node:fs/promises"
@@ -3038,6 +3038,18 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                     finished: m.info.role === "assistant" ? !!(m.info as MessageV2.Assistant).finish : undefined,
                     parts: m.parts,
                   })),
+                  // `msgs` starts AT the boundary, so the step that was in flight before it is not in the
+                  // list. Read one message further back, with the same iteration the window itself is
+                  // built from — without this the detector is unreachable and always false.
+                  //
+                  // ASKED ONLY WHEN THERE IS SOMETHING TO ASK ABOUT. filterCompacted begins the window at
+                  // a boundary when the session has one, so a window that does not start with one has no
+                  // boundary at all — and the read would then walk the WHOLE session on every finish to
+                  // answer false. With the guard the walk stops one message past the head, so the cost is
+                  // the window's length; without it, it is the session's.
+                  msgs[0]?.info.role === "user" &&
+                    msgs[0].parts.some((p) => isContextBoundaryPart(p.type)) &&
+                    MessageV2.priorWorkBeforeWindowFor(sessionID, agentID ?? "main"),
                 )
               ) {
                 postCompactionContinued = true

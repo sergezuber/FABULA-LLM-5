@@ -17,6 +17,7 @@ import type { Provider } from "@/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Effect } from "effect"
 import { EffectLogger } from "@/effect"
+import { isContextBoundaryPart } from "./verify-gate"
 
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
 interface FetchDecompressionError extends Error {
@@ -981,11 +982,41 @@ export function filterCompacted(msgs: Iterable<WithParts>) {
   const result = [] as WithParts[]
   for (const msg of msgs) {
     result.push(msg)
-    if (msg.info.role === "user" && msg.parts.some((p) => p.type === "checkpoint" || p.type === "compaction")) break
+    // ONE definition of what a context boundary is (verify-gate.ts isContextBoundaryPart). This function
+    // decides where the live window STARTS; the goal stop-layer then reads that window and must agree on
+    // the same marker set. It did not: this line knew both markers, sessionShowsTaskEvidence knew only the
+    // checkpoint, and a compacted task session therefore read as one that had never worked.
+    if (msg.info.role === "user" && msg.parts.some((p) => isContextBoundaryPart(p.type))) break
   }
   result.reverse()
   return result
 }
+
+// WAS WORK IN FLIGHT BEFORE THE BOUNDARY? The window `filterCompacted` returns STARTS at the boundary, so
+// nothing before it is ever in that list — which is why the post-compaction stall detector, given only the
+// window, could never answer its own question and returned false for every real session (measured
+// 2026-08-20: the detector has no recorded firing, and a replay of a real 2-pass fold confirms the work
+// turn lies outside the window by construction). The answer lives one message further back, so it is read
+// here, in the module that owns the boundary rule, with the SAME iteration filterCompacted uses: the stream
+// is newest-first, so skip to and past the boundary and the next real assistant step is the one that
+// immediately preceded it. Lazy — it stops at that message, so the cost is the window's length, not the
+// session's.
+export function priorWorkBeforeWindow(msgs: Iterable<WithParts>): boolean {
+  let passed = false
+  for (const msg of msgs) {
+    if (!passed) {
+      if (msg.info.role === "user" && msg.parts.some((p) => isContextBoundaryPart(p.type))) passed = true
+      continue
+    }
+    if (msg.info.role !== "assistant") continue
+    if ((msg.info as { summary?: boolean }).summary === true) continue // a summary is not a work turn
+    return msg.parts.some((p) => p.type === "tool")
+  }
+  return false
+}
+
+export const priorWorkBeforeWindowFor = (sessionID: SessionID, agentID?: string) =>
+  priorWorkBeforeWindow(stream(sessionID, { agentID }))
 
 export const filterCompactedEffect = Effect.fnUntraced(function* (
   sessionID: SessionID,

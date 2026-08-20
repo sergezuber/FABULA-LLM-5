@@ -192,10 +192,23 @@ export function sessionShowsTaskEvidence(messages: readonly ScanMessage[]): bool
   return messages.some((m) =>
     m.role === "assistant"
       ? m.parts.some((p) => p.type === "tool")
-      : m.role === "user" && m.parts.some((p) => p.type === "checkpoint"),
+      : m.role === "user" && m.parts.some((p) => isContextBoundaryPart(p.type)),
   )
 }
 
+// A context boundary is EITHER recovery mechanism, and this is the ONE place that says which.
+// `postCompactionStall` below already treats the two as one class and says so in its own comment; this
+// predicate knew only the checkpoint, so a COMPACTED task session read as a session that had never
+// worked — every tool part lives behind the boundary, and the window the gate reads is the one AFTER it.
+// Measured live (ses_fe1fdd928ffe…, 2026-08-20): thirteen tool parts before the boundary, zero after, the
+// stop-layer short-circuited in 7 ms with no judge call, and a task that had not started reported itself
+// finished. The part exists only because the conversation crossed a threshold, which a session doing real
+// work reaches and a short chat does not; a very long pure chat that crosses it is reclassified for life,
+// which costs one judge call per stop, bounded by the auto-goal cap — the same cost already accepted for
+// the checkpoint, and the reason this is a witness rather than a verdict.
+export function isContextBoundaryPart(type: string): boolean {
+  return type === "checkpoint" || type === "compaction"
+}
 
 /** Did THIS turn produce assistant text at all? Presence only — never length: a one-word answer and a
  *  ten-thousand-word one are equally an answer, and gating on size would make the decision depend on the
@@ -408,7 +421,15 @@ export interface PostCompactionScanMessage {
   parts: ReadonlyArray<{ type: string }>
 }
 
-export function postCompactionStall(messages: ReadonlyArray<PostCompactionScanMessage>): boolean {
+export function postCompactionStall(
+  messages: ReadonlyArray<PostCompactionScanMessage>,
+  // Was work in flight before the FIRST message of `messages`? The production caller passes the live
+  // window, which begins AT the boundary — so the work turn is outside it by construction and the walk
+  // below runs off the start. Supplying this answer (message-v2.ts priorWorkBeforeWindow, one message
+  // further back) is what makes the detector reachable at all. Left undefined it answers exactly as
+  // before: no evidence of prior work, no re-entry — a missing history never invents a stall.
+  priorWorkBeforeList?: boolean,
+): boolean {
   // walk from the end: the CURRENT assistant reply
   let i = messages.length - 1
   while (i >= 0 && messages[i].role !== "assistant") i--
@@ -439,9 +460,18 @@ export function postCompactionStall(messages: ReadonlyArray<PostCompactionScanMe
   }
   if (boundary === null) return false
   // and before the boundary, work was genuinely in flight
+  //
+  // SKIP SUMMARIES WALKING BACK. This function opens by declaring that a summary is not a work turn, and
+  // then — before this line — accepted one as the work turn simply because it was the nearest assistant
+  // message. One rule, applied in one direction only. It cost nothing while a compaction produced exactly
+  // one summary; `planFold` (compaction.ts) now folds an oversized head into N passes and writes N summary
+  // messages, so from the boundary the nearest assistant message is ANOTHER summary and the detector
+  // reported "no work was in flight" for every fold with N > 1. Measured live (ses_fe1fdd928ffe…,
+  // 2026-08-20): "head is ~42850 tokens against a 25536 budget — folding into 3 passes", three summaries,
+  // work turn three messages further back, stall undetected, session ended on an announcement.
   let k = j - 1
-  while (k >= 0 && messages[k].role !== "assistant") k--
-  if (k < 0) return false
+  while (k >= 0 && !(messages[k].role === "assistant" && messages[k].summary !== true)) k--
+  if (k < 0) return priorWorkBeforeList === true
   return messages[k].parts.some((p) => p.type === "tool")
 }
 

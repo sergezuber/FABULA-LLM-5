@@ -19,6 +19,7 @@ import { goalStopLayerFires, sessionShowsTaskEvidence, type ScanMessage , trajec
 
 const user = (_text = "q"): ScanMessage => ({ role: "user", parts: [{ type: "text" }] })
 const userCheckpoint = (): ScanMessage => ({ role: "user", parts: [{ type: "checkpoint" }, { type: "text" }] })
+const userCompaction = (): ScanMessage => ({ role: "user", parts: [{ type: "compaction" }] })
 const assistantText = (): ScanMessage => ({ role: "assistant", parts: [{ type: "text" }] })
 const assistantTool = (tool = "read"): ScanMessage => ({
   role: "assistant",
@@ -49,6 +50,19 @@ describe("sessionShowsTaskEvidence", () => {
   })
 })
 
+  // MEASURED 2026-08-20 (ses_fe1fdd928ffe…): thirteen tool parts before the boundary, ZERO after it, and
+  // the window a gate reads is the one after. filterCompacted — the function that decides where that
+  // window starts — already treated checkpoint and compaction as one class; this predicate knew only the
+  // checkpoint, so a compacted TASK session read as a session that had never worked, the stop-layer
+  // short-circuited in 0 ms with no judge call, and the work was never done.
+  test("a COMPACTION boundary is task evidence exactly like a checkpoint", () => {
+    expect(sessionShowsTaskEvidence([userCompaction(), assistantText()])).toBe(true)
+  })
+
+  test("a compaction-typed part on an ASSISTANT message is not a boundary (role guard pinned)", () => {
+    expect(sessionShowsTaskEvidence([{ role: "assistant", parts: [{ type: "compaction" }] }])).toBe(false)
+  })
+
 describe("goalStopLayerFires — session-scoped conversation test", () => {
   test("MEASURED CASE: restart + continue announcement in a session with prior tool work must reach the judge", () => {
     // [old task turns with tools] … [user «продолжай»] [text-only announcement]
@@ -59,6 +73,10 @@ describe("goalStopLayerFires — session-scoped conversation test", () => {
     const messages = [userCheckpoint(), user("продолжай"), assistantText()]
     expect(goalStopLayerFires({ auto: true, messages })).toBe(false)
   })
+  test("MEASURED: every tool part swept behind a compaction boundary must still reach the judge", () => {
+    expect(goalStopLayerFires({ auto: true, messages: [userCompaction(), assistantText()] })).toBe(false)
+  })
+
   test("pure conversational session keeps the short-circuit (IAL regression guard)", () => {
     const messages = [user("почему небо синее?"), assistantText()]
     expect(goalStopLayerFires({ auto: true, messages })).toBe(true)

@@ -227,7 +227,41 @@ export function outstandingWork(messages: readonly ScanMessage[]): boolean {
   return f.unverifiedEdits || f.lastVerify === "red" || f.notDone > 0
 }
 
-export function goalStopLayerFires(input: { auto: boolean; messages: readonly ScanMessage[] }): boolean {
+// DID THIS RE-ENTRY PRODUCE WORK, or is the run circling?
+//
+// The goal gate re-enters on a "not satisfied" verdict and counted those re-entries with a plain tally
+// capped at three. A tally cannot tell a run that is ADVANCING from one that is stuck, so an answer that
+// grew with every attempt was cut off by arithmetic while the harness's own judge was still saying the
+// work was not done. Measured live (ses_fe18b7baaffe…, 2026-08-20): "attempt=1 goal not satisfied;
+// re-entering", "attempt=2 …", then the cap — and the two attempts in between made FOUR tool calls and
+// added 1453 characters of answer. The reader saw the reply stop mid-sentence on "Coming next turn…".
+//
+// The signal is the one this engine already uses for the same shape one layer down (invalid-output.ts:
+// progress, not a count). Work here means a TOOL CALL — the model acting on the world — deliberately not
+// "it wrote more words", because writing more words is exactly what a stuck model does. So a circling
+// chat still stops at the soft cap (the Infinite Agentic Loop guard, arXiv:2607.01641, is untouched)
+// while a run that is genuinely working keeps its budget, bounded by the hard ceiling either way.
+export function goalAttemptProgressed(messages: readonly ScanMessage[]): boolean {
+  let boundary = -1
+  for (let j = messages.length - 1; j >= 0; j--) {
+    const m = messages[j]
+    if (m.role !== "user") continue
+    // a re-entry is a user message the HARNESS wrote: every part synthetic. A message the reader wrote
+    // starts the turn, so there is no earlier attempt to compare against.
+    if (m.parts.length > 0 && m.parts.every((p) => p.synthetic === true)) boundary = j
+    break
+  }
+  // First attempt of the turn — nothing has been spent yet, so it cannot be a stall.
+  if (boundary < 0) return true
+  return messages.slice(boundary + 1).some((m) => m.role === "assistant" && m.parts.some((p) => p.type === "tool"))
+}
+
+export function goalStopLayerFires(input: {
+  auto: boolean
+  messages: readonly ScanMessage[]
+  /** has the judge already refused a stop in THIS turn? (the persisted goal react count is above zero) */
+  judgeRefusedThisTurn?: boolean
+}): boolean {
   // WHEN IS A TURN FINISHED? Explicit /goal is the user opting INTO the loop and is never short-circuited.
   // Otherwise the stop is honored only for a session that was never a task: no unverified artifact, and no
   // sign the session is task work (a tool part anywhere, or a rebuild boundary).
@@ -246,6 +280,16 @@ export function goalStopLayerFires(input: { auto: boolean; messages: readonly Sc
   // the research answer insufficient, plus the fact that a re-entry arrives AFTER the reader has already
   // been shown the text as final. Neither is fixed by moving this predicate.
   if (input.auto !== true) return false
+  // THE HARNESS DOES NOT OVERRULE ITS OWN EVALUATOR. Every short-circuit below decides a stop WITHOUT
+  // calling the judge — which is sound only while the judge has not yet spoken about this turn. Once it
+  // has looked at the work and said "not satisfied", bypassing it is the harness contradicting itself,
+  // and that is measured, not hypothetical: ses_fe18b7baaffe… (2026-08-20) shows "attempt=1 … re-entering",
+  // "attempt=2 … re-entering", and then this layer honouring the stop in 5 ms with no judge call — on an
+  // answer that broke off mid-sentence promising the rest "next turn". The two cases the exhausted branch
+  // below has to separate — a delivered research answer and a half-written one — differ in MEANING, which
+  // is the judge's job; this keeps the decision with the layer that can read it, bounded by the re-entry
+  // cap exactly as before.
+  if (input.judgeRefusedThisTurn === true) return false
   if (!answerIsTerminal(input.messages)) return false
   // EXHAUSTED is not UNFINISHED, and this is the one place the difference is decidable without reading
   // meaning. When the harness itself has refused further calls and the turn still produced text, the

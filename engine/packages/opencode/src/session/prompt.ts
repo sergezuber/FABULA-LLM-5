@@ -7,7 +7,7 @@ import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
 import { classifyAssistantStep } from "./classify"
 import * as InvalidOutput from "./invalid-output"
-import { isContextBoundaryPart, needsForcedVerify, hasVerifyCommand, goalStopLayerFires, sessionShowsTaskEvidence, trajectoryFeatures, badDynamicsSignature, postCompactionStall, FORCE_VERIFY_REMINDER, FORCE_VERIFY_NOT_DONE, type ScanMessage, turnEndedWithAnswer } from "./verify-gate"
+import { isContextBoundaryPart, goalAttemptProgressed, needsForcedVerify, hasVerifyCommand, goalStopLayerFires, sessionShowsTaskEvidence, trajectoryFeatures, badDynamicsSignature, postCompactionStall, FORCE_VERIFY_REMINDER, FORCE_VERIFY_NOT_DONE, type ScanMessage, turnEndedWithAnswer } from "./verify-gate"
 import { auditEntry, mcpSourceFor, schemaTokenBreakdown, renderBreakdown, type ToolAuditEntry } from "./tool-audit"
 import { beltFor, beltMasks, beltVisible, stashShadow, NEVER_MASK, type ShadowTool } from "./belt"
 import { readdir } from "node:fs/promises"
@@ -2359,10 +2359,20 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             trace("goal.eval", {
               sid: sessionID,
               auto: active.auto === true,
-              stopLayer: goalStopLayerFires({ auto: active.auto === true, messages: scan }),
+              stopLayer: goalStopLayerFires({
+                auto: active.auto === true,
+                messages: scan,
+                judgeRefusedThisTurn: (active.react ?? 0) > 0,
+              }),
               sessTask: sessionShowsTaskEvidence(scan),
             })
-            if (goalStopLayerFires({ auto: active.auto === true, messages: scan })) {
+            if (
+              goalStopLayerFires({
+                auto: active.auto === true,
+                messages: scan,
+                judgeRefusedThisTurn: (active.react ?? 0) > 0,
+              })
+            ) {
               yield* slog.info("goal stop-layer: AUTO goal + no verifiable artifact; answer is terminal; honoring stop", {
                 sessionID,
                 condition: active.condition,
@@ -2450,15 +2460,22 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           }
 
           const count = yield* goal.bumpReact(sessionID)
-          // Auto-armed goals (harness-derived condition) get a much lower cap than
-          // explicit /goal — a mis-judged casual message must not spin for 12 rounds.
-          const reactCap = active.auto === true ? AutoGoal.autoGoalCap(process.env) : MAX_GOAL_REACT
+          // Auto-armed goals (harness-derived condition) get a much lower STALL cap than explicit /goal —
+          // a mis-judged casual message must not spin for 12 rounds. But that cap is a bound on CIRCLING,
+          // not on working: a run whose attempts keep calling tools is advancing, and cutting it by
+          // arithmetic ends a task the harness's own judge has just called unfinished (measured
+          // 2026-08-20 — see goalAttemptProgressed). The absolute ceiling still terminates the edge
+          // regardless of progress, which is the W4 re-entry-bound contract.
+          const softCap = active.auto === true ? AutoGoal.autoGoalCap(process.env) : MAX_GOAL_REACT
+          const progressed = goalAttemptProgressed(scan)
+          const reactCap = progressed ? MAX_GOAL_REACT : softCap
           if (count > reactCap) {
             yield* slog.warn("goal hit re-entry cap; allowing stop", {
               sessionID,
               condition: active.condition,
               count,
               cap: reactCap,
+              progressed,
               auto: active.auto === true,
             })
             yield* bus.publish(Goal.Event.Updated, {

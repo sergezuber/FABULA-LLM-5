@@ -151,9 +151,9 @@ export const RE_ENTRY_EDGES: readonly ReEntryEdge[] = [
     boundEnv: "FABULA_AUTO_GOAL_MAX",
     capEnvParse: "finiteNonNegative",
     cap: 12,
-    capSource: "session/prompt.ts MAX_GOAL_REACT = 12 (explicit /goal; auto-armed is autoGoalCap = 3)",
+    capSource: "session/prompt.ts MAX_GOAL_REACT = 12 (the absolute ceiling for BOTH; autoGoalCap = 3 bounds a STALL only)",
     description:
-      "the stop-condition judge (and the W3 trajectory hard-veto) refused the stop; re-enter. Bounded by the persisted goal react count (autoGoalCap for AUTO, MAX_GOAL_REACT for explicit /goal)",
+      "the stop-condition judge (and the W3 trajectory hard-veto) refused the stop; re-enter. Bounded by the persisted goal react count. The bound is progress-aware (verify-gate.ts goalAttemptProgressed): an attempt that called tools is advancing and is bounded by MAX_GOAL_REACT, while an attempt that produced no tool call is a stall and an AUTO goal is bounded by autoGoalCap. The absolute ceiling is 12 either way, so the edge terminates regardless of progress",
   },
   {
     id: "structured-output-retry",

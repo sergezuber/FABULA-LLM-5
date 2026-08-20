@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.243.0"
+export const FABULA_VERSION = "0.244.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.244.0",
+    date: "2026-08-20",
+    items: [
+      {
+        ru: "Ответ больше не обрывается на полуслове с обещанием «продолжу в следующем ходу». Когда FABULA сама проверяет, выполнена ли задача, и дважды отвечает «нет», работа должна продолжаться — а вместо этого включалась короткая дорожка, которая принимала остановку за пять миллисекунд, вообще не спрашивая проверку. Срабатывала она по признаку «обвязка отказала в очередном одинаковом поиске»: отказ в поиске трактовался как «агенту больше нечего сказать», хотя ему оставалось не искать, а дописывать. Теперь, если проверка уже высказалась против остановки в этом ходе, обойти её нельзя — решает она. Заодно исправлен и запас повторных попыток: он считался простым счётчиком до трёх, поэтому ответ, который рос с каждой попыткой, обрывался арифметикой. Запас тратится на топтание на месте, а не на работу: попытка, в которой агент вызывал инструменты, его не расходует. Общий предел сохранён, так что ход по-прежнему гарантированно завершается.",
+        en: "An answer no longer breaks off mid-sentence promising the rest «next turn». When FABULA checks for itself whether the task is done and twice answers no, the work should carry on — instead a short path took over, accepting the stop in five milliseconds without consulting that check at all. It triggered on «the harness refused another identical search»: a refused search was read as «the agent has nothing left to say», when what remained was not searching but finishing the writing. Now, once the check has spoken against stopping in this turn, nothing may bypass it — it decides. The retry budget is corrected too: it was a plain tally of three, so an answer that grew with every attempt was cut off by arithmetic. The budget is spent on circling, not on working: an attempt in which the agent called tools does not consume it. The absolute ceiling is unchanged, so a turn still always terminates.",
+      },
+    ],
+  },
   {
     version: "0.243.0",
     date: "2026-08-20",

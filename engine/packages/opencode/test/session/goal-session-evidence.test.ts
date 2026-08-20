@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { goalStopLayerFires, sessionShowsTaskEvidence, type ScanMessage , trajectoryFeatures, renderFeatureBlock} from "../../src/session/verify-gate"
+import { readFileSync } from "node:fs"
+import { goalAttemptProgressed, goalStopLayerFires, sessionShowsTaskEvidence, type ScanMessage , trajectoryFeatures, renderFeatureBlock} from "../../src/session/verify-gate"
 
 /**
  * The conversational short-circuit of the goal stop-layer must be scoped to the SESSION,
@@ -218,5 +219,102 @@ describe("the refusal reaches the rule from the engine's own part shape", () => 
       { role: "assistant" as const, parts: [{ type: "text" as const, text: "x" }] },
     ]
     expect(trajectoryFeatures(buried as any).harnessBlocked).toBe(0)
+  })
+})
+
+// The re-entry budget must bound CIRCLING, not working. Measured live (ses_fe18b7baaffe…, 2026-08-20):
+// the judge said "not satisfied" twice, the two attempts in between made four tool calls and added 1453
+// characters of answer, and the run was then ended by a tally of three — the reader's reply stopped
+// mid-sentence on "Coming next turn…".
+describe("goalAttemptProgressed — a re-entry that worked is not a stall", () => {
+  const reentry = (): ScanMessage => ({ role: "user", parts: [{ type: "text", synthetic: true }] })
+  const realUser = (): ScanMessage => ({ role: "user", parts: [{ type: "text" }] })
+  const worked = (): ScanMessage => ({ role: "assistant", parts: [{ type: "tool", tool: "web_search" }, { type: "text" }] })
+  const talked = (): ScanMessage => ({ role: "assistant", parts: [{ type: "text" }] })
+
+  test("MEASURED: after a re-entry the model called tools — that attempt is progress", () => {
+    expect(goalAttemptProgressed([realUser(), talked(), reentry(), worked(), worked(), talked()])).toBe(true)
+  })
+
+  test("after a re-entry the model only talked — that attempt is a stall", () => {
+    expect(goalAttemptProgressed([realUser(), talked(), reentry(), talked()])).toBe(false)
+  })
+
+  test("the FIRST attempt of a turn is never a stall — nothing has been spent yet", () => {
+    expect(goalAttemptProgressed([realUser(), talked()])).toBe(true)
+  })
+
+  test("only the LATEST attempt is judged — earlier tool work does not excuse a circling one", () => {
+    expect(goalAttemptProgressed([realUser(), worked(), reentry(), talked()])).toBe(false)
+  })
+
+  test("a message the reader wrote is not a re-entry boundary", () => {
+    expect(goalAttemptProgressed([reentry(), worked(), realUser(), talked()])).toBe(true)
+  })
+
+  test("degenerate input never throws", () => {
+    expect(goalAttemptProgressed([])).toBe(true)
+    expect(goalAttemptProgressed([{ role: "user", parts: [] }])).toBe(true)
+  })
+})
+
+// The wiring: a pure test stays green against a gate that computes the signal and then ignores it.
+describe("the goal gate spends its budget on stalls, not on work", () => {
+  const src = readFileSync(new URL("../../src/session/prompt.ts", import.meta.url), "utf8")
+  const block = src.slice(src.indexOf("const count = yield* goal.bumpReact"))
+  const body = block.slice(0, block.indexOf("goal hit re-entry cap"))
+
+  test("the cap is chosen by whether the attempt progressed", () => {
+    expect(body).toContain("goalAttemptProgressed(scan)")
+    expect(body).toMatch(/progressed\s*\?\s*MAX_GOAL_REACT\s*:\s*softCap/)
+  })
+
+  test("the absolute ceiling still applies, so the edge terminates either way", () => {
+    expect(body).toContain("MAX_GOAL_REACT")
+  })
+})
+
+// MEASURED 2026-08-20 (ses_fe18b7baaffe…): the judge refused a stop twice — "attempt=1 … re-entering",
+// "attempt=2 … re-entering" — and then this layer honoured the stop in 5 ms with no judge call at all,
+// on an answer that broke off mid-sentence promising the rest "next turn". A short-circuit is sound only
+// while the judge has not yet spoken about the turn.
+describe("the short-circuit never overrules a judge that has already refused", () => {
+  const refused = (): ScanMessage => ({
+    role: "assistant",
+    parts: [{ type: "tool", tool: "web_search", error: "[fabula-steer] LOOP BLOCKED: stop searching" }, { type: "text" }],
+  })
+
+  test("MEASURED: exhausted turn, but the judge already said not-satisfied — it decides, not this layer", () => {
+    expect(
+      goalStopLayerFires({ auto: true, messages: [user(), refused()], judgeRefusedThisTurn: true }),
+    ).toBe(false)
+  })
+
+  test("the SAME turn with no prior refusal keeps the exhausted short-circuit (2026-07-25 case intact)", () => {
+    expect(
+      goalStopLayerFires({ auto: true, messages: [user(), refused()], judgeRefusedThisTurn: false }),
+    ).toBe(true)
+  })
+
+  test("a pure conversation with a spoken judge also reaches the judge again", () => {
+    expect(
+      goalStopLayerFires({ auto: true, messages: [user(), assistantText()], judgeRefusedThisTurn: true }),
+    ).toBe(false)
+  })
+
+  test("omitting the flag preserves the previous behaviour exactly", () => {
+    expect(goalStopLayerFires({ auto: true, messages: [user(), assistantText()] })).toBe(true)
+  })
+})
+
+describe("both call sites tell the layer whether the judge has spoken", () => {
+  const src = readFileSync(new URL("../../src/session/prompt.ts", import.meta.url), "utf8")
+  test("every goalStopLayerFires call passes judgeRefusedThisTurn", () => {
+    const calls = src.split("goalStopLayerFires({").slice(1)
+    expect(calls.length).toBeGreaterThanOrEqual(2)
+    for (const c of calls) expect(c.slice(0, 260)).toContain("judgeRefusedThisTurn")
+  })
+  test("it is read from the persisted react count, not invented", () => {
+    expect(src).toMatch(/judgeRefusedThisTurn:\s*\(active\.react \?\? 0\) > 0/)
   })
 })

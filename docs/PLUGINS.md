@@ -7,7 +7,7 @@ Every capability is a plugin: a single file (`plugin/fabula-*.ts`) with a declar
 timeline **are** the plugins — same names everywhere: in `list_plugins`, in **Settings ▸ Plugins**, and below.
 
 <p align="center">
-  <img src="assets/plugins.svg" alt="All 40 FABULA plugins grouped by role — UNDERSTAND & PLAN, ACT ON THE WORLD, REMEMBER, PERCEIVE, GUARD EVERY CALL, VERIFY & SHIP (including the Go static-analysis floor), WHEN THE MODEL FAILS (rewind, escalate), GROW, OWN THE STACK, and the PROOF ECONOMY disrupt layer (registry, witness, daemon, relay, coordinator, buddy — off by default); ⚡ marks the pure hooks that fire themselves" width="880">
+  <img src="assets/plugins.svg" alt="All 41 FABULA plugins grouped by role — UNDERSTAND & PLAN, ACT ON THE WORLD, REMEMBER, PERCEIVE, GUARD EVERY CALL, VERIFY & SHIP (including the Go static-analysis floor), WHEN THE MODEL FAILS (rewind, escalate), GROW, OWN THE STACK, and the PROOF ECONOMY disrupt layer (registry, witness, daemon, relay, coordinator, buddy — off by default); ⚡ marks the pure hooks that fire themselves" width="880">
 </p>
 
 ## What the system does

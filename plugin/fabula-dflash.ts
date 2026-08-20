@@ -20,6 +20,8 @@ import { gate } from "./lib/manage"
 import { spawn } from "child_process"
 import { homedir } from "os"
 import path from "path"
+import { readFile, writeFile } from "fs/promises"
+import { residencyDecision, residencyFile, parseServed } from "./lib/residency"
 
 const OMLX_PORT = 1236
 const ADAPTER_PORT = 1237
@@ -87,6 +89,42 @@ async function waitUp(port: number, budgetMs: number): Promise<boolean> {
  * готовности. Никогда не бросает: не поднялось — запрос уйдёт как обычно и упадёт своей ошибкой,
  * а не нашей.
  */
+// How many models the runtime is holding. Its health reports the COUNT, never which ones — that is why
+// the id we last dispatched is recorded on our side (lib/residency.ts). Unreachable or unparseable means
+// "cannot tell", and cannot-tell is reported as nothing held, so a runtime that is down is never restarted
+// on residency grounds alone.
+// Frees THIS runtime's memory. `stop` takes the processes down and deliberately leaves the provider
+// entry in place, so the models stay visible in the picker and the next turn that needs one brings the
+// runtime back up.
+async function freeThisRuntime(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    try {
+      const p = spawn("/bin/bash", ["-lc", `'${SCRIPT}' stop >/dev/null 2>&1 || true`], {
+        stdio: "ignore",
+      })
+      p.on("exit", () => resolve())
+      p.on("error", () => resolve())
+      setTimeout(resolve, 6000)
+    } catch {
+      resolve()
+    }
+  })
+}
+
+async function residentCount(): Promise<number> {
+  try {
+    const res = await fetch(`http://127.0.0.1:${OMLX_PORT}/health`, {
+      signal: AbortSignal.timeout(1200),
+    })
+    if (!res.ok) return 0
+    const j: any = await res.json()
+    const n = Number(j?.engine_pool?.loaded_count)
+    return Number.isFinite(n) && n > 0 ? n : 0
+  } catch {
+    return 0
+  }
+}
+
 async function bringUp(): Promise<void> {
   const home = homedir()
   const script = path.join(home, "GitHub", "FABULA-LLM-5", "scripts", "dflash.sh")
@@ -115,13 +153,42 @@ export const FabulaDFlash = async () =>
       if (!enabled()) return
       try {
         const provider = String(input?.provider?.id ?? input?.model?.providerID ?? "")
-        if (provider !== PROVIDER_ID) return
+        if (provider !== PROVIDER_ID) {
+          // THE OTHER DIRECTION OF THE SAME RULE. A turn on some other provider does not need this
+          // runtime at all, and leaving it holding a model is the same "two at once" that the memory
+          // ceiling refuses — only with the roles swapped, and invisible until the next switch back
+          // fails. Stopping it frees the memory and keeps its models in the picker (the provider entry
+          // survives a stop by design); the next turn that needs one brings it up again.
+          if (await residentCount()) {
+            await freeThisRuntime()
+            await writeFile(residencyFile(), JSON.stringify({ lastServed: "" }), "utf8").catch(() => {})
+          }
+          return
+        }
         // Каждый раз, а не только при первом подъёме: между ходами автоподбор окна мог снова
         // загрузить модель LM Studio, и тогда обе окажутся в памяти. Вызов дешёвый и идемпотентный.
         await freeOtherRuntime()
-        if (await answers(ADAPTER_PORT, 600)) return
+
+        // ONE MODEL RESIDENT AT A TIME (lib/residency.ts). The runtime keeps the previous model and
+        // REFUSES the next one when both will not fit — measured: "projected memory 44.97GB would exceed
+        // the metal_cap memory ceiling 37.44GB (current: 23.52GB, model: 21.45GB)", and the turn failed.
+        // Its own pool advertises LRU eviction but the memory guard answers first, so nothing on that
+        // side ever makes room. Here the old model is dropped BEFORE the request goes out — bringUp()
+        // stops the runtime and starts it clean, which is the only eviction lever it exposes.
+        const target = String(input?.model?.modelID ?? input?.model?.id ?? "")
+        const decision = residencyDecision({
+          target,
+          lastServed: parseServed(await readFile(residencyFile(), "utf8").catch(() => undefined)),
+          residentCount: await residentCount(),
+        })
+        const up = await answers(ADAPTER_PORT, 600)
+        if (up && !decision.evict) return
         if (!starting) starting = bringUp().finally(() => (starting = null))
         await starting
+        // Recorded only after the runtime is up for this model: a record written ahead of a failed
+        // start would claim a residency that never happened, and the next switch would skip its eviction.
+        if (target)
+          await writeFile(residencyFile(), JSON.stringify({ lastServed: target }), "utf8").catch(() => {})
       } catch {
         // Ускорение — удобство, а не условие работы: любой сбой здесь молча уступает обычному пути.
       }

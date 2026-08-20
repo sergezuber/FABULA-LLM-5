@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.247.0"
+export const FABULA_VERSION = "0.248.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.248.0",
+    date: "2026-08-20",
+    items: [
+      {
+        ru: "Две модели больше никогда не занимают память одновременно. При смене модели прежняя оставалась загруженной, и новая просто не помещалась — вместо ответа приходила ошибка о превышении потолка памяти, хотя нужно было всего лишь освободить место. Рантайм заявляет вытеснение по давности использования, но его сторож памяти отказывает раньше, чем пул успевает что-либо вытеснить, — то есть сам он место не освободит никогда. Теперь прежняя модель гасится ДО того, как уходит запрос: нужная становится единственной в памяти. Ту же самую модель повторно не трогают, чтобы не терять прогретую; если про прошлое ничего не известно, место освобождается — одна перезагрузка дешевле сорванного хода.",
+        en: "Two models never occupy memory at the same time any more. On switching, the previous one stayed loaded and the new one simply did not fit — an error about exceeding the memory ceiling arrived instead of an answer, when all that was needed was to make room. The runtime advertises least-recently-used eviction, but its memory guard refuses before the pool evicts anything, so it will never free that room by itself. The previous model is now unloaded BEFORE the request goes out: the one being asked for becomes the only model in memory. The same model is left alone rather than reloaded warm; and when nothing is known about the past, room is made anyway — one reload is cheaper than a failed turn.",
+      },
+    ],
+  },
   {
     version: "0.247.0",
     date: "2026-08-20",

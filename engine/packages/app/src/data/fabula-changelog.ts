@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.246.0"
+export const FABULA_VERSION = "0.247.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.247.0",
+    date: "2026-08-20",
+    items: [
+      {
+        ru: "Об окончании ответа теперь сообщает один звук, а не два. Звук в самом окне и уведомление на рабочем столе срабатывали на одно и то же событие, а уведомление несёт собственный звук — поэтому, когда окно свёрнуто, слышался щелчок поверх мягкого сигнала. Ни один из двух слоёв не знал о другом, и каждый играл безусловно. Теперь уведомление сообщает, издало ли оно звук, и звук в окне звучит, только если не издало: когда окно на виду, когда уведомления выключены или на них не дано разрешения. Правило одно для всех трёх случаев — завершение ответа, ошибка и запрос разрешения.",
+        en: "A finished answer is now announced by one sound, not two. The in-page sound and the desktop notification fired for the same event, and the notification carries a sound of its own — so with the window in the background you heard a click on top of a soft chime. Neither layer knew about the other, and each played unconditionally. The notification now reports whether it sounded, and the in-page sound plays only when it did not: when the window is in view, when notifications are off, or when permission was never granted. One rule for all three cases — a finished answer, an error, and a permission request.",
+      },
+    ],
+  },
   {
     version: "0.246.0",
     date: "2026-08-20",

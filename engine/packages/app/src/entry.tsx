@@ -82,21 +82,22 @@ const notify: Platform["notify"] = async (title, description, href) => {
   ).webkit?.messageHandlers?.fabulaNotify
   if (bridge) {
     const inView = document.visibilityState === "visible" && document.hasFocus()
-    if (inView) return
+    if (inView) return false
     bridge.postMessage({ title, body: description ?? "", href: href ?? "" })
-    return
+    // the Swift host attaches a sound to every banner it posts (FabulaApp.swift, UNNotificationSound)
+    return true
   }
-  if (!("Notification" in window)) return
+  if (!("Notification" in window)) return false
 
   const permission =
     Notification.permission === "default"
       ? await Notification.requestPermission().catch(() => "denied")
       : Notification.permission
 
-  if (permission !== "granted") return
+  if (permission !== "granted") return false
 
   const inView = document.visibilityState === "visible" && document.hasFocus()
-  if (inView) return
+  if (inView) return false
 
   const notification = new Notification(title, {
     body: description ?? "",
@@ -107,6 +108,8 @@ const notify: Platform["notify"] = async (title, description, href) => {
     handleNotificationClick(href)
     notification.close()
   }
+  // a posted web Notification is sounded by the operating system
+  return true
 }
 
 const openLink: Platform["openLink"] = (url) => {

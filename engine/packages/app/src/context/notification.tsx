@@ -233,9 +233,21 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
         if (!session) return
         if (session.parentID) return
 
-        if (settings.sounds.agentEnabled()) {
-          void playSoundById(settings.sounds.agent())
-        }
+        // ONE EVENT, ONE SOUND. The in-page sound and the desktop notification fire for the SAME event,
+        // and the notification carries a sound of its own — so with the window in the background the
+        // reader heard both, a click on top of a chime (reported 2026-08-20). The sound is now played
+        // only when the notification did not make one: window in view, notifications off, or permission
+        // denied. Whoever actually sounded decides, so neither layer has to guess about the other.
+        const sounded = settings.notifications.agent()
+          ? platform.notify(
+              language.t("notification.session.responseReady.title"),
+              session.title ?? sessionID,
+              `/${base64Encode(directory)}/session/${sessionID}`,
+            )
+          : Promise.resolve(false)
+        void sounded.then((did) => {
+          if (!did && settings.sounds.agentEnabled()) void playSoundById(settings.sounds.agent())
+        })
 
         append({
           directory,
@@ -245,10 +257,6 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
           session: sessionID,
         })
 
-        const href = `/${base64Encode(directory)}/session/${sessionID}`
-        if (settings.notifications.agent()) {
-          void platform.notify(language.t("notification.session.responseReady.title"), session.title ?? sessionID, href)
-        }
       })
     }
 
@@ -261,10 +269,6 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       void lookup(directory, sessionID).then((session) => {
         if (meta.disposed) return
         if (session?.parentID) return
-
-        if (settings.sounds.errorsEnabled()) {
-          void playSoundById(settings.sounds.errors())
-        }
 
         const error = "error" in event.properties ? event.properties.error : undefined
         append({
@@ -279,9 +283,13 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
           session?.title ??
           (typeof error === "string" ? error : language.t("notification.session.error.fallbackDescription"))
         const href = sessionID ? `/${base64Encode(directory)}/session/${sessionID}` : `/${base64Encode(directory)}`
-        if (settings.notifications.errors()) {
-          void platform.notify(language.t("notification.session.error.title"), description, href)
-        }
+        // one event, one sound — see the completion path above
+        const sounded = settings.notifications.errors()
+          ? platform.notify(language.t("notification.session.error.title"), description, href)
+          : Promise.resolve(false)
+        void sounded.then((did) => {
+          if (!did && settings.sounds.errorsEnabled()) void playSoundById(settings.sounds.errors())
+        })
       })
     }
 

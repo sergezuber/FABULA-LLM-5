@@ -491,12 +491,14 @@ export default function Layout(props: ParentProps) {
         alertedAtBySession.set(sessionKey, now)
 
         if (e.details.type === "permission.asked") {
-          if (settings.sounds.permissionsEnabled()) {
-            void playSoundById(settings.sounds.permissions())
-          }
-          if (settings.notifications.permissions()) {
-            void platform.notify(title, description, href)
-          }
+          // one event, one sound (see context/notification.tsx): the notification carries a sound of its
+          // own, so the in-page one plays only when no notification was posted.
+          const sounded = settings.notifications.permissions()
+            ? platform.notify(title, description, href)
+            : Promise.resolve(false)
+          void sounded.then((did) => {
+            if (!did && settings.sounds.permissionsEnabled()) void playSoundById(settings.sounds.permissions())
+          })
         }
 
         if (e.details.type === "question.asked") {

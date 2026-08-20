@@ -35,7 +35,9 @@ export type Platform = {
   forward(): void
 
   /** Send a system notification (optional deep link) */
-  notify(title: string, description?: string, href?: string): Promise<void>
+  /** Posts a desktop notification. Resolves TRUE when one was actually posted AND carries its own
+   *  sound, so the caller knows not to play a second one for the same event. One event, one sound. */
+  notify(title: string, description?: string, href?: string): Promise<boolean>
 
   /** Open directory picker dialog (native on Tauri, server-backed on web) */
   openDirectoryPickerDialog?(opts?: OpenDirectoryPickerOptions): Promise<PickerPaths>

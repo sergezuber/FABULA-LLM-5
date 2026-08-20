@@ -1,7 +1,7 @@
 // FABULA: local versioning — the app's own patch notes. Every deployed change lands here as a
 // dated entry (newest first) and is shown in Settings > Changes. No network fetch: the log
 // ships with the build, so it is always current for the binary the user runs.
-export const FABULA_VERSION = "0.245.0"
+export const FABULA_VERSION = "0.246.0"
 
 export type ChangelogEntry = {
   version: string
@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.246.0",
+    date: "2026-08-20",
+    items: [
+      {
+        ru: "У хода появилась последняя дверь, и она заперта. Решение «работа закончена» принимали несколько независимых мест, каждое по своему куску сведений, и каждое было поймано на ошибке — поэтому чинить их по одному значит оставлять неисправным следующее. Теперь объективный признак незавершённости спрашивается в единственной точке, где ход действительно заканчивается, и спрашивается ВСЕГДА: раньше он работал, только если была взведена цель, а в проекте без команды проверки её не взводят — то есть именно там, где работа тише всего превращалась в остановку. Признак не смотрит ни на модель, ни на формулировки, ни на длину ответа. Число повторов ограничено, поэтому ход по-прежнему гарантированно завершается. Заодно сведена к одному определению сборка сведений о ходе: копий было две, и они уже разошлись — одна проверка видела строго меньше другой и не могла прийти к тому же выводу.",
+        en: "A turn now has a last door, and it is locked. «The work is finished» was decided by several independent places, each on its own slice of the evidence, and each has been caught deciding wrongly — so repairing them one at a time only leaves the next one unguarded. The objective signature of unfinished work is now consulted at the single point where a turn actually ends, and consulted ALWAYS: before, it ran only when a goal happened to be armed, and a project with no verify command never arms one — precisely where work was most quietly becoming a stop. The signature reads nothing about the model, the wording, or the length of the reply. The number of continuations is bounded, so a turn still always terminates. The gathering of that evidence is now one definition too: there were two copies and they had already drifted, so one check saw strictly less than the other and could not have reached the same verdict.",
+      },
+    ],
+  },
   {
     version: "0.245.0",
     date: "2026-08-20",

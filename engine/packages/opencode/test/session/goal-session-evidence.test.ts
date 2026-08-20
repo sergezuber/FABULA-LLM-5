@@ -372,3 +372,49 @@ describe("the scan carries what the rule reads", () => {
     expect(src).toMatch(/text:\s*p\.type === "text" \|\| p\.type === "reasoning" \? p\.text : undefined/)
   })
 })
+
+// ── THE UNIVERSAL INVARIANT ────────────────────────────────────────────────────────────────────────
+// Three separate stop paths were measured ending a turn while the work was demonstrably unfinished, and
+// each was repaired on its own. The class only closes if the objective signature is consulted at the ONE
+// point where a turn actually ends — and stays consulted. These read the source, because a pure test
+// stays green against a run loop that computes the verdict and walks past it.
+describe("the last door always asks whether the work is finished", () => {
+  const src = readFileSync(new URL("../../src/session/prompt.ts", import.meta.url), "utf8")
+  const door = src.slice(src.indexOf("THE LAST DOOR"), src.indexOf('via: "no-gate-continued"'))
+
+  test("the exit consults the objective completeness signature", () => {
+    expect(door).toContain("badDynamicsSignature(trajectoryFeatures(")
+  })
+
+  test("it is bounded, so the edge terminates whatever the signature says", () => {
+    expect(door).toContain("finishGuardFired < FINISH_GUARD_MAX")
+    expect(door).toContain("finishGuardFired++")
+  })
+
+  test("it carries a kill-switch", () => {
+    expect(door).toContain("FINISH_GUARD_ENABLED")
+    expect(src).toContain('process.env.FABULA_FINISH_GUARD !== "0"')
+  })
+
+  test("it asks about THIS project's verify command rather than assuming one", () => {
+    expect(door).toContain("hasVerifyCommand(guardFiles")
+  })
+
+  test("nothing may end the turn between the guard and the exit", () => {
+    // the guard must be the LAST thing before the break — no gate may slip in behind it
+    const after = src.slice(src.indexOf('via: "no-gate-continued"'))
+    expect(after.slice(0, 200)).toContain("break")
+  })
+})
+
+// ONE definition of what every completeness check is allowed to see. The two copies that existed had
+// already drifted — the second dropped autoRewind, notDone and the harness-refusal marker.
+describe("the transcript scan has one definition", () => {
+  const src = readFileSync(new URL("../../src/session/prompt.ts", import.meta.url), "utf8")
+  test("no site builds its own ScanMessage mapping", () => {
+    expect(src.match(/transcriptMsgs\.map\(/g)).toBeNull()
+  })
+  test("every consumer goes through it", () => {
+    expect((src.match(/toScan\(/g) ?? []).length).toBeGreaterThanOrEqual(3)
+  })
+})

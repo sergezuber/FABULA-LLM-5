@@ -216,6 +216,17 @@ export const RE_ENTRY_EDGES: readonly ReEntryEdge[] = [
     description:
       "work was in flight before a compaction boundary and the first post-boundary turn produced a text-only announcement with zero tool calls; one bounded re-entry steers the model to resume. The counter is a boolean, so the cap is 1 by construction; FABULA_POST_COMPACTION_CONTINUE=0 disables the edge entirely (kill-switch, not a cap parser)",
   },
+  {
+    id: "finish-guard",
+    fn: "(inline block — session/prompt.ts finish path, badDynamicsSignature in verify-gate.ts)",
+    counter: "finishGuardFired",
+    boundEnv: "FABULA_FINISH_GUARD_MAX",
+    capEnvParse: "finiteNonNegative",
+    cap: 2,
+    capSource: "prompt.ts FINISH_GUARD_MAX = 2",
+    description:
+      "THE LAST DOOR: the single point where a turn actually ends. Every gate above it decides on its own slice of evidence and each has been measured deciding wrongly, so the objective completeness signature the judge's hard veto already trusts is consulted here too — and ALWAYS, where before it ran only when a goal happened to be armed (an auto goal is deliberately not armed in a project with no verify command, which is exactly where work was measured silently becoming a stop). Reads nothing about the model, the wording or the length; FABULA_FINISH_GUARD=0 disables the edge entirely",
+  },
 ]
 
 export const REENTRY_BUDGET_ENV = "FABULA_REENTRY_BUDGET"

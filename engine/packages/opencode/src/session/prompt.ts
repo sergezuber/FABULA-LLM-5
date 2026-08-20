@@ -132,6 +132,39 @@ export function recallHintLines(toolCfg: ToolStyleConfig | undefined): string[] 
  * actors' MAX_PRE_REACT (=3) because main-session goals are usually larger.
  * TODO: lift to mimocode.json config (e.g. session.maxGoalReact).
  */
+// ONE definition of how a stored message becomes a ScanMessage. It existed TWICE and the two had already
+// drifted: the second dropped autoRewind, notDone and the harness-refusal marker, so one completeness
+// check saw strictly less than the other and could not have reached the same verdict. A third copy was
+// about to be written for the finish guard. The shape this repository loses most often is a rule with
+// more than one definition, and this one decides what EVERY completeness check is allowed to see.
+const toScan = (msgs: ReadonlyArray<any>): ScanMessage[] =>
+  msgs.map((m: any) => ({
+    role: m.info.role,
+    parts: (m.parts ?? []).map((p: any) => ({
+      type: p.type,
+      tool: p.tool,
+      synthetic: p.synthetic,
+      // read only by turnAnsweredOnlyWithItsReasoning, which compares an answer against the
+      // reasoning beside it; carried by reference, so it costs nothing to pass along
+      text: p.type === "text" || p.type === "reasoning" ? p.text : undefined,
+      metadata:
+        p.type === "tool"
+          ? {
+              passed: p.state?.metadata?.passed,
+              autoRewind: p.state?.metadata?.autoRewind,
+              notDone: p.state?.metadata?.notDone,
+            }
+          : undefined,
+      // A refusal BY THE HARNESS is a fact about what is still POSSIBLE, not about what broke.
+      // It belongs on the part, where isHarnessSteer reads it — putting it inside `metadata`
+      // type-checked, shipped, and did nothing: 22 refusals in a live turn, stopLayer still false.
+      error: p.type === "tool" ? (p.state as any)?.error : undefined,
+      // bash edits (sed -i / redirect / git apply) count as source edits — pass the command so
+      // turnEvents can classify a tree-mutating bash call as an "edit" (verify-gate.bashEditsTree)
+      input: p.type === "tool" ? { command: p.state?.input?.command } : undefined,
+    })),
+  }))
+
 const MAX_GOAL_REACT = 12
 
 // Force-verify done-gate (main agent). On a stop with unverified SOURCE edits, re-enter demanding a
@@ -153,6 +186,12 @@ const UNVERIFIED_CONTINUATION_LIMIT = (() => {
 // FABULA_GOAL_VERIFY_GATE=0. Reads the SAME artifact signal as force-verify
 // (verify-gate.ts answerIsTerminal), so the two gates agree.
 const GOAL_VERIFY_GATE_ENABLED = process.env.FABULA_GOAL_VERIFY_GATE !== "0"
+// The last door (see the finish guard in the run loop). Bounded per turn so the edge always terminates.
+const FINISH_GUARD_ENABLED = process.env.FABULA_FINISH_GUARD !== "0"
+const FINISH_GUARD_MAX = (() => {
+  const n = Number(process.env.FABULA_FINISH_GUARD_MAX)
+  return Number.isFinite(n) && n >= 0 ? n : 2
+})()
 // W3: refuse an overconfident judge "done" when the measured trajectory says otherwise (default on).
 const JUDGE_HARD_VETO_ENABLED = process.env.FABULA_JUDGE_HARD_VETO !== "0"
 
@@ -2025,6 +2064,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         // runLoop. Bounded by construction — either the model resumes real work (tool calls appear and
         // the detector goes quiet), or it repeats a text-only reply and that second stop stands.
         let postCompactionContinued = false
+        let finishGuardFired = 0
         // Compaction-failure rescue fired this runLoop (see loopgraph edge "compaction-failure-rescue").
         // The structural bound (the boundary consumes the compaction part) already prevents re-entry;
         // this flag is the registry-visible belt on top, same pattern as postCompactionContinued.
@@ -2331,30 +2371,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           // ONE transcript scan, reused by the stop-layer AND the W3 trajectory hard-veto. The metadata
           // carries the dynamics the harness already records deterministically: verify pass/fail, an
           // auto-rewind, and a terminal NOT-DONE verdict.
-          const scan: ScanMessage[] = transcriptMsgs.map((m: any) => ({
-            role: m.info.role,
-            parts: (m.parts ?? []).map((p: any) => ({
-              type: p.type,
-              tool: p.tool,
-              synthetic: p.synthetic,
-              // read only by turnAnsweredOnlyWithItsReasoning, which compares an answer against the
-              // reasoning beside it; carried by reference, so it costs nothing to pass along
-              text: p.type === "text" || p.type === "reasoning" ? p.text : undefined,
-              metadata:
-                p.type === "tool"
-                  ? {
-                      passed: p.state?.metadata?.passed,
-                      autoRewind: p.state?.metadata?.autoRewind,
-                      notDone: p.state?.metadata?.notDone,
-                    }
-                  : undefined,
-              // A refusal BY THE HARNESS is a fact about what is still POSSIBLE, not about what broke.
-              // It belongs on the part, where isHarnessSteer reads it — putting it inside `metadata`
-              // type-checked, shipped, and did nothing: 22 refusals in a live turn, stopLayer still false.
-              error: p.type === "tool" ? (p.state as any)?.error : undefined,
-              input: p.type === "tool" ? { command: p.state?.input?.command } : undefined,
-            })),
-          }))
+          const scan: ScanMessage[] = toScan(transcriptMsgs)
           if (GOAL_VERIFY_GATE_ENABLED) {
             // Only an AUTO-armed goal short-circuits here; an explicit /goal is the
             // user opting into the loop and must always reach the judge (bounded by
@@ -2547,21 +2564,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             contextWatermark: session.contextWatermark,
             agentID: "main",
           })
-          const scan: ScanMessage[] = transcriptMsgs.map((m: any) => ({
-            role: m.info.role,
-            parts: (m.parts ?? []).map((p: any) => ({
-              type: p.type,
-              tool: p.tool,
-              synthetic: p.synthetic,
-              // read only by turnAnsweredOnlyWithItsReasoning, which compares an answer against the
-              // reasoning beside it; carried by reference, so it costs nothing to pass along
-              text: p.type === "text" || p.type === "reasoning" ? p.text : undefined,
-              metadata: p.type === "tool" ? { passed: p.state?.metadata?.passed } : undefined,
-              // bash edits (sed -i / redirect / git apply) count as source edits — pass the command so
-              // turnEvents can classify a tree-mutating bash call as an "edit" (verify-gate.bashEditsTree)
-              input: p.type === "tool" ? { command: p.state?.input?.command } : undefined,
-            })),
-          }))
+          const scan: ScanMessage[] = toScan(transcriptMsgs)
           if (!needsForcedVerify(scan)) return false
           // Never force-loop a project with nothing to verify (docs edits, config-only repos, …).
           const files = yield* Effect.promise(() => readdir(ctx.directory).catch(() => [] as string[]))
@@ -3109,6 +3112,64 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               if (yield* goalGate(lastUser)) {
                 trace("gate", { sid: sessionID, g: "goal", fired: 1 })
                 continue
+              }
+              // ── THE LAST DOOR ────────────────────────────────────────────────────────────────────
+              // Every gate above decides on its own slice of evidence, and each has been measured deciding
+              // wrongly: the stop-layer honouring a stop the judge had twice refused; the same layer reading
+              // a compacted task session as one that never worked; a turn whose whole answer was the model's
+              // reasoning verbatim. Patching them one at a time leaves the NEXT one unguarded.
+              //
+              // So the objective signature — the one the judge's hard veto already trusts — is consulted
+              // HERE, at the single point where a turn actually ends, and it is consulted ALWAYS. Until now
+              // it ran only when a goal happened to be armed, and an auto goal is deliberately not armed in
+              // a project with no verify command — precisely the book-folder shape where work was measured
+              // silently becoming a stop. It reads nothing about the model, the wording, or the length.
+              //
+              // Bounded by construction: FINISH_GUARD_MAX per turn, so the edge terminates whatever the
+              // signature says. FABULA_FINISH_GUARD=0 restores the previous behaviour byte for byte.
+              if (FINISH_GUARD_ENABLED && finishGuardFired < FINISH_GUARD_MAX) {
+                const guardCtx = yield* InstanceState.context
+                const guardFiles = yield* Effect.promise(() =>
+                  readdir(guardCtx.directory).catch(() => [] as string[]),
+                )
+                const unfinished = badDynamicsSignature(trajectoryFeatures(toScan(msgs)), {
+                  hasVerifyCommand: hasVerifyCommand(guardFiles, process.env.FABULA_VERIFY_CMD),
+                })
+                if (unfinished.veto) {
+                  finishGuardFired++
+                  const cont = yield* sessions.updateMessage({
+                    id: MessageID.ascending(),
+                    role: "user" as const,
+                    sessionID: lastUser.sessionID,
+                    agentID: lastUser.agentID,
+                    agent: lastUser.agent,
+                    model: lastUser.model,
+                    tools: lastUser.tools,
+                    format: lastUser.format,
+                    time: { created: Date.now() },
+                  })
+                  yield* sessions.updatePart({
+                    id: PartID.ascending(),
+                    messageID: cont.id,
+                    sessionID: lastUser.sessionID,
+                    type: "text",
+                    synthetic: true,
+                    text: [
+                      "<system-reminder>",
+                      `This turn is not finished: ${unfinished.reason}.`,
+                      "Continue the work now — do not announce what you are about to do, and do not defer any",
+                      "of it to a later turn. If it is genuinely complete, state the finished result itself.",
+                      "</system-reminder>",
+                    ].join("\n"),
+                  })
+                  yield* slog.info("finish guard — work is not finished; continuing", {
+                    sessionID,
+                    reason: unfinished.reason,
+                    fired: finishGuardFired,
+                  })
+                  trace("gate", { sid: sessionID, g: "finish-guard", fired: finishGuardFired })
+                  continue
+                }
               }
               trace("turn.end", { sid: sessionID, via: "no-gate-continued", cls: classification.type })
               yield* slog.info("exiting loop", { classification: classification.type })
